@@ -30,6 +30,34 @@ fn row_to_json_values(row: &TableRow) -> Vec<Value> {
             Cell::F64(v) => json!(v),
             Cell::Bytes(v) => json!(format!("<bytes len={}>", v.len())),
             Cell::Json(v) => v.clone(),
+            Cell::Numeric(v) => json!(v.to_string()), // Attempt conversion
+            Cell::Array(v) => match v {
+                etl::types::ArrayCell::Bool(list) => json!(list),
+                etl::types::ArrayCell::I16(list) => json!(list),
+                etl::types::ArrayCell::I32(list) => json!(list),
+                etl::types::ArrayCell::I64(list) => json!(list),
+                etl::types::ArrayCell::F32(list) => json!(list),
+                etl::types::ArrayCell::F64(list) => json!(list),
+                etl::types::ArrayCell::String(list) => json!(list),
+                etl::types::ArrayCell::Numeric(list) => json!(
+                    list.iter()
+                        .map(|opt| opt.as_ref().map(|n| n.to_string()))
+                        .collect::<Vec<_>>()
+                ),
+                etl::types::ArrayCell::Date(list) => json!(
+                    list.iter()
+                        .map(|opt| opt.as_ref().map(|d| d.to_string()))
+                        .collect::<Vec<_>>()
+                ),
+                etl::types::ArrayCell::TimestampTz(list) => json!(
+                    list.iter()
+                        .map(|opt| opt.as_ref().map(|t| t.to_rfc3339()))
+                        .collect::<Vec<_>>()
+                ),
+                _ => json!(format!("{:?}", v)), // Fallback for Bytes, Uuid, etc.
+            }, // Attempt conversion
+            Cell::Date(v) => json!(v.to_string()),
+            Cell::TimestampTz(v) => json!(v.to_rfc3339()),
             _ => json!(format!("{:?}", cell)),
         })
         .collect()
