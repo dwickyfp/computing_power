@@ -9,7 +9,7 @@ use sqlx::{Pool, Postgres};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::Mutex;
-use tracing::{info, warn, error};
+use tracing::{error, info};
 
 #[derive(Debug, Clone)]
 pub struct SnowflakeDestination {
@@ -34,7 +34,7 @@ fn cell_to_json_value(cell: &Cell) -> Value {
         Cell::Bytes(v) => json!(format!("<bytes len={}>", v.len())),
         Cell::Json(v) => v.clone(),
         Cell::Numeric(v) => json!(v.to_string()),
-        Cell::Uuid(v) => json!(v.to_string()),  // Handle UUID properly
+        Cell::Uuid(v) => json!(v.to_string()), // Handle UUID properly
         Cell::Array(v) => match v {
             etl::types::ArrayCell::Bool(list) => json!(list),
             etl::types::ArrayCell::I16(list) => json!(list),
@@ -67,7 +67,7 @@ fn cell_to_json_value(cell: &Cell) -> Value {
         },
         Cell::Date(v) => json!(v.to_string()),
         Cell::Time(v) => json!(v.to_string()),
-        Cell::Timestamp(v) => json!(v.to_string()),  // NaiveDateTime uses to_string()
+        Cell::Timestamp(v) => json!(v.to_string()), // NaiveDateTime uses to_string()
         Cell::TimestampTz(v) => json!(v.to_rfc3339()),
         _ => json!(format!("{:?}", cell)),
     }
@@ -76,21 +76,25 @@ fn cell_to_json_value(cell: &Cell) -> Value {
 // Helper: Convert TableRow to JSON object with column names
 fn row_to_json_object(row: &TableRow, column_names: &[String], operation: &str) -> Value {
     let mut obj = serde_json::Map::new();
-    
+
     // Add column values - convert to uppercase for Snowflake
     for (i, cell) in row.values.iter().enumerate() {
-        let col_name = column_names.get(i)
+        let col_name = column_names
+            .get(i)
             .map(|s| s.to_uppercase())
             .unwrap_or_else(|| format!("COL_{}", i));
         obj.insert(col_name, cell_to_json_value(cell));
     }
-    
+
     // Add operation column (uppercase for Snowflake)
     obj.insert("OPERATION".to_string(), json!(operation));
-    
+
     // Add sync timestamp (uppercase for Snowflake)
-    obj.insert("SYNC_TIMESTAMP".to_string(), json!(chrono::Utc::now().to_rfc3339()));
-    
+    obj.insert(
+        "SYNC_TIMESTAMP".to_string(),
+        json!(chrono::Utc::now().to_rfc3339()),
+    );
+
     Value::Object(obj)
 }
 
@@ -156,18 +160,21 @@ impl SnowflakeDestination {
               AND table_name = (SELECT relname FROM pg_class WHERE oid = $1)
             ORDER BY ordinal_position
         "#;
-        
+
         let rows: Vec<(String,)> = sqlx::query_as(query)
             .bind(table_id.0 as i32)
             .fetch_all(&self.pg_pool)
             .await
             .unwrap_or_else(|e| {
-                error!("Failed to query column names for TableId {}: {}", table_id, e);
+                error!(
+                    "Failed to query column names for TableId {}: {}",
+                    table_id, e
+                );
                 vec![]
             });
 
         let column_names: Vec<String> = rows.into_iter().map(|(name,)| name).collect();
-        
+
         cache.insert(table_id, column_names.clone());
         column_names
     }
@@ -190,7 +197,7 @@ impl Destination for SnowflakeDestination {
 
         let table_name = self.resolve_table_name(table_id).await;
         let column_names = self.resolve_column_names(table_id).await;
-        
+
         let mut client = self.client.lock().await;
         let mut tokens = self.current_token.lock().await;
 
@@ -263,7 +270,7 @@ impl Destination for SnowflakeDestination {
             }
 
             let mut json_rows = Vec::new();
-            
+
             for event in events {
                 let row_obj = match event {
                     Event::Insert(i) => Some(row_to_json_object(&i.table_row, &column_names, "C")),

@@ -7,3 +7,5 @@
 /backend/**/*.pyc
 /backend/venv/*
 
+/web/node_modules
+
