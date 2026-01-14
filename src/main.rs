@@ -1,8 +1,11 @@
+mod monitor;
+
 use anyhow::Result;
 use dotenv::dotenv;
 use figlet_rs::FIGfont;
 use rosetta::manager::PipelineManager;
 use tracing::info;
+use sqlx::postgres::PgPoolOptions;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -20,8 +23,18 @@ async fn main() -> Result<()> {
         .expect("CONFIG_DATABASE_URL environment variable must be set");
 
     info!("Starting Rosetta Pipeline Manager...");
-    info!("Connecting to config database: {}", database_url);
+   
+    // Create database pool for monitor
+    let pool = PgPoolOptions::new()
+        .max_connections(10)
+        .connect(&database_url)
+        .await?;
 
+    // Start monitor in background before starting manager
+    monitor::start(pool.clone());
+    info!("System monitor started in background");
+
+    // Start the pipeline manager (this will block)
     let manager = PipelineManager::new(&database_url).await?;
     manager.run().await?;
 

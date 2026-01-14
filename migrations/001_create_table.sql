@@ -54,7 +54,19 @@ CREATE TABLE IF NOT EXISTS pipeline_metadata (
     updated_at TIMESTAMP DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS system_metrics (
+    id SERIAL PRIMARY KEY,
+    cpu_usage FLOAT4,        -- Percentage
+    total_memory BIGINT,     -- In KB
+    used_memory BIGINT,      -- In KB
+    total_swap BIGINT,       -- In KB
+    used_swap BIGINT,        -- In KB
+    recorded_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 -- Create indexes for common queries
 CREATE INDEX IF NOT EXISTS idx_pipelines_status ON pipelines(status);
 CREATE INDEX IF NOT EXISTS idx_pipelines_source_id ON pipelines(source_id);
 CREATE INDEX IF NOT EXISTS idx_pipelines_destination_id ON pipelines(destination_id);
+CREATE INDEX IF NOT EXISTS idx_pipeline_metadata_pipeline_id ON pipeline_metadata(pipeline_id);
+CREATE INDEX IF NOT EXISTS idx_pipeline_metadata_status ON pipeline_metadata(status);
