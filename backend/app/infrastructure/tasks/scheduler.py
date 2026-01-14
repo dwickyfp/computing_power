@@ -4,6 +4,7 @@ Background task scheduler.
 Manages scheduling and execution of background tasks like WAL monitoring.
 """
 
+import asyncio
 from typing import Optional
 
 from apscheduler.schedulers.background import (
@@ -31,6 +32,18 @@ class BackgroundScheduler:
         self.scheduler: Optional[APSBackgroundScheduler] = None
         self.wal_monitor: Optional[WALMonitorService] = None
 
+    def _run_wal_monitor(self) -> None:
+        """
+        Synchronous wrapper for async WAL monitor task.
+        
+        This is needed because APScheduler BackgroundScheduler 
+        expects synchronous functions.
+        """
+        try:
+            asyncio.run(self.wal_monitor.monitor_all_sources())
+        except Exception as e:
+            logger.error("Error running WAL monitor task", extra={"error": str(e)})
+
     def start(self) -> None:
         """
         Start the background scheduler.
@@ -54,7 +67,7 @@ class BackgroundScheduler:
 
             # Schedule WAL monitoring task
             self.scheduler.add_job(
-                self.wal_monitor.monitor_all_sources,
+                self._run_wal_monitor,  # Use synchronous wrapper
                 trigger=IntervalTrigger(
                     seconds=self.settings.wal_monitor_interval_seconds
                 ),

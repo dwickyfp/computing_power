@@ -1,7 +1,7 @@
 """
 WAL Monitor service for background monitoring.
 
-Implements PostgreSQL WAL size monitoring with retry logic and error handling.
+Implements PostgreSQL WAL status monitoring with retry logic and error handling.
 """
 
 import asyncio
@@ -18,22 +18,24 @@ from app.core.exceptions import WALMonitorError
 from app.core.logging import get_logger
 from app.domain.models.source import Source
 from app.domain.repositories.source import SourceRepository
-from app.domain.repositories.wal_metric import WALMetricRepository
+from app.domain.repositories.wal_monitor_repo import WALMonitorRepository
 
 logger = get_logger(__name__)
 
 
 class WALMonitorService:
     """
-    Service for monitoring PostgreSQL WAL size.
+    Service for monitoring PostgreSQL WAL status.
 
-    Periodically checks WAL size for all registered sources and
-    persists metrics to the database.
+    Periodically checks WAL status for all registered sources and
+    persists current status to the wal_monitor table (upsert pattern).
     """
 
-    # SQL query to get current WAL size
-    WAL_SIZE_QUERY = """
-        SELECT pg_wal_lsn_diff(pg_current_wal_lsn(), '0/0')::bigint AS wal_size_bytes;
+    # SQL query to get current WAL LSN and position
+    WAL_STATUS_QUERY = """
+        SELECT 
+            pg_current_wal_lsn()::text AS wal_lsn,
+            pg_wal_lsn_diff(pg_current_wal_lsn(), '0/0')::bigint AS wal_position;
     """
 
     def __init__(self):
@@ -42,17 +44,17 @@ class WALMonitorService:
         self._running = False
         self._task: Optional[asyncio.Task] = None
 
-    async def check_wal_size(self, source: Source) -> int:
+    async def check_wal_status(self, source: Source) -> dict:
         """
-        Check WAL size for a specific source.
+        Check WAL status for a specific source.
 
-        Connects to the source database and queries current WAL size.
+        Connects to the source database and queries current WAL status.
 
         Args:
             source: Source to check
 
         Returns:
-            WAL size in bytes
+            Dictionary with wal_lsn and wal_position
 
         Raises:
             WALMonitorError: If WAL check fails
@@ -63,7 +65,7 @@ class WALMonitorService:
             connection = None
             try:
                 logger.debug(
-                    "Checking WAL size",
+                    "Checking WAL status",
                     extra={
                         "source_id": source.id,
                         "host": source.pg_host,
@@ -81,24 +83,26 @@ class WALMonitorService:
                     connect_timeout=self.settings.wal_monitor_timeout_seconds,
                 )
 
-                # Execute WAL size query
+                # Execute WAL status query
                 with connection.cursor(
                     cursor_factory=psycopg2.extras.RealDictCursor
                 ) as cursor:
-                    cursor.execute(self.WAL_SIZE_QUERY)
+                    cursor.execute(self.WAL_STATUS_QUERY)
                     result = cursor.fetchone()
-                    wal_size_bytes = result["wal_size_bytes"]
+                    wal_lsn = result["wal_lsn"]
+                    wal_position = result["wal_position"]
 
                 logger.info(
-                    "WAL size checked successfully",
+                    "WAL status checked successfully",
                     extra={
                         "source_id": source.id,
-                        "wal_size_bytes": wal_size_bytes,
-                        "wal_size_mb": wal_size_bytes / (1024 * 1024),
+                        "wal_lsn": wal_lsn,
+                        "wal_position": wal_position,
+                        "wal_position_mb": wal_position / (1024 * 1024),
                     },
                 )
 
-                return wal_size_bytes
+                return {"wal_lsn": wal_lsn, "wal_position": wal_position}
 
             except psycopg2.Error as e:
                 logger.error(
@@ -125,34 +129,42 @@ class WALMonitorService:
 
     async def monitor_source(self, source: Source, db: Session) -> None:
         """
-        Monitor WAL size for a single source with retry logic.
+        Monitor WAL status for a single source with retry logic.
 
         Args:
             source: Source to monitor
-            db: Database session for persisting metrics
+            db: Database session for persisting status
         """
         max_retries = self.settings.wal_monitor_max_retries
         retry_count = 0
 
         while retry_count <= max_retries:
             try:
-                # Check WAL size
-                wal_size_bytes = await self.check_wal_size(source)
+                # Check WAL status
+                wal_status = await self.check_wal_status(source)
+                now = datetime.utcnow()
 
-                # Persist metric
-                wal_repo = WALMetricRepository(db)
-                wal_repo.record_metric(
+                # Upsert monitor record
+                wal_monitor_repo = WALMonitorRepository(db)
+                wal_monitor_repo.upsert_monitor(
                     source_id=source.id,
-                    size_bytes=wal_size_bytes,
-                    recorded_at=datetime.utcnow(),
+                    wal_lsn=wal_status["wal_lsn"],
+                    wal_position=wal_status["wal_position"],
+                    last_wal_received=now,
+                    last_transaction_time=now,
+                    replication_slot_name=source.publication_name,  # Using publication name as identifier
+                    replication_lag_bytes=0,  # Could be calculated if needed
+                    status="ACTIVE",
+                    error_message=None,
                 )
                 db.commit()
 
                 logger.info(
-                    "WAL metric recorded",
+                    "WAL monitor status updated",
                     extra={
                         "source_id": source.id,
-                        "wal_size_mb": wal_size_bytes / (1024 * 1024),
+                        "wal_lsn": wal_status["wal_lsn"],
+                        "wal_position_mb": wal_status["wal_position"] / (1024 * 1024),
                     },
                 )
 
@@ -171,23 +183,54 @@ class WALMonitorService:
                         "WAL monitor failed after all retries",
                         extra={"source_id": source.id, "retries": retry_count},
                     )
+                    # Update status to ERROR
+                    try:
+                        wal_monitor_repo = WALMonitorRepository(db)
+                        wal_monitor_repo.upsert_monitor(
+                            source_id=source.id,
+                            status="ERROR",
+                            error_message=str(e),
+                            last_wal_received=datetime.utcnow(),
+                        )
+                        db.commit()
+                    except Exception as update_error:
+                        logger.error(
+                            "Failed to update error status",
+                            extra={"source_id": source.id, "error": str(update_error)},
+                        )
             except Exception as e:
                 logger.error(
                     "Unexpected error in WAL monitoring",
                     extra={"source_id": source.id, "error": str(e)},
                 )
+                # Update status to ERROR
+                try:
+                    wal_monitor_repo = WALMonitorRepository(db)
+                    wal_monitor_repo.upsert_monitor(
+                        source_id=source.id,
+                        status="ERROR",
+                        error_message=str(e),
+                        last_wal_received=datetime.utcnow(),
+                    )
+                    db.commit()
+                except Exception as update_error:
+                    logger.error(
+                        "Failed to update error status",
+                        extra={"source_id": source.id, "error": str(update_error)},
+                    )
                 break
 
     async def monitor_all_sources(self) -> None:
         """
-        Monitor WAL size for all active sources.
+        Monitor WAL status for all active sources.
 
         This method is called periodically by the background scheduler.
         """
         try:
             logger.info("Starting WAL monitoring cycle")
 
-            async with get_session_context() as db:
+            # Use regular 'with' instead of 'async with' for synchronous context manager
+            with get_session_context() as db:
                 # Get all sources
                 source_repo = SourceRepository(db)
                 sources = source_repo.get_all(skip=0, limit=1000)
