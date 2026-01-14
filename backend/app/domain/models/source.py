@@ -4,6 +4,7 @@ Source model - PostgreSQL data source configurations.
 Represents PostgreSQL database connection configurations for CDC replication.
 """
 
+from datetime import datetime
 from typing import TYPE_CHECKING
 
 from sqlalchemy import Integer, String, UniqueConstraint
@@ -15,6 +16,7 @@ if TYPE_CHECKING:
     from app.domain.models.pipeline import Pipeline
     from app.domain.models.wal_metric import WALMetric
     from app.domain.models.wal_monitor import WALMonitor
+    from app.domain.models.table_metadata import TableMetadata
 
 
 class Source(Base, TimestampMixin):
@@ -78,6 +80,22 @@ class Source(Base, TimestampMixin):
         Integer, nullable=False, comment="Replication slot identifier"
     )
 
+    is_publication_enabled: Mapped[bool] = mapped_column(
+        default=False, nullable=False, comment="Whether publication is enabled"
+    )
+
+    is_replication_enabled: Mapped[bool] = mapped_column(
+        default=False, nullable=False, comment="Whether replication is enabled"
+    )
+
+    last_check_replication_publication: Mapped[datetime | None] = mapped_column(
+        nullable=True, comment="Last timestamp of replication/publication check"
+    )
+
+    total_tables: Mapped[int] = mapped_column(
+        Integer, default=0, nullable=False, comment="Total tables in publication"
+    )
+
     # Relationships
     pipelines: Mapped[list["Pipeline"]] = relationship(
         "Pipeline",
@@ -99,6 +117,13 @@ class Source(Base, TimestampMixin):
         cascade="all, delete-orphan",
         lazy="select",
         uselist=False,  # One-to-one relationship
+    )
+
+    tables: Mapped[list["TableMetadata"]] = relationship(
+        "TableMetadata",
+        back_populates="source",
+        cascade="all, delete-orphan",
+        lazy="select",
     )
 
     def __repr__(self) -> str:

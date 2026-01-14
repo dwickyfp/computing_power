@@ -11,6 +11,10 @@ CREATE TABLE IF NOT EXISTS sources (
     pg_password VARCHAR(255),
     publication_name VARCHAR(255) NOT NULL,
     replication_id INTEGER NOT NULL,
+    is_publication_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+    is_replication_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+    last_check_replication_publication TIMESTAMP NULL,
+    total_tables INTEGER NOT NULL DEFAULT 0,
     created_at TIMESTAMP DEFAULT NOW(),
     updated_at TIMESTAMP DEFAULT NOW()
 );
@@ -25,6 +29,7 @@ CREATE TABLE IF NOT EXISTS destinations (
     snowflake_schema VARCHAR(255),
     snowflake_role VARCHAR(255),
     snowflake_private_key_path VARCHAR(255),
+    snowflake_private_key_content TEXT,
     snowflake_private_key_passphrase VARCHAR(255),
     snowflake_host VARCHAR(255),
     created_at TIMESTAMP DEFAULT NOW(),
@@ -74,11 +79,38 @@ CREATE TABLE IF NOT EXISTS wal_monitor (
     last_transaction_time TIMESTAMP, -- Last transaction timestamp
     replication_slot_name VARCHAR(255), -- Name of the replication slot
     replication_lag_bytes BIGINT,   -- Replication lag in bytes
+    total_wal_size VARCHAR(255),    -- Total size of WAL files (e.g., '640 MB')
     status VARCHAR(20) DEFAULT 'ACTIVE', -- 'ACTIVE', 'IDLE', 'ERROR'
     error_message TEXT,             -- Error details if any
     created_at TIMESTAMP DEFAULT NOW(),
     updated_at TIMESTAMP DEFAULT NOW(),
     CONSTRAINT unique_source_wal UNIQUE (source_id) -- Ensures 1 source = 1 row
+);
+
+-- Save lisat table based on publication, schema table, check table name
+CREATE TABLE IF NOT EXISTS table_metadata_list (
+    id SERIAL PRIMARY KEY,
+    source_id INTEGER NOT NULL REFERENCES sources(id) ON DELETE CASCADE,
+    table_name VARCHAR(255),
+    schema_table JSONB NULL,
+    is_exists_table_landing BOOLEAN DEFAULT FALSE, -- table landing in snowflake
+    is_exists_task BOOLEAN DEFAULT FALSE, -- task in snowflake
+    is_exists_table_destination BOOLEAN DEFAULT FALSE, -- table destination in snowflake
+    is_changes_schema BOOLEAN DEFAULT FALSE, -- track changes schema
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
+);
+
+-- track schema changes based on table in table_metadata_list (Append Only)
+CREATE TABLE IF NOT EXISTS history_schema_evolution (
+    id SERIAL PRIMARY KEY,
+    table_metadata_list_id INTEGER NOT NULL REFERENCES table_metadata_list(id) ON DELETE CASCADE,
+    schema_table_old JSONB NULL,
+    schema_table_new JSONB NULL,
+    changes_type VARCHAR(20) NULL, -- 'NEW COLUMN', 'DROP COLUMN', 'CHANGES TYPE', 
+    version_schema INTEGER NULL,
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
 );
 
 -- Create indexes for common queries

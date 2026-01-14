@@ -4,6 +4,7 @@ Source Pydantic schemas for request/response validation.
 Defines schemas for creating, updating, and retrieving source configurations.
 """
 
+from datetime import datetime
 from typing import Optional
 
 from pydantic import Field, validator
@@ -111,6 +112,42 @@ class SourceCreate(SourceBase):
         }
 
 
+class SourceConnectionTest(BaseSchema):
+    """
+    Schema for testing database connection.
+    """
+    pg_host: str = Field(
+        ...,
+        min_length=1,
+        max_length=255,
+        description="PostgreSQL host address",
+    )
+    pg_port: int = Field(
+        default=5432,
+        ge=1,
+        le=65535,
+        description="PostgreSQL port number",
+    )
+    pg_database: str = Field(
+        ...,
+        min_length=1,
+        max_length=255,
+        description="PostgreSQL database name",
+    )
+    pg_username: str = Field(
+        ...,
+        min_length=1,
+        max_length=255,
+        description="PostgreSQL username",
+    )
+    pg_password: str = Field(
+        ...,
+        min_length=1,
+        max_length=255,
+        description="PostgreSQL password",
+    )
+
+
 class SourceUpdate(BaseSchema):
     """
     Schema for updating an existing source.
@@ -176,6 +213,10 @@ class SourceResponse(SourceBase, TimestampSchema):
     """
 
     id: int = Field(..., description="Unique source identifier", examples=[1, 42])
+    is_publication_enabled: bool = Field(default=False, description="Whether publication is enabled")
+    is_replication_enabled: bool = Field(default=False, description="Whether replication is enabled")
+    last_check_replication_publication: Optional[datetime] = Field(default=None, description="Last timestamp of replication/publication check")
+    total_tables: int = Field(default=0, description="Total tables in publication")
 
     class Config:
         orm_mode = True
@@ -192,6 +233,9 @@ class SourceResponse(SourceBase, TimestampSchema):
                 "pg_username": "replication_user",
                 "publication_name": "dbz_publication",
                 "replication_id": 1,
+                "is_publication_enabled": True,
+                "is_replication_enabled": True,
+                "total_tables": 10,
                 "created_at": "2024-01-01T00:00:00Z",
                 "updated_at": "2024-01-01T00:00:00Z",
             }
