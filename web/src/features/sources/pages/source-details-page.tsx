@@ -16,6 +16,16 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { RefreshCcw, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 
 export default function SourceDetailsPage() {
     // Use TansStack Router useParams
@@ -26,6 +36,8 @@ export default function SourceDetailsPage() {
     const [isPublicationLoading, setIsPublicationLoading] = useState(false)
     const [isReplicationLoading, setIsReplicationLoading] = useState(false)
     const [createPubDialogOpen, setCreatePubDialogOpen] = useState(false)
+    const [dropPublicationDialogOpen, setDropPublicationDialogOpen] = useState(false)
+    const [dropReplicationDialogOpen, setDropReplicationDialogOpen] = useState(false)
 
     const { data, isLoading, error } = useQuery({
         queryKey: ['source-details', id],
@@ -47,44 +59,65 @@ export default function SourceDetailsPage() {
         }
     }
 
-    const handlePublicationAction = async () => {
+    const handlePublicationAction = () => {
         if (data?.source.is_publication_enabled) {
-            // Drop Publication
-            if (!window.confirm("Are you sure you want to drop the publication? This will stop CDC.")) return
-            setIsPublicationLoading(true)
-            try {
-                await sourcesRepo.dropPublication(id)
-                queryClient.invalidateQueries({ queryKey: ['source-details', id] })
-                toast.success("Publication dropped successfully")
-            } catch (err) {
-                console.error(err)
-                toast.error("Failed to drop publication")
-            } finally {
-                setIsPublicationLoading(false)
-            }
+            // Open Drop Publication Dialog
+            setDropPublicationDialogOpen(true)
         } else {
             // Create Publication -> Open Dialog
             setCreatePubDialogOpen(true)
         }
     }
 
+    const handleDropPublication = async () => {
+        setIsPublicationLoading(true)
+        setDropPublicationDialogOpen(false)
+        try {
+            await sourcesRepo.dropPublication(id)
+            queryClient.invalidateQueries({ queryKey: ['source-details', id] })
+            toast.success("Publication dropped successfully")
+        } catch (err) {
+            console.error(err)
+            toast.error("Failed to drop publication")
+        } finally {
+            setIsPublicationLoading(false)
+        }
+    }
+
     const handleReplicationAction = async () => {
+        if (data?.source.is_replication_enabled) {
+            // Open Drop Replication Dialog
+            setDropReplicationDialogOpen(true)
+        } else {
+             // Create Replication
+             await handleCreateReplication()
+        }
+    }
+
+    const handleCreateReplication = async () => {
         setIsReplicationLoading(true)
         try {
-            if (data?.source.is_replication_enabled) {
-                // Drop Replication
-                if (!window.confirm("Are you sure you want to drop the replication slot?")) return
-                await sourcesRepo.dropReplication(id)
-                toast.success("Replication slot dropped successfully")
-            } else {
-                // Create Replication
-                await sourcesRepo.createReplication(id)
-                toast.success("Replication slot created successfully")
-            }
+            await sourcesRepo.createReplication(id)
+            toast.success("Replication slot created successfully")
             queryClient.invalidateQueries({ queryKey: ['source-details', id] })
         } catch (err) {
             console.error(err)
-            toast.error(`Failed to ${data?.source.is_replication_enabled ? 'drop' : 'create'} replication slot`)
+             toast.error("Failed to create replication slot")
+        } finally {
+            setIsReplicationLoading(false)
+        }
+    }
+
+    const handleDropReplication = async () => {
+        setIsReplicationLoading(true)
+        setDropReplicationDialogOpen(false)
+        try {
+            await sourcesRepo.dropReplication(id)
+            toast.success("Replication slot dropped successfully")
+            queryClient.invalidateQueries({ queryKey: ['source-details', id] })
+        } catch (err) {
+            console.error(err)
+            toast.error("Failed to drop replication slot")
         } finally {
             setIsReplicationLoading(false)
         }
@@ -192,6 +225,42 @@ export default function SourceDetailsPage() {
                             sourceId={id}
                             listTables={data?.source.list_tables || []}
                         />
+                        
+                        <AlertDialog open={dropPublicationDialogOpen} onOpenChange={setDropPublicationDialogOpen}>
+                            <AlertDialogContent>
+                                <AlertDialogHeader>
+                                    <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                        This action will drop the publication and stop Change Data Capture (CDC).
+                                        This action cannot be undone.
+                                    </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                    <AlertDialogAction onClick={handleDropPublication} className="bg-destructive text-white hover:bg-destructive/90">
+                                        Drop Publication
+                                    </AlertDialogAction>
+                                </AlertDialogFooter>
+                            </AlertDialogContent>
+                        </AlertDialog>
+
+                        <AlertDialog open={dropReplicationDialogOpen} onOpenChange={setDropReplicationDialogOpen}>
+                            <AlertDialogContent>
+                                <AlertDialogHeader>
+                                    <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                        This action will drop the replication slot.
+                                        This action cannot be undone.
+                                    </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                    <AlertDialogAction onClick={handleDropReplication} className="bg-destructive text-white hover:bg-destructive/90">
+                                        Drop Replication
+                                    </AlertDialogAction>
+                                </AlertDialogFooter>
+                            </AlertDialogContent>
+                        </AlertDialog>
                     </>
                 )}
             </Main>
