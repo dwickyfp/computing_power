@@ -7,9 +7,11 @@ Provides REST API for managing data sources.
 from typing import List
 
 from fastapi import APIRouter, Depends, Query, status
+from pydantic import BaseModel
 
 from app.api.deps import get_source_service
 from app.domain.schemas.source import (
+    PublicationCreateRequest,
     SourceCreate,
     SourceResponse,
     SourceUpdate,
@@ -209,3 +211,100 @@ async def get_table_schema(
         List of schema columns
     """
     return service.get_table_schema_by_version(table_id, version)
+
+
+class TableRegisterRequest(BaseModel):
+    table_name: str
+
+
+@router.post(
+    "/{source_id}/tables/register",
+    status_code=status.HTTP_200_OK,
+    summary="Register table to publication",
+    description="Add a table to the source's publication",
+)
+async def register_table(
+    source_id: int,
+    request: TableRegisterRequest,
+    service: SourceService = Depends(get_source_service),
+) -> None:
+    """
+    Register table to publication.
+
+    Args:
+        source_id: Source identifier
+        request: Registration request
+        service: Source service instance
+    """
+    service.register_table_to_publication(source_id, request.table_name)
+    
+@router.delete(
+    "/{source_id}/tables/{table_name}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Unregister/Drop table from publication",
+    description="Remove a table from the source's publication",
+)
+async def unregister_table(
+    source_id: int,
+    table_name: str,
+    service: SourceService = Depends(get_source_service),
+) -> None:
+    service.unregister_table_from_publication(source_id, table_name)
+
+
+@router.post(
+    "/{source_id}/refresh",
+    status_code=status.HTTP_200_OK,
+    summary="Refresh source metadata",
+    description="Manually checks and updates table list and status",
+)
+async def refresh_source(
+    source_id: int,
+    service: SourceService = Depends(get_source_service),
+) -> None:
+    service.refresh_source_metadata(source_id)
+
+@router.post(
+    "/{source_id}/publication",
+    status_code=status.HTTP_201_CREATED,
+    summary="Create Publication",
+)
+async def create_publication(
+    source_id: int,
+    request: PublicationCreateRequest,
+    service: SourceService = Depends(get_source_service),
+) -> None:
+    service.create_publication(source_id, request.tables)
+
+@router.delete(
+    "/{source_id}/publication",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Drop Publication",
+)
+async def drop_publication(
+    source_id: int,
+    service: SourceService = Depends(get_source_service),
+) -> None:
+    service.drop_publication(source_id)
+
+@router.post(
+    "/{source_id}/replication",
+    status_code=status.HTTP_201_CREATED,
+    summary="Create Replication Slot",
+)
+async def create_replication_slot(
+    source_id: int,
+    service: SourceService = Depends(get_source_service),
+) -> None:
+    service.create_replication_slot(source_id)
+
+@router.delete(
+    "/{source_id}/replication",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Drop Replication Slot",
+)
+async def drop_replication_slot(
+    source_id: int,
+    service: SourceService = Depends(get_source_service),
+) -> None:
+    service.drop_replication_slot(source_id)

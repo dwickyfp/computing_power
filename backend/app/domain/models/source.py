@@ -8,6 +8,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 
 from sqlalchemy import Integer, String, UniqueConstraint
+from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.domain.models.base import Base, TimestampMixin
@@ -94,6 +95,10 @@ class Source(Base, TimestampMixin):
 
     total_tables: Mapped[int] = mapped_column(
         Integer, default=0, nullable=False, comment="Total tables in publication"
+    )
+
+    list_tables: Mapped[list[str]] = mapped_column(
+        ARRAY(String), nullable=True, comment="List of all tables in public schema"
     )
 
     # Relationships

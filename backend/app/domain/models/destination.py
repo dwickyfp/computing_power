@@ -69,7 +69,7 @@ class Destination(Base, TimestampMixin):
 
     # Authentication
     snowflake_private_key: Mapped[str | None] = mapped_column(
-        "snowflake_private_key_content", String, nullable=True, comment="Snowflake private key (PEM content)"
+        "snowflake_private_key", String, nullable=True, comment="Snowflake private key (PEM content)"
     )
 
     snowflake_private_key_passphrase: Mapped[str | None] = mapped_column(

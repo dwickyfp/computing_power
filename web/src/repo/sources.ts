@@ -15,6 +15,7 @@ export interface Source {
     total_tables: number
     created_at: string
     updated_at: string
+    list_tables: string[]
 }
 
 export interface SourceCreate {
@@ -111,5 +112,26 @@ export const sourcesRepo = {
             params: { version }
         })
         return data
+    },
+    registerTable: async (sourceId: number, tableName: string) => {
+        await api.post(`/sources/${sourceId}/tables/register`, { table_name: tableName })
+    },
+    unregisterTable: async (sourceId: number, tableName: string) => {
+        await api.delete(`/sources/${sourceId}/tables/${tableName}`)
+    },
+    refreshSource: async (sourceId: number) => {
+        await api.post(`/sources/${sourceId}/refresh`)
+    },
+    createPublication: async (sourceId: number, tables: string[]) => {
+        await api.post(`/sources/${sourceId}/publication`, { tables })
+    },
+    dropPublication: async (sourceId: number) => {
+        await api.delete(`/sources/${sourceId}/publication`)
+    },
+    createReplication: async (sourceId: number) => {
+        await api.post(`/sources/${sourceId}/replication`)
+    },
+    dropReplication: async (sourceId: number) => {
+        await api.delete(`/sources/${sourceId}/replication`)
     }
 }

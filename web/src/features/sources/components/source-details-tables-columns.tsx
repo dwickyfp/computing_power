@@ -14,7 +14,8 @@ import {
 export const getSourceDetailsTablesColumns = (
     onCheckSchema: (table: SourceTableInfo) => void,
     selectedVersions: Record<number, number>,
-    onVersionChange: (tableId: number, version: number) => void
+    onVersionChange: (tableId: number, version: number) => void,
+    onUnregister: (tableName: string) => void
 ): ColumnDef<SourceTableInfo>[] => [
     
     {
@@ -129,5 +130,22 @@ export const getSourceDetailsTablesColumns = (
                 </Button>
             </div>
         ),
+    },
+    {
+        id: 'actions',
+        header: ({ column }) => (
+             <DataTableColumnHeader column={column} title='Action' className='w-full justify-center' />
+        ),
+        cell: ({ row }) => (
+            <div className='flex justify-center'>
+                <Button
+                    variant='destructive'
+                    size='sm'
+                    onClick={() => onUnregister(row.original.table_name)}
+                >
+                    Drop
+                </Button>
+            </div>
+        )
     }
 ]

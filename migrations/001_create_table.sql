@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS sources (
     is_replication_enabled BOOLEAN NOT NULL DEFAULT FALSE,
     last_check_replication_publication TIMESTAMP NULL,
     total_tables INTEGER NOT NULL DEFAULT 0,
+    list_tables TEXT[] NULL,
     created_at TIMESTAMP DEFAULT NOW(),
     updated_at TIMESTAMP DEFAULT NOW()
 );

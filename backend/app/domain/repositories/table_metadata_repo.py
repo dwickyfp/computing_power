@@ -78,3 +78,29 @@ class TableMetadataRepository(BaseRepository[TableMetadata]):
         )
         
         return query.all()
+
+    def delete_by_source_id(self, source_id: int) -> None:
+        """
+        Delete all table metadata for a source.
+        
+        Args:
+            source_id: Source identifier
+        """
+        self.db.query(TableMetadata).filter(TableMetadata.source_id == source_id).delete()
+        self.db.flush()
+
+    def delete_table(self, source_id: int, table_name: str) -> None:
+        """
+        Delete metadata for a specific table.
+
+        Args:
+            source_id: Source identifier
+            table_name: Table name
+        """
+        self.db.query(TableMetadata).filter(
+            TableMetadata.source_id == source_id, 
+            TableMetadata.table_name == table_name
+        ).delete()
+        self.db.flush()
+
+

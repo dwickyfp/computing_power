@@ -18,6 +18,8 @@ import {
   // Users,
   // MessagesSquare,
   // ShieldCheck,
+  Snowflake,
+  Workflow,
   Command,
   Database,
 } from 'lucide-react'
@@ -97,8 +99,18 @@ export const sidebarData: SidebarData = {
         },
         {
             title: 'Destinations',
-            icon: Database,
+            icon: Snowflake,
             url: '/destinations',
+        },
+      ],
+    },
+    {
+      title: 'Integrations',
+      items: [
+        {
+          title: 'Pipelines',
+          icon: Workflow,
+          url: '/pipelines',
         },
       ],
     },

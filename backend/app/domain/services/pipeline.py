@@ -8,6 +8,7 @@ from typing import List
 
 from sqlalchemy.orm import Session
 
+from app.core.exceptions import DuplicateEntityError
 from app.core.logging import get_logger
 from app.domain.models.pipeline import Pipeline, PipelineMetadata, PipelineStatus
 from app.domain.repositories.pipeline import PipelineRepository
@@ -40,8 +41,18 @@ class PipelineService:
         """
         logger.info("Creating new pipeline", extra={"name": pipeline_data.name})
 
+        # Check if source is already used in another pipeline
+        existing_pipelines = self.repository.get_by_source_id(pipeline_data.source_id)
+        if existing_pipelines:
+            raise DuplicateEntityError(
+                entity_type="Pipeline",
+                field="source_id",
+                value=pipeline_data.source_id,
+                details={"message": "Source is already connected to a pipeline"},
+            )
+
         # Create pipeline with metadata using repository method
-        pipeline = self.repository.create_with_metadata(**pipeline_data.model_dump())
+        pipeline = self.repository.create_with_metadata(**pipeline_data.dict())
 
         logger.info(
             "Pipeline created successfully",
@@ -129,7 +140,7 @@ class PipelineService:
             "Updating pipeline",
             extra={
                 "pipeline_id": pipeline_id,
-                "fields": pipeline_data.model_dump(exclude_unset=True),
+                "fields": pipeline_data.dict(exclude_unset=True),
             },
         )
 
@@ -138,7 +149,7 @@ class PipelineService:
 
         # Update pipeline
         updated_pipeline = self.repository.update(
-            pipeline_id, **pipeline_data.model_dump(exclude_unset=True)
+            pipeline_id, **pipeline_data.dict(exclude_unset=True)
         )
 
         logger.info(
