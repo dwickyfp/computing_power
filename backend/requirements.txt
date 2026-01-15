@@ -40,4 +40,5 @@ isort==5.13.2
 httpx==0.26.0
 faker==22.0.0
 
-deepdiff
+deepdiff==8.6.1
+snowflake-connector-python==4.0.0

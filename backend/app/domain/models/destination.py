@@ -68,16 +68,16 @@ class Destination(Base, TimestampMixin):
     )
 
     # Authentication
-    snowflake_private_key_path: Mapped[str | None] = mapped_column(
-        String(255), nullable=True, comment="Path to Snowflake private key file"
+    snowflake_private_key: Mapped[str | None] = mapped_column(
+        "snowflake_private_key_content", String, nullable=True, comment="Snowflake private key (PEM content)"
     )
 
     snowflake_private_key_passphrase: Mapped[str | None] = mapped_column(
         String(255), nullable=True, comment="Private key passphrase (encrypted)"
     )
 
-    snowflake_host: Mapped[str | None] = mapped_column(
-        String(255), nullable=True, comment="Snowflake host/endpoint"
+    snowflake_warehouse: Mapped[str | None] = mapped_column(
+        String(255), nullable=True, comment="Snowflake warehouse name"
     )
 
     # Relationships
@@ -110,11 +110,16 @@ class Destination(Base, TimestampMixin):
             "role": self.snowflake_role or "",
         }
 
-        if self.snowflake_host:
-            config["host"] = self.snowflake_host
+        if self.snowflake_warehouse:
+            config["warehouse"] = self.snowflake_warehouse
 
-        if self.snowflake_private_key_path:
-            config["private_key_path"] = self.snowflake_private_key_path
+        if self.snowflake_private_key:
+            config["private_key"] = self.snowflake_private_key
+
+        if self.snowflake_private_key_passphrase:
+            config["private_key_passphrase"] = self.snowflake_private_key_passphrase
+
+        return config
 
         if self.snowflake_private_key_passphrase:
             config["private_key_passphrase"] = self.snowflake_private_key_passphrase

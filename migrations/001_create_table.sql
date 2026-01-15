@@ -28,10 +28,9 @@ CREATE TABLE IF NOT EXISTS destinations (
     snowflake_database VARCHAR(255),
     snowflake_schema VARCHAR(255),
     snowflake_role VARCHAR(255),
-    snowflake_private_key_path VARCHAR(255),
-    snowflake_private_key_content TEXT,
+    snowflake_private_key TEXT,
     snowflake_private_key_passphrase VARCHAR(255),
-    snowflake_host VARCHAR(255),
+    snowflake_warehouse VARCHAR(255),
     created_at TIMESTAMP DEFAULT NOW(),
     updated_at TIMESTAMP DEFAULT NOW()
 );
@@ -122,3 +121,8 @@ CREATE INDEX IF NOT EXISTS idx_pipeline_metadata_status ON pipeline_metadata(sta
 CREATE INDEX IF NOT EXISTS idx_wal_monitor_source_id ON wal_monitor(source_id);
 CREATE INDEX IF NOT EXISTS idx_wal_monitor_status ON wal_monitor(status);
 CREATE INDEX IF NOT EXISTS idx_wal_monitor_last_received ON wal_monitor(last_wal_received);
+CREATE INDEX IF NOT EXISTS idx_table_metadata_list_source_id ON table_metadata_list(source_id);
+CREATE INDEX IF NOT EXISTS idx_table_metadata_list_table_name ON table_metadata_list(table_name);
+CREATE INDEX IF NOT EXISTS idx_history_schema_evolution_table_metadata_list_id ON history_schema_evolution(table_metadata_list_id);
+CREATE INDEX IF NOT EXISTS idx_history_schema_evolution_version_schema ON history_schema_evolution(version_schema);
+

@@ -191,7 +191,7 @@ impl PipelineManager {
             role: dest_row
                 .try_get("snowflake_role")
                 .unwrap_or_else(|_| "PUBLIC".to_string()),
-            private_key_path: dest_row.try_get("snowflake_private_key_path")?,
+            private_key: dest_row.try_get("snowflake_private_key_content")?,
             private_key_passphrase: dest_row
                 .try_get("snowflake_private_key_passphrase")
                 .ok()

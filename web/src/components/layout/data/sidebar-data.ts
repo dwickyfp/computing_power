@@ -95,6 +95,11 @@ export const sidebarData: SidebarData = {
           icon: Database,
           url: '/sources',
         },
+        {
+            title: 'Destinations',
+            icon: Database,
+            url: '/destinations',
+        },
       ],
     },
     // {

@@ -8,7 +8,7 @@ use rsa::{
 };
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use std::fs;
+
 use std::time::{SystemTime, UNIX_EPOCH};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -31,11 +31,8 @@ pub struct AuthManager {
 
 impl AuthManager {
     pub fn new(config: &SnowflakeConfig) -> Result<Self> {
-        // 1. Baca File Private Key
-        let key_content = fs::read_to_string(&config.private_key_path).context(format!(
-            "Failed to read key file at {}",
-            config.private_key_path
-        ))?;
+        // 1. Get Private Key Content
+        let key_content = &config.private_key;
 
         // 2. Parse Private Key (Support Encrypted & Unencrypted)
         let private_key = if let Some(pass) = &config.private_key_passphrase {

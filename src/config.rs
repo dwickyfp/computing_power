@@ -11,7 +11,7 @@ pub struct SnowflakeConfig {
     pub role: String,
 
     // Auth Config
-    pub private_key_path: String,               // Path ke file .p8
+    pub private_key: String,               // Isi konten private key (PEM)
     pub private_key_passphrase: Option<String>, // Password key (jika ada)
 }
 
@@ -25,8 +25,8 @@ impl SnowflakeConfig {
             table: env::var("SNOWFLAKE_TABLE").context("SNOWFLAKE_TABLE missing")?,
             role: env::var("SNOWFLAKE_ROLE").unwrap_or_else(|_| "PUBLIC".to_string()),
 
-            private_key_path: env::var("SNOWFLAKE_PRIVATE_KEY_PATH")
-                .context("SNOWFLAKE_PRIVATE_KEY_PATH missing")?,
+            private_key: env::var("SNOWFLAKE_PRIVATE_KEY")
+                .context("SNOWFLAKE_PRIVATE_KEY missing")?,
             private_key_passphrase: env::var("SNOWFLAKE_PRIVATE_KEY_PASSPHRASE").ok(),
         })
     }
