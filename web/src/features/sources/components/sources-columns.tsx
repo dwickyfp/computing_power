@@ -2,10 +2,32 @@ import { type ColumnDef } from '@tanstack/react-table'
 import { DataTableColumnHeader } from '@/components/data-table'
 import { type Source } from '../data/schema'
 import { SourcesRowActions } from './sources-row-actions'
-
 import { Badge } from '@/components/ui/badge'
+import { Info } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 
 export const sourcesColumns: ColumnDef<Source>[] = [
+    {
+        id: 'detail',
+        header: ({ column }) => (
+            <DataTableColumnHeader column={column} title='Action' className='w-full justify-center' />
+        ),
+        cell: ({ row }) => (
+            <div className='flex justify-center'>
+               <Button
+                    variant='ghost'
+                    size='sm'
+                    className='h-8 w-8 p-0'
+                    onClick={() => window.location.href = `/sources/${row.getValue('id')}/details`}
+                >
+                    <Info className='h-4 w-4' />
+                    <span className='sr-only'>Detail</span>
+                </Button>
+            </div>
+        ),
+        enableSorting: false,
+        enableHiding: false,
+    },
     {
         accessorKey: 'id',
         header: ({ column }) => (

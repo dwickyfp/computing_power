@@ -40,6 +40,7 @@ import { Route as AuthenticatedSettingsDisplayRouteImport } from './routes/_auth
 import { Route as AuthenticatedSettingsAppearanceRouteImport } from './routes/_authenticated/settings/appearance'
 import { Route as AuthenticatedSettingsAccountRouteImport } from './routes/_authenticated/settings/account'
 import { Route as AuthenticatedErrorsErrorRouteImport } from './routes/_authenticated/errors/$error'
+import { Route as AuthenticatedSourcesSourceIdDetailsRouteImport } from './routes/_authenticated/sources/$sourceId.details'
 
 const ClerkRouteRoute = ClerkRouteRouteImport.update({
   id: '/clerk',
@@ -203,6 +204,12 @@ const AuthenticatedErrorsErrorRoute =
     path: '/errors/$error',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedSourcesSourceIdDetailsRoute =
+  AuthenticatedSourcesSourceIdDetailsRouteImport.update({
+    id: '/sources/$sourceId/details',
+    path: '/sources/$sourceId/details',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/clerk': typeof ClerkAuthenticatedRouteRouteWithChildren
@@ -233,6 +240,7 @@ export interface FileRoutesByFullPath {
   '/sources': typeof AuthenticatedSourcesIndexRoute
   '/tasks': typeof AuthenticatedTasksIndexRoute
   '/users': typeof AuthenticatedUsersIndexRoute
+  '/sources/$sourceId/details': typeof AuthenticatedSourcesSourceIdDetailsRoute
 }
 export interface FileRoutesByTo {
   '/clerk': typeof ClerkAuthenticatedRouteRouteWithChildren
@@ -262,6 +270,7 @@ export interface FileRoutesByTo {
   '/sources': typeof AuthenticatedSourcesIndexRoute
   '/tasks': typeof AuthenticatedTasksIndexRoute
   '/users': typeof AuthenticatedUsersIndexRoute
+  '/sources/$sourceId/details': typeof AuthenticatedSourcesSourceIdDetailsRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -296,6 +305,7 @@ export interface FileRoutesById {
   '/_authenticated/sources/': typeof AuthenticatedSourcesIndexRoute
   '/_authenticated/tasks/': typeof AuthenticatedTasksIndexRoute
   '/_authenticated/users/': typeof AuthenticatedUsersIndexRoute
+  '/_authenticated/sources/$sourceId/details': typeof AuthenticatedSourcesSourceIdDetailsRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -328,6 +338,7 @@ export interface FileRouteTypes {
     | '/sources'
     | '/tasks'
     | '/users'
+    | '/sources/$sourceId/details'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/clerk'
@@ -357,6 +368,7 @@ export interface FileRouteTypes {
     | '/sources'
     | '/tasks'
     | '/users'
+    | '/sources/$sourceId/details'
   id:
     | '__root__'
     | '/_authenticated'
@@ -390,6 +402,7 @@ export interface FileRouteTypes {
     | '/_authenticated/sources/'
     | '/_authenticated/tasks/'
     | '/_authenticated/users/'
+    | '/_authenticated/sources/$sourceId/details'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -626,6 +639,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedErrorsErrorRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/sources/$sourceId/details': {
+      id: '/_authenticated/sources/$sourceId/details'
+      path: '/sources/$sourceId/details'
+      fullPath: '/sources/$sourceId/details'
+      preLoaderRoute: typeof AuthenticatedSourcesSourceIdDetailsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
   }
 }
 
@@ -662,6 +682,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedSourcesIndexRoute: typeof AuthenticatedSourcesIndexRoute
   AuthenticatedTasksIndexRoute: typeof AuthenticatedTasksIndexRoute
   AuthenticatedUsersIndexRoute: typeof AuthenticatedUsersIndexRoute
+  AuthenticatedSourcesSourceIdDetailsRoute: typeof AuthenticatedSourcesSourceIdDetailsRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
@@ -674,6 +695,8 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedSourcesIndexRoute: AuthenticatedSourcesIndexRoute,
   AuthenticatedTasksIndexRoute: AuthenticatedTasksIndexRoute,
   AuthenticatedUsersIndexRoute: AuthenticatedUsersIndexRoute,
+  AuthenticatedSourcesSourceIdDetailsRoute:
+    AuthenticatedSourcesSourceIdDetailsRoute,
 }
 
 const AuthenticatedRouteRouteWithChildren =

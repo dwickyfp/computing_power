@@ -35,6 +35,48 @@ export interface SourceListResponse {
     total: number
 }
 
+export interface SourceTableInfo {
+    id: number
+    table_name: string
+    is_exists_table_landing: boolean
+    is_exists_task: boolean
+    is_exists_table_destination: boolean
+    version: number
+    schema_table?: {
+        column_name: string
+        is_nullable: string
+        real_data_type: string
+        is_primary_key: boolean
+        has_default: boolean
+        default_value: string | null
+    }[]
+}
+
+export interface WALMonitorResponse {
+    wal_lsn: string | null
+    wal_position: number | null
+    last_wal_received: string | null
+    last_transaction_time: string | null
+    replication_slot_name: string | null
+    replication_lag_bytes: number | null
+    total_wal_size: string | null
+    status: string
+    error_message: string | null
+    id: number
+    created_at: string
+    updated_at: string
+}
+
+export interface SourceDetailResponse {
+    source: SourceResponse
+    wal_monitor: WALMonitorResponse | null
+    tables: SourceTableInfo[]
+    destinations: string[]
+}
+
+// Ensure SourceResponse is compatible or defined if not already perfect
+export interface SourceResponse extends Source {}
+
 export const sourcesRepo = {
     getAll: async () => {
         const { data } = await api.get<Source[]>('/sources')
@@ -58,6 +100,16 @@ export const sourcesRepo = {
         // We use SourceCreate as it contains all necessary fields for connection test
         // Ensure required fields for test are present if using a partial type elsewhere
         const { data } = await api.post<boolean>('/sources/test_connection', config)
+        return data
+    },
+    getDetails: async (id: number) => {
+        const { data } = await api.get<SourceDetailResponse>(`/sources/${id}/details`)
+        return data
+    },
+    getTableSchema: async (tableId: number, version: number) => {
+        const { data } = await api.get<SourceTableInfo['schema_table']>(`/sources/tables/${tableId}/schema`, {
+            params: { version }
+        })
         return data
     }
 }

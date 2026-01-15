@@ -9,9 +9,23 @@ from typing import List
 from sqlalchemy.orm import Session
 
 from app.core.logging import get_logger
+from app.core.exceptions import EntityNotFoundError
+from app.domain.models.history_schema_evolution import HistorySchemaEvolution
 from app.domain.models.source import Source
 from app.domain.repositories.source import SourceRepository
-from app.domain.schemas.source import SourceConnectionTest, SourceCreate, SourceUpdate
+from app.domain.repositories.wal_monitor_repo import WALMonitorRepository
+from app.domain.repositories.table_metadata_repo import TableMetadataRepository
+from app.domain.repositories.history_schema_evolution_repo import HistorySchemaEvolutionRepository
+from app.domain.repositories.pipeline import PipelineRepository
+from app.domain.schemas.source import (
+    SourceConnectionTest, 
+    SourceCreate, 
+    SourceUpdate,
+    SourceResponse
+)
+from app.domain.schemas.source_detail import SourceDetailResponse, SourceTableInfo
+from app.domain.schemas.wal_monitor import WALMonitorResponse
+
 
 logger = get_logger(__name__)
 
@@ -170,6 +184,7 @@ class SourceService:
             )
             return False
 
+
     def test_connection(self, source_id: int) -> bool:
         """
         Test database connection for a source.
@@ -192,3 +207,113 @@ class SourceService:
         )
 
         return self.test_connection_config(config)
+
+    def get_source_details(self, source_id: int) -> SourceDetailResponse:
+        """
+        Get detailed information for a source.
+        
+        Includes WAL monitor metrics and table metadata.
+        
+        Args:
+            source_id: Source identifier
+            
+        Returns:
+            Source details
+        """
+        # 1. Get Source
+        source = self.get_source(source_id)
+        
+        # 2. Get WAL Monitor
+        wal_monitor_repo = WALMonitorRepository(self.db)
+        wal_monitor = wal_monitor_repo.get_by_source(source_id)
+        
+        # 3. Get Tables with Version Count
+        table_repo = TableMetadataRepository(self.db)
+        tables_with_count = table_repo.get_tables_with_version_count(source_id)
+        
+        source_tables = []
+        for table, count in tables_with_count:
+            # logic: if count table is 0, then version 1, if count table 1 then version 2 etc.
+            # So generic formula: version = count + 1
+            version = count + 1
+            
+            source_tables.append(
+                SourceTableInfo(
+                    id=table.id,
+                    table_name=table.table_name or "Unknown",
+                    is_exists_table_landing=table.is_exists_table_landing,
+                    is_exists_task=table.is_exists_task,
+                    is_exists_table_destination=table.is_exists_table_destination,
+                    version=version,
+                    schema_table=list(table.schema_table.values()) if isinstance(table.schema_table, dict) else (table.schema_table if isinstance(table.schema_table, list) else [])
+                )
+            )
+            
+        # 4. Get Destinations via Pipelines
+        pipeline_repo = PipelineRepository(self.db)
+        pipelines = pipeline_repo.get_by_source_id(source_id)
+        
+        # Extract unique destination names
+        destination_names = list(set(
+            p.destination.name for p in pipelines 
+            if p.destination
+        ))
+
+        return SourceDetailResponse(
+            source=SourceResponse.from_orm(source),
+            wal_monitor=WALMonitorResponse.from_orm(wal_monitor) if wal_monitor else None,
+            tables=source_tables,
+            destinations=destination_names
+        )
+
+    def get_table_schema_by_version(self, table_id: int, version: int) -> List[dict]:
+        """
+        Get table schema for a specific version.
+        
+        Args:
+            table_id: Table ID
+            version: Schema version
+            
+        Returns:
+            List of schema columns
+        """
+        table_repo = TableMetadataRepository(self.db)
+        history_repo = HistorySchemaEvolutionRepository(self.db)
+        
+        table = table_repo.get_by_id(table_id)
+        if not table:
+            raise EntityNotFoundError(entity_type="TableMetadata", entity_id=table_id)
+            
+        current_version = (
+            self.db.query(HistorySchemaEvolution)
+            .filter(HistorySchemaEvolution.table_metadata_list_id == table.id)
+            .count()
+        ) + 1
+        
+        if version < 1 or version > current_version:
+             raise ValueError(f"Version must be between 1 and {current_version}")
+             
+        # If requesting current version
+        if version == current_version:
+            schema_data = table.schema_table
+        else:
+            history = history_repo.get_by_table_and_version(table.id, version)
+            # Logic: If requesting V1, and history for V1 exists, it contains OLD schema (V1) and NEW schema (V2).
+            # So we return schema_table_old.
+            
+            if not history:
+                 # Fallback logic: 
+                 # If we requested a valid version < current, history SHOULD exist.
+                 # But if not found (maybe gap?), try to find nearest? 
+                 # For now, strict.
+                 raise EntityNotFoundError(entity_type="HistorySchemaEvolution", entity_id=f"{table.id}-v{version}")
+            
+            schema_data = history.schema_table_old
+            
+        # Convert dictionary to list if needed
+        if isinstance(schema_data, dict):
+            return list(schema_data.values())
+        elif isinstance(schema_data, list):
+            return schema_data
+        return []
+

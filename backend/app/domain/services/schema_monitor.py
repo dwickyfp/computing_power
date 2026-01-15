@@ -223,31 +223,59 @@ class SchemaMonitorService:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             # Complex query with PostGIS support
             complex_query = f"""
-                SELECT
-                   c.column_name,
-                   c.is_nullable,
-                   CASE
-                       WHEN c.udt_name = 'geometry' THEN 'GEOMETRY'
-                       WHEN c.udt_name = 'geography' THEN 'GEOGRAPHY'
-                       ELSE UPPER(c.data_type)
-                   END AS real_data_type
-                FROM
-                   information_schema.columns c
-                LEFT JOIN
-                   geometry_columns gc
-                   ON c.table_schema = gc.f_table_schema
-                   AND c.table_name = gc.f_table_name
-                   AND c.column_name = gc.f_geometry_column
-                LEFT JOIN
-                   geography_columns gg
-                   ON c.table_schema = gg.f_table_schema
-                   AND c.table_name = gg.f_table_name
-                   AND c.column_name = gg.f_geography_column
-                WHERE
-                   c.table_schema = 'public' 
-                   and c.table_name = '{table_name}'
-                ORDER BY
-                   c.ordinal_position;
+                SELECT 
+                    c.column_name,
+                    c.is_nullable,
+                    CASE 
+                        WHEN c.udt_name = 'geometry' THEN 'GEOMETRY'
+                        WHEN c.udt_name = 'geography' THEN 'GEOGRAPHY'
+                        ELSE UPPER(c.data_type)
+                    END AS real_data_type,
+                    CASE 
+                        WHEN pk.column_name IS NOT NULL THEN TRUE 
+                        ELSE FALSE 
+                    END AS is_primary_key,
+
+                    CASE 
+                        WHEN c.column_default IS NOT NULL THEN TRUE 
+                        ELSE FALSE 
+                    END AS has_default,
+                    c.column_default AS default_value
+                FROM 
+                    information_schema.columns c
+                LEFT JOIN 
+                    geometry_columns gc 
+                    ON c.table_schema = gc.f_table_schema 
+                    AND c.table_name = gc.f_table_name 
+                    AND c.column_name = gc.f_geometry_column
+                LEFT JOIN 
+                    geography_columns gg 
+                    ON c.table_schema = gg.f_table_schema 
+                    AND c.table_name = gg.f_table_name 
+                    AND c.column_name = gg.f_geography_column
+                LEFT JOIN (
+                    SELECT 
+                        kcu.table_schema, 
+                        kcu.table_name, 
+                        kcu.column_name
+                    FROM 
+                        information_schema.key_column_usage kcu
+                    JOIN 
+                        information_schema.table_constraints tc 
+                        ON kcu.constraint_name = tc.constraint_name 
+                        AND kcu.table_schema = tc.table_schema
+                    WHERE 
+                        tc.constraint_type = 'PRIMARY KEY'
+                ) pk 
+                    ON c.table_schema = pk.table_schema 
+                    AND c.table_name = pk.table_name 
+                    AND c.column_name = pk.column_name
+                WHERE 
+                    c.table_schema = 'public' 
+                    and c.table_name = '{table_name}'
+                ORDER BY 
+                    c.table_name, 
+                    c.ordinal_position;
             """
             
             try:
@@ -268,16 +296,43 @@ class SchemaMonitorService:
             # Fallback Query
             fallback_query = f"""
                 SELECT
-                   c.column_name,
-                   c.is_nullable,
-                   UPPER(c.data_type) aS real_data_type
-                FROM
-                   information_schema.columns c
-                WHERE
-                   c.table_schema = 'public' 
-                   and c.table_name = '{table_name}'
-                ORDER BY
-                   c.ordinal_position;
+                    c.column_name,
+                    c.is_nullable,
+                    UPPER(c.data_type) aS real_data_type,
+                    CASE 
+                            WHEN pk.column_name IS NOT NULL THEN TRUE 
+                            ELSE FALSE 
+                        END AS is_primary_key,
+
+                        CASE 
+                            WHEN c.column_default IS NOT NULL THEN TRUE 
+                            ELSE FALSE 
+                        END AS has_default,
+                        c.column_default AS default_value
+                    FROM
+                    information_schema.columns c
+                    LEFT JOIN (
+                        SELECT 
+                            kcu.table_schema, 
+                            kcu.table_name, 
+                            kcu.column_name
+                        FROM 
+                            information_schema.key_column_usage kcu
+                        JOIN 
+                            information_schema.table_constraints tc 
+                            ON kcu.constraint_name = tc.constraint_name 
+                            AND kcu.table_schema = tc.table_schema
+                        WHERE 
+                            tc.constraint_type = 'PRIMARY KEY'
+                    ) pk 
+                        ON c.table_schema = pk.table_schema 
+                        AND c.table_name = pk.table_name 
+                        AND c.column_name = pk.column_name
+                    WHERE
+                    c.table_schema = 'public' 
+                    and c.table_name = '{table_name}'
+                    ORDER BY
+                    c.ordinal_position;
             """
             cur.execute(fallback_query)
             return cur.fetchall()

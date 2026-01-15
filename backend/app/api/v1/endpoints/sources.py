@@ -15,6 +15,7 @@ from app.domain.schemas.source import (
     SourceUpdate,
     SourceConnectionTest,
 )
+from app.domain.schemas.source_detail import SourceDetailResponse
 from app.domain.services.source import SourceService
 
 router = APIRouter()
@@ -95,6 +96,28 @@ async def get_source(
     return SourceResponse.from_orm(source)
 
 
+@router.get(
+    "/{source_id}/details",
+    response_model=SourceDetailResponse,
+    summary="Get source details",
+    description="Get detailed source information including WAL monitor metrics and table metadata",
+)
+async def get_source_details(
+    source_id: int, service: SourceService = Depends(get_source_service)
+) -> SourceDetailResponse:
+    """
+    Get source details.
+
+    Args:
+        source_id: Source identifier
+        service: Source service instance
+
+    Returns:
+        Source details
+    """
+    return service.get_source_details(source_id)
+
+
 @router.put(
     "/{source_id}",
     response_model=SourceResponse,
@@ -161,3 +184,28 @@ async def test_connection(
         True if connection is successful, False otherwise
     """
     return service.test_connection_config(config)
+
+
+@router.get(
+    "/tables/{table_id}/schema",
+    response_model=List[dict],
+    summary="Get table schema by version",
+    description="Get schema columns for a specific table version",
+)
+async def get_table_schema(
+    table_id: int,
+    version: int = Query(..., ge=1, description="Schema version"),
+    service: SourceService = Depends(get_source_service),
+) -> List[dict]:
+    """
+    Get table schema for a specific version.
+
+    Args:
+        table_id: Table identifier
+        version: Schema version
+        service: Source service instance
+
+    Returns:
+        List of schema columns
+    """
+    return service.get_table_schema_by_version(table_id, version)

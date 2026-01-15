@@ -5,11 +5,15 @@ Defines schemas for creating, updating, and retrieving source configurations.
 """
 
 from datetime import datetime
-from typing import Optional
+from typing import List, Optional
 
-from pydantic import Field, validator
+from pydantic import BaseModel, Field, validator
 
 from app.domain.schemas.common import BaseSchema, TimestampSchema
+
+
+
+
 
 
 class SourceBase(BaseSchema):

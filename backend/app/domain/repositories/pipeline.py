@@ -117,3 +117,19 @@ class PipelineRepository(BaseRepository[Pipeline]):
         self.db.refresh(pipeline)
 
         return pipeline
+    def get_by_source_id(self, source_id: int) -> List[Pipeline]:
+        """
+        Get all pipelines for a specific source.
+        
+        Args:
+            source_id: Source identifier
+            
+        Returns:
+            List of pipelines with destination loaded
+        """
+        result = self.db.execute(
+            select(Pipeline)
+            .options(selectinload(Pipeline.destination))
+            .where(Pipeline.source_id == source_id)
+        )
+        return list(result.scalars().all())
