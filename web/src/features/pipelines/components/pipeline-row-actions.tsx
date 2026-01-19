@@ -24,11 +24,33 @@ export function PipelineRowActions<TData>({ row }: DataTableRowActionsProps<TDat
   const { mutate: deleteMutate } = useMutation({
     mutationFn: pipelinesRepo.delete,
     onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: ['pipelines'] })
-        toast.success('Pipeline deleted')
+      queryClient.invalidateQueries({ queryKey: ['pipelines'] })
+      toast.success('Pipeline deleted')
     },
     onError: () => {
-        toast.error('Failed to delete pipeline')
+      toast.error('Failed to delete pipeline')
+    }
+  })
+
+  const { mutate: startMutate } = useMutation({
+    mutationFn: pipelinesRepo.start,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['pipelines'] })
+      toast.success('Pipeline started')
+    },
+    onError: () => {
+      toast.error('Failed to start pipeline')
+    }
+  })
+
+  const { mutate: pauseMutate } = useMutation({
+    mutationFn: pipelinesRepo.pause,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['pipelines'] })
+      toast.success('Pipeline paused')
+    },
+    onError: () => {
+      toast.error('Failed to pause pipeline')
     }
   })
 
@@ -41,7 +63,15 @@ export function PipelineRowActions<TData>({ row }: DataTableRowActionsProps<TDat
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align='end' className='w-[160px]'>
-        <DropdownMenuItem>Edit</DropdownMenuItem>
+        {pipeline.status === 'START' ? (
+          <DropdownMenuItem onClick={() => pauseMutate(pipeline.id)}>
+            Pause
+          </DropdownMenuItem>
+        ) : (
+          <DropdownMenuItem onClick={() => startMutate(pipeline.id)}>
+            Start
+          </DropdownMenuItem>
+        )}
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={() => deleteMutate(pipeline.id)}>
           Delete

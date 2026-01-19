@@ -80,9 +80,13 @@ export const pipelineColumns: ColumnDef<Pipeline>[] = [
     header: 'Status',
     cell: ({ row }) => {
       const status = row.getValue('status') as string
+      const isStart = status === 'START'
       return (
-        <Badge variant={status === 'START' ? 'default' : 'secondary'}>
-          {status}
+        <Badge
+          variant={isStart ? 'default' : 'secondary'}
+          className={isStart ? 'bg-green-500 hover:bg-green-600' : ''}
+        >
+          {isStart ? 'RUNNING' : status}
         </Badge>
       )
     },

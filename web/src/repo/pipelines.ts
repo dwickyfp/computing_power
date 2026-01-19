@@ -52,5 +52,13 @@ export const pipelinesRepo = {
   },
   delete: async (id: number): Promise<void> => {
     await api.delete(`/pipelines/${id}`)
+  },
+  start: async (id: number): Promise<Pipeline> => {
+    const response: AxiosResponse<Pipeline> = await api.post(`/pipelines/${id}/start`)
+    return response.data
+  },
+  pause: async (id: number): Promise<Pipeline> => {
+    const response: AxiosResponse<Pipeline> = await api.post(`/pipelines/${id}/pause`)
+    return response.data
   }
 }
