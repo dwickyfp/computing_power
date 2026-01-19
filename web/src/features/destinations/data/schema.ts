@@ -15,6 +15,7 @@ export const destinationSchema = z.object({
     snowflake_warehouse: z.string().nullable(),
     created_at: z.string(),
     updated_at: z.string(),
+    is_used_in_active_pipeline: z.boolean().optional(),
 })
 
 export type Destination = z.infer<typeof destinationSchema>

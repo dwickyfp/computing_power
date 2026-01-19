@@ -6,7 +6,8 @@ Stores Snowflake credit usage data for destinations.
 
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Integer, DateTime, ForeignKey
+from decimal import Decimal
+from sqlalchemy import Integer, DateTime, ForeignKey, Numeric
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.domain.models.base import Base, TimestampMixin
@@ -45,8 +46,8 @@ class CreditSnowflakeMonitoring(Base, TimestampMixin):
     )
 
     # Data
-    total_credit: Mapped[int] = mapped_column(
-        Integer,
+    total_credit: Mapped[Decimal] = mapped_column(
+        Numeric(38, 9),
         nullable=False,
         comment="Total credits used",
     )

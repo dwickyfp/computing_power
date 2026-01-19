@@ -139,3 +139,8 @@ class Destination(Base, TimestampMixin):
             config["private_key_passphrase"] = self.snowflake_private_key_passphrase
 
         return config
+
+    @property
+    def is_used_in_active_pipeline(self) -> bool:
+        """Check if destination is used in any active pipeline."""
+        return any(p.status == "START" for p in self.pipelines)

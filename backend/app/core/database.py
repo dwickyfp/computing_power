@@ -162,6 +162,20 @@ class DatabaseManager:
             "total_connections": pool.size() + pool.overflow(),
         }
 
+    @contextmanager
+    def session(self) -> Generator[Session, None, None]:
+        """
+        Get database session as context manager.
+        """
+        session = self.session_factory()
+        try:
+            yield session
+        except Exception:
+            session.rollback()
+            raise
+        finally:
+            session.close()
+
 
 # Global database manager instance
 db_manager = DatabaseManager()

@@ -220,26 +220,25 @@ class CreditMonitorService:
             # Verify destination exists
             dest = session.get(Destination, destination_id)
             if not dest:
-                 # Should probably raise 404
                  return None
 
-            # Fetch all data for this destination in date desc order
-            # Limit to last ~60 days to cover month comparisons
-            start_date = datetime.now() - timedelta(days=65)
+            today = datetime.now().date()
             
-            records = session.execute(
-                select(CreditSnowflakeMonitoring)
-                .where(
+            # Helper to execute aggregation query
+            def get_sum(start_date, end_date=None):
+                query = select(func.sum(CreditSnowflakeMonitoring.total_credit)).where(
                     CreditSnowflakeMonitoring.destination_id == destination_id,
                     CreditSnowflakeMonitoring.usage_date >= start_date
                 )
-                .order_by(desc(CreditSnowflakeMonitoring.usage_date))
-            ).scalars().all()
-            
-            # Calculate stats
-            today = datetime.now().date()
-            
-            # Current week (starts Monday)
+                if end_date:
+                    query = query.where(CreditSnowflakeMonitoring.usage_date <= end_date)
+                
+                result = session.execute(query).scalar()
+                return float(result) if result else 0.0
+
+            # Current week (starts MONDAY)
+            # Snowflake usage_date is usually the day of usage.
+            # Assuming 'usage_date' is stored as the date of record (without time or time=00:00).
             start_week = today - timedelta(days=today.weekday())
             # Previous week
             start_prev_week = start_week - timedelta(weeks=1)
@@ -248,38 +247,34 @@ class CreditMonitorService:
             # Current month
             start_month = today.replace(day=1)
             # Previous month
-            # Logic to get prev month start/end
             last_month_end = start_month - timedelta(days=1)
             start_prev_month = last_month_end.replace(day=1)
             
-            curr_week_sum = 0.0
-            prev_week_sum = 0.0
-            curr_month_sum = 0.0
-            prev_month_sum = 0.0
+            # Execute aggregations
+            curr_week_sum = get_sum(start_week)
+            prev_week_sum = get_sum(start_prev_week, end_prev_week)
+            curr_month_sum = get_sum(start_month)
+            prev_month_sum = get_sum(start_prev_month, last_month_end)
             
-            daily_data = [] # For last 30 days
-            
+            # Daily data for chart (Last 30 days)
             limit_30_days = today - timedelta(days=30)
             
-            for r in records:
-                d = r.usage_date.date()
-                val = float(r.total_credit)
-                
-                # Weekly stats
-                if d >= start_week:
-                    curr_week_sum += val
-                elif start_prev_week <= d <= end_prev_week:
-                    prev_week_sum += val
-                    
-                # Monthly stats
-                if d >= start_month:
-                    curr_month_sum += val
-                elif start_prev_month <= d <= last_month_end:
-                    prev_month_sum += val
-                    
-                # Chart data
-                if d >= limit_30_days:
-                    daily_data.append(DailyUsage(date=r.usage_date, credits=val))
+            daily_records = session.execute(
+                select(
+                    CreditSnowflakeMonitoring.usage_date,
+                    CreditSnowflakeMonitoring.total_credit
+                )
+                .where(
+                    CreditSnowflakeMonitoring.destination_id == destination_id,
+                    CreditSnowflakeMonitoring.usage_date >= limit_30_days
+                )
+                .order_by(desc(CreditSnowflakeMonitoring.usage_date))
+            ).all()
+            
+            daily_data = [
+                DailyUsage(date=r.usage_date, credits=float(r.total_credit)) 
+                for r in daily_records
+            ]
 
             return CreditUsageResponse(
                 summary=WeeklyMonthlyUsage(

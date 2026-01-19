@@ -217,6 +217,10 @@ class DestinationResponse(DestinationBase, TimestampSchema):
     snowflake_warehouse: str | None = Field(
         default=None, description="Snowflake warehouse name"
     )
+    is_used_in_active_pipeline: bool = Field(
+        default=False,
+        description="Indicates if destination is used in any active pipeline"
+    )
 
     class Config:
         orm_mode = True

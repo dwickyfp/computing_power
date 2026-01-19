@@ -1,6 +1,6 @@
 import { DotsHorizontalIcon } from '@radix-ui/react-icons'
 import { type Row } from '@tanstack/react-table'
-import { Trash2 } from 'lucide-react'
+import { Trash2, Lock } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
     DropdownMenu,
@@ -41,8 +41,14 @@ export function DestinationsRowActions<TData>({
                         setCurrentRow(destination)
                         setOpen('update')
                     }}
+                    disabled={destination.is_used_in_active_pipeline}
                 >
                     Edit
+                    {destination.is_used_in_active_pipeline && (
+                        <DropdownMenuShortcut>
+                            <Lock size={16} />
+                        </DropdownMenuShortcut>
+                    )}
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem

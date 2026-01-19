@@ -73,7 +73,7 @@ export function DestinationDetailsPage() {
                             <CardTitle className="text-sm font-medium">This Week</CardTitle>
                         </CardHeader>
                         <CardContent>
-                            <div className="text-2xl font-bold">{summary?.current_week.toFixed(2) ?? '0.00'}</div>
+                            <div className="text-2xl font-bold">{summary?.current_week.toFixed(9) ?? '0.000000000'}</div>
                             <p className="text-xs text-muted-foreground">Credits used</p>
                         </CardContent>
                     </Card>
@@ -82,7 +82,7 @@ export function DestinationDetailsPage() {
                             <CardTitle className="text-sm font-medium">This Month</CardTitle>
                         </CardHeader>
                         <CardContent>
-                            <div className="text-2xl font-bold">{summary?.current_month.toFixed(2) ?? '0.00'}</div>
+                            <div className="text-2xl font-bold">{summary?.current_month.toFixed(9) ?? '0.000000000'}</div>
                             <p className="text-xs text-muted-foreground">Credits used</p>
                         </CardContent>
                     </Card>
@@ -91,7 +91,7 @@ export function DestinationDetailsPage() {
                             <CardTitle className="text-sm font-medium">Previous Week</CardTitle>
                         </CardHeader>
                         <CardContent>
-                            <div className="text-2xl font-bold">{summary?.previous_week.toFixed(2) ?? '0.00'}</div>
+                            <div className="text-2xl font-bold">{summary?.previous_week.toFixed(9) ?? '0.000000000'}</div>
                             <p className="text-xs text-muted-foreground">Credits used</p>
                         </CardContent>
                     </Card>
@@ -100,7 +100,7 @@ export function DestinationDetailsPage() {
                             <CardTitle className="text-sm font-medium">Previous Month</CardTitle>
                         </CardHeader>
                         <CardContent>
-                            <div className="text-2xl font-bold">{summary?.previous_month.toFixed(2) ?? '0.00'}</div>
+                            <div className="text-2xl font-bold">{summary?.previous_month.toFixed(9) ?? '0.000000000'}</div>
                             <p className="text-xs text-muted-foreground">Credits used</p>
                         </CardContent>
                     </Card>
