@@ -6,15 +6,20 @@ import { Button } from '@/components/ui/button'
 import { PipelineAnimatedArrow } from './pipeline-animated-arrow.tsx'
 import { PipelineRowActions } from './pipeline-row-actions.tsx'
 import { Info } from 'lucide-react'
+import { Switch } from '@/components/ui/switch'
+import { pipelinesRepo } from '@/repo/pipelines'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { toast } from 'sonner'
 
 
 export const pipelineColumns: ColumnDef<Pipeline>[] = [
-  
+
   {
     id: 'details',
     header: () => <div className="text-center font-semibold">Action</div>,
     cell: ({ row }) => (
-      <div className='flex items-center justify-center'>
+      <div className='flex items-center justify-center space-x-2'>
+        <PipelineStatusSwitch pipeline={row.original} />
         <PipelineDetailsButton pipelineId={row.original.id} />
       </div>
     ),
@@ -82,7 +87,7 @@ export const pipelineColumns: ColumnDef<Pipeline>[] = [
           variant={isStart || isRefresh ? 'default' : 'secondary'}
           className={
             isStart ? 'bg-green-500 hover:bg-green-600' :
-            isRefresh ? 'bg-blue-500 hover:bg-blue-600' : ''
+              isRefresh ? 'bg-blue-500 hover:bg-blue-600' : ''
           }
         >
           {isStart ? 'RUNNING' : status}
@@ -113,6 +118,36 @@ function PipelineDetailsButton({ pipelineId }: { pipelineId: number }) {
     >
       <Info className="h-4 w-4" />
     </Button>
+  )
+}
+
+function PipelineStatusSwitch({ pipeline }: { pipeline: Pipeline }) {
+  const queryClient = useQueryClient()
+  const isRunning = pipeline.status === 'START' || pipeline.status === 'REFRESH'
+
+  const { mutate, isPending } = useMutation({
+    mutationFn: async (checked: boolean) => {
+      if (checked) {
+        return pipelinesRepo.start(pipeline.id)
+      } else {
+        return pipelinesRepo.pause(pipeline.id)
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['pipelines'] })
+      toast.success('Pipeline status updated')
+    },
+    onError: (error) => {
+      toast.error(`Failed to update status: ${error}`)
+    }
+  })
+
+  return (
+    <Switch
+      checked={isRunning}
+      onCheckedChange={(checked) => mutate(checked)}
+      disabled={isPending}
+    />
   )
 }
 

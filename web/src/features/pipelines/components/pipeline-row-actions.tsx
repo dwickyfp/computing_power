@@ -50,27 +50,7 @@ export function PipelineRowActions<TData>({ row }: DataTableRowActionsProps<TDat
     },
   })
 
-  const { mutate: startMutate } = useMutation({
-    mutationFn: pipelinesRepo.start,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['pipelines'] })
-      toast.success('Pipeline started')
-    },
-    onError: () => {
-      toast.error('Failed to start pipeline')
-    }
-  })
 
-  const { mutate: pauseMutate } = useMutation({
-    mutationFn: pipelinesRepo.pause,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['pipelines'] })
-      toast.success('Pipeline paused')
-    },
-    onError: () => {
-      toast.error('Failed to pause pipeline')
-    }
-  })
 
   const { mutate: refreshMutate } = useMutation({
     mutationFn: pipelinesRepo.refresh,
@@ -92,15 +72,7 @@ export function PipelineRowActions<TData>({ row }: DataTableRowActionsProps<TDat
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align='end' className='w-[160px]'>
-        {pipeline.status === 'START' ? (
-          <DropdownMenuItem onClick={() => pauseMutate(pipeline.id)}>
-            Pause
-          </DropdownMenuItem>
-        ) : (
-          <DropdownMenuItem onClick={() => startMutate(pipeline.id)}>
-            Start
-          </DropdownMenuItem>
-        )}
+
         <DropdownMenuItem onClick={() => refreshMutate(pipeline.id)}>
           Refresh
         </DropdownMenuItem>
