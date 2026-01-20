@@ -81,15 +81,12 @@ const MonitoringSparkline = ({ stats }: { stats: PipelineStats | undefined }) =>
                         <CartesianGrid strokeDasharray="3 3" vertical={false} />
                         <XAxis 
                             dataKey="label" 
-                            hide={false} 
-                            tick={{ fontSize: 10 }} 
-                            interval="preserveStartEnd"
-                            tickCount={3}
+                            hide={true} 
                         />
                         <YAxis 
                             hide={false} 
-                            tick={{ fontSize: 10 }}
-                            width={40}
+                            tick={false}
+                            width={10}
                             domain={[0, 'auto']}
                             allowDecimals={false}
                             tickFormatter={formatYAxis}
@@ -140,7 +137,7 @@ export const getSourceDetailsTablesColumns = (
                 const tableName = row.getValue('table_name') as string
                 const stats = statsMap[tableName]
                 // Get today's count (last entry in daily_stats usually, or check date)
-                const today = new Date().toISOString().split('T')[0]
+                const today = new Date().toLocaleDateString('en-CA')
                 const todayStat = stats?.daily_stats.find(d => d.date.startsWith(today))
                 const count = todayStat ? todayStat.count : 0
                 

@@ -706,8 +706,13 @@ class PipelineService:
                     "recent_stats": []
                 }
             
+            # Ensure timestamp is timezone-aware (Asia/Jakarta)
+            timestamp = row.created_at
+            if timestamp.tzinfo is None:
+                timestamp = timestamp.replace(tzinfo=ZoneInfo('Asia/Jakarta'))
+                
             stats_by_table[table_name]["recent_stats"].append({
-                "timestamp": row.created_at.isoformat() + "Z",
+                "timestamp": timestamp.isoformat(),
                 "count": row.record_count
             })
             
