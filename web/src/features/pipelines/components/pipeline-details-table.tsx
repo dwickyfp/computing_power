@@ -130,13 +130,14 @@ export function PipelineDetailsTable({ pipelineId, tables }: PipelineDetailsTabl
                                             data-state={row.getIsSelected() && 'selected'}
                                         >
                                             {row.getVisibleCells().map((cell) => (
-                                                <TableCell
-                                                    key={cell.id}
-                                                    className={cn(
-                                                        cell.column.columnDef.meta?.className,
-                                                        cell.column.columnDef.meta?.tdClassName
-                                                    )}
-                                                >
+                                                 <TableCell
+                                                     key={cell.id}
+                                                     className={cn(
+                                                         'py-4',
+                                                         cell.column.columnDef.meta?.className,
+                                                         cell.column.columnDef.meta?.tdClassName
+                                                     )}
+                                                 >
                                                     {flexRender(
                                                         cell.column.columnDef.cell,
                                                         cell.getContext()

@@ -50,7 +50,7 @@ export function DestinationDetailsPage() {
     })
 
     return (
-        <div className="flex min-h-screen flex-col">
+        <>
             <Header fixed>
                 <Search />
                 <div className='ms-auto flex items-center space-x-4'>
@@ -59,7 +59,7 @@ export function DestinationDetailsPage() {
                 </div>
             </Header>
 
-            <Main className='flex flex-1 flex-col gap-4 sm:gap-6 pt-16'>
+            <Main className='flex flex-1 flex-col gap-4 sm:gap-6'>
                 <div className="flex items-center justify-between">
                     <div>
                         <h2 className="text-2xl font-bold tracking-tight">Destination Details</h2>
@@ -148,6 +148,6 @@ export function DestinationDetailsPage() {
                     </CardContent>
                 </Card>
             </Main>
-        </div>
+        </>
     )
 }

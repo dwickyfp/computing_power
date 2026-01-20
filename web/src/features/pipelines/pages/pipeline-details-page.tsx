@@ -116,8 +116,7 @@ export default function PipelineDetailsPage() {
                         </Button>
                     </div>
                 </div>
-                <div className="space-y-4">
-                    <h3 className="text-lg font-medium">Table Replication Status</h3>
+                <div>
                     {isLoading ? (
                         <div className="space-y-2">
                             <Skeleton className="h-10 w-full" />

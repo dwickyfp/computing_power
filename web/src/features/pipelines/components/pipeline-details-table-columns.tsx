@@ -67,8 +67,8 @@ const MonitoringSparkline = ({ stats }: { stats: PipelineStats | undefined }) =>
     }, [stats, now])
 
     return (
-        <div className="flex justify-center p-2">
-            <div className="h-[80px] w-[250px]">
+        <div className="flex h-full items-center justify-center">
+            <div className="h-[100px] w-[300px]">
                 <ResponsiveContainer width="100%" height="100%">
                     <AreaChart data={data}>
                         <defs>
@@ -120,9 +120,14 @@ export const getPipelineDetailsTableColumns = (
             header: ({ column }) => (
                 <DataTableColumnHeader column={column} title='Table Name' />
             ),
-            cell: ({ row }) => (
-                <span className='font-medium'>{row.getValue('table_name')}</span>
-            ),
+            cell: ({ row }) => {
+                const tableName = row.getValue('table_name') as string
+                return (
+                    <div className="flex h-full items-center px-3">
+                        <span className='font-medium uppercase'>{tableName}</span>
+                    </div>
+                )
+            },
             enableSorting: true,
             enableHiding: false,
         },
@@ -140,8 +145,10 @@ export const getPipelineDetailsTableColumns = (
                 const count = todayStat ? todayStat.count : 0
                 
                 return (
-                   <div className="text-center font-medium">
-                       {count.toLocaleString()}
+                   <div className="flex h-full items-center justify-center">
+                       <span className="text-lg font-semibold tabular-nums">
+                           {count.toLocaleString()}
+                       </span>
                    </div>
                 )
             }
