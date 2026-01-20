@@ -1,19 +1,19 @@
 import {
   // Construction,
   LayoutDashboard,
-  Monitor,
+  // Monitor,
   // Bug,
   // ListTodo,
   // FileX,
   HelpCircle,
   // Lock,
-  Bell,
+  // Bell,
   // Package,
-  Palette,
+  // Palette,
   // ServerOff,
   Settings,
-  Wrench,
-  UserCog,
+  // Wrench,
+  // UserCog,
   // UserX,
   // Users,
   // MessagesSquare,
@@ -22,6 +22,7 @@ import {
   Workflow,
   Command,
   Database,
+  Activity,
 } from 'lucide-react'
 // import { ClerkLogo } from '@/assets/clerk-logo'
 import { type SidebarData } from '../types'
@@ -184,29 +185,9 @@ export const sidebarData: SidebarData = {
           icon: Settings,
           items: [
             {
-              title: 'Profile',
-              url: '/settings',
-              icon: UserCog,
-            },
-            {
-              title: 'Account',
-              url: '/settings/account',
-              icon: Wrench,
-            },
-            {
-              title: 'Appearance',
-              url: '/settings/appearance',
-              icon: Palette,
-            },
-            {
-              title: 'Notifications',
-              url: '/settings/notifications',
-              icon: Bell,
-            },
-            {
-              title: 'Display',
-              url: '/settings/display',
-              icon: Monitor,
+              title: 'WAL Monitor',
+              url: '/settings/wal-monitor',
+              icon: Activity,
             },
           ],
         },

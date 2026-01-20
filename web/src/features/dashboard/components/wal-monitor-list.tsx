@@ -17,6 +17,20 @@ export function WALMonitorList() {
         return <div className='text-sm text-muted-foreground'>No active WAL monitors found.</div>
     }
 
+    // Helper to get badge variant based on threshold status
+    const getWalSizeBadgeVariant = (status: 'OK' | 'WARNING' | 'ERROR' | null) => {
+        switch (status) {
+            case 'OK':
+                return 'default' // Green
+            case 'WARNING':
+                return 'outline' // Yellow/outlined
+            case 'ERROR':
+                return 'destructive' // Red
+            default:
+                return 'secondary'
+        }
+    }
+
     return (
         <div className='space-y-8'>
             {monitors.map((monitor) => (
@@ -40,9 +54,18 @@ export function WALMonitorList() {
                             <span className='text-xs text-muted-foreground'>
                                 Lag: {formatBytes(monitor.replication_lag_bytes || 0)}
                             </span>
-                            <span className='text-xs text-muted-foreground'>
-                                WAL Size: {monitor.total_wal_size || 'N/A'}
-                            </span>
+                            <Badge 
+                                variant={getWalSizeBadgeVariant(monitor.wal_threshold_status)}
+                                className={
+                                    monitor.wal_threshold_status === 'OK' 
+                                        ? 'bg-green-500 hover:bg-green-600' 
+                                        : monitor.wal_threshold_status === 'WARNING'
+                                        ? 'bg-yellow-500 hover:bg-yellow-600 text-white'
+                                        : ''
+                                }
+                            >
+                                WAL: {monitor.total_wal_size || 'N/A'}
+                            </Badge>
                         </div>
                     </div>
                 </div>

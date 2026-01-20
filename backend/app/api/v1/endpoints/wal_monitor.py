@@ -139,27 +139,96 @@ async def get_wal_monitor_by_source(
     response_model=WALMonitorListResponse,
     status_code=status.HTTP_200_OK,
     summary="List all WAL monitors",
-    description="Retrieve all WAL monitor records",
+    description="Retrieve all WAL monitor records with threshold status",
 )
 async def list_wal_monitors(
     db: Session = Depends(get_db),
 ):
     """
-    Get all WAL monitor records.
+    Get all WAL monitor records with threshold calculation.
 
     Args:
         db: Database session
 
     Returns:
-        List of all WAL monitor records
+        List of all WAL monitor records with threshold status
 
     Raises:
         500: Database error
     """
     try:
+        from app.domain.services.configuration import ConfigurationService
+        import httpx
+        import re
+        
         service = WALMonitorService(db)
+        config_service = ConfigurationService(db)
+        
+        # Get thresholds from configuration
+        thresholds = config_service.get_wal_thresholds()
+        
         monitors = service.list_monitors()
-
+        
+        # Add threshold status to each monitor
+        for monitor in monitors:
+            # Parse WAL size to bytes if it's a string
+            wal_size_bytes = 0
+            if monitor.total_wal_size:
+                # Parse formats like "5.2 MB", "1.5 GB", etc.
+                match = re.match(r'([\d.]+)\s*([KMGT]?B)', monitor.total_wal_size, re.IGNORECASE)
+                if match:
+                    value = float(match.group(1))
+                    unit = match.group(2).upper()
+                    
+                    multipliers = {
+                        'B': 1,
+                        'KB': 1024,
+                        'MB': 1024 ** 2,
+                        'GB': 1024 ** 3,
+                        'TB': 1024 ** 4
+                    }
+                    wal_size_bytes = int(value * multipliers.get(unit, 1))
+            
+            # Set wal_size_bytes attribute
+            monitor.wal_size_bytes = wal_size_bytes
+            
+            # Determine threshold status
+            if wal_size_bytes < thresholds.warning:
+                monitor.wal_threshold_status = "OK"
+            elif wal_size_bytes < thresholds.error:
+                monitor.wal_threshold_status = "WARNING"
+            else:
+                monitor.wal_threshold_status = "ERROR"
+            
+            # Send webhook notification if in WARNING or ERROR and webhook URL is set
+            if monitor.wal_threshold_status in ["WARNING", "ERROR"] and thresholds.webhook_url:
+                try:
+                    alert_name = f"WAL Size Alert - {monitor.wal_threshold_status}"
+                    alert_message = (
+                        f"Source #{monitor.source_id} ({monitor.source.name if monitor.source else 'Unknown'}) "
+                        f"has WAL size of {monitor.total_wal_size} ({wal_size_bytes} bytes). "
+                        f"Status: {monitor.wal_threshold_status}"
+                    )
+                    
+                    payload = {
+                        "ALERT_NAME": alert_name,
+                        "ALERT_MESSAGE": alert_message
+                    }
+                    
+                    async with httpx.AsyncClient(timeout=5.0) as client:
+                        await client.post(thresholds.webhook_url, json=payload)
+                    
+                    logger.info(
+                        f"Webhook notification sent for {monitor.wal_threshold_status} status",
+                        extra={"source_id": monitor.source_id, "wal_size": wal_size_bytes}
+                    )
+                except Exception as webhook_error:
+                    # Log but don't fail the request if webhook fails
+                    logger.warning(
+                        f"Failed to send webhook notification",
+                        extra={"error": str(webhook_error), "source_id": monitor.source_id}
+                    )
+        
         return WALMonitorListResponse(
             monitors=monitors,
             total=len(monitors),

@@ -175,3 +175,15 @@ CREATE TABLE IF NOT EXISTS data_flow_record_monitoring(
 );
 
 CREATE INDEX IF NOT EXISTS idx_data_flow_record_monitoring_pipeline_id ON data_flow_record_monitoring(pipeline_id);
+
+
+CREATE TABLE IF NOT EXISTS rosetta_setting_configuration(
+    id SERIAL PRIMARY KEY,
+    config_key VARCHAR(255) NOT NULL,
+    config_value VARCHAR(255) NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+);
+INSERT INTO rosetta_setting_configuration(config_key, config_value) VALUES('WAL_MONITORING_THRESHOLD_WARNING', '3000');
+INSERT INTO rosetta_setting_configuration(config_key, config_value) VALUES('WAL_MONITORING_THRESHOLD_ERROR', '6000');
+INSERT INTO rosetta_setting_configuration(config_key, config_value) VALUES('ALERT_NOTIFICATION_WEBHOOK_URL', '');
