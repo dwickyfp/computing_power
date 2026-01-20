@@ -225,7 +225,13 @@ impl PipelineManager {
             .connect(&source_pool_url)
             .await?;
 
-        let destination = SnowflakeDestination::new(snowflake_config, source_pool)?;
+        let destination = SnowflakeDestination::new(
+            snowflake_config,
+            source_pool,
+            self.db_pool.clone(),
+            pipeline_id,
+            source_id,
+        )?;
 
         let store = CustomStore::new();
 

@@ -161,4 +161,17 @@ CREATE TABLE IF NOT EXISTS credit_snowflake_monitoring(
     created_at TIMESTAMP DEFAULT NOW(),
     updated_at TIMESTAMP DEFAULT NOW()
 );
+CREATE INDEX IF NOT EXISTS idx_credit_snowflake_monitoring_destination_id ON credit_snowflake_monitoring(destination_id);
 
+-- Goals is to track record count of each table in each pipeline
+CREATE TABLE IF NOT EXISTS data_flow_record_monitoring(
+    id SERIAL PRIMARY KEY,
+    pipeline_id INTEGER NOT NULL REFERENCES pipelines(id) ON DELETE CASCADE,
+    source_id  INTEGER NOT NULL REFERENCES sources(id) ON DELETE CASCADE,
+    table_name VARCHAR(255) NOT NULL,
+    record_count BIGINT NOT NULL,
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_data_flow_record_monitoring_pipeline_id ON data_flow_record_monitoring(pipeline_id);

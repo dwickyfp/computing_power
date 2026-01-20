@@ -16,6 +16,9 @@ pub struct SnowflakeDestination {
     client: Arc<Mutex<SnowpipeClient>>,
     current_token: Arc<Mutex<HashMap<TableId, String>>>,
     pg_pool: Pool<Postgres>,
+    metadata_pool: Pool<Postgres>,
+    pipeline_id: i32,
+    source_id: i32,
     table_cache: Arc<Mutex<HashMap<TableId, String>>>,
     column_cache: Arc<Mutex<HashMap<TableId, Vec<String>>>>,
 }
@@ -99,7 +102,13 @@ fn row_to_json_object(row: &TableRow, column_names: &[String], operation: &str) 
 }
 
 impl SnowflakeDestination {
-    pub fn new(config: SnowflakeConfig, pg_pool: Pool<Postgres>) -> EtlResult<Self> {
+    pub fn new(
+        config: SnowflakeConfig,
+        pg_pool: Pool<Postgres>,
+        metadata_pool: Pool<Postgres>,
+        pipeline_id: i32,
+        source_id: i32,
+    ) -> EtlResult<Self> {
         // Init client (akan hitung fingerprint di sini)
         let client = SnowpipeClient::new(config)
             .map_err(|e| etl_error!(ErrorKind::Unknown, "Client init error: {}", e))?;
@@ -108,6 +117,9 @@ impl SnowflakeDestination {
             client: Arc::new(Mutex::new(client)),
             current_token: Arc::new(Mutex::new(HashMap::new())),
             pg_pool,
+            metadata_pool,
+            pipeline_id,
+            source_id,
             table_cache: Arc::new(Mutex::new(HashMap::new())),
             column_cache: Arc::new(Mutex::new(HashMap::new())),
         })
@@ -227,6 +239,22 @@ impl Destination for SnowflakeDestination {
             })?;
 
         *token = next_token;
+
+        // Monitor data flow
+        let record_count = rows.len() as i64;
+        if let Err(e) = sqlx::query(
+            "INSERT INTO data_flow_record_monitoring (pipeline_id, source_id, table_name, record_count) VALUES ($1, $2, $3, $4)",
+        )
+        .bind(self.pipeline_id)
+        .bind(self.source_id)
+        .bind(&table_name)
+        .bind(record_count)
+        .execute(&self.metadata_pool)
+        .await
+        {
+            error!("Failed to insert monitoring record for {}: {}", table_name, e);
+        }
+
         Ok(())
     }
 
@@ -269,6 +297,7 @@ impl Destination for SnowflakeDestination {
                     })?;
             }
 
+            let record_count = events.len() as i64;
             let mut json_rows = Vec::new();
 
             for event in events {
@@ -300,6 +329,20 @@ impl Destination for SnowflakeDestination {
                         etl_error!(ErrorKind::Unknown, "Write events failed: {}", e)
                     })?;
                 *token = next_token;
+
+                // Monitor data flow
+                if let Err(e) = sqlx::query(
+                    "INSERT INTO data_flow_record_monitoring (pipeline_id, source_id, table_name, record_count) VALUES ($1, $2, $3, $4)",
+                )
+                .bind(self.pipeline_id)
+                .bind(self.source_id)
+                .bind(&table_name)
+                .bind(record_count)
+                .execute(&self.metadata_pool)
+                .await
+                {
+                    error!("Failed to insert monitoring record for {}: {}", table_name, e);
+                }
             }
         }
 
