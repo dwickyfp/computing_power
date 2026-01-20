@@ -1,36 +1,23 @@
 import { ColumnDef } from '@tanstack/react-table'
 import { Badge } from '@/components/ui/badge'
-import { Checkbox } from '@/components/ui/checkbox'
 import { Pipeline } from '@/repo/pipelines'
 import { useNavigate } from '@tanstack/react-router'
 import { Button } from '@/components/ui/button'
 import { PipelineAnimatedArrow } from './pipeline-animated-arrow.tsx'
 import { PipelineRowActions } from './pipeline-row-actions.tsx'
+import { Info } from 'lucide-react'
 
 
 export const pipelineColumns: ColumnDef<Pipeline>[] = [
+  
   {
-    id: 'select',
-    header: ({ table }) => (
-      <Checkbox
-        checked={
-          table.getIsAllPageRowsSelected() || (table.getIsSomePageRowsSelected() && 'indeterminate')
-        }
-        onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
-        aria-label='Select all'
-        className='translate-y-[2px]'
-      />
-    ),
+    id: 'details',
+    header: () => <div className="text-center font-semibold">Action</div>,
     cell: ({ row }) => (
-      <Checkbox
-        checked={row.getIsSelected()}
-        onCheckedChange={(value) => row.toggleSelected(!!value)}
-        aria-label='Select row'
-        className='translate-y-[2px]'
-      />
+      <div className='flex items-center justify-center'>
+        <PipelineDetailsButton pipelineId={row.original.id} />
+      </div>
     ),
-    enableSorting: false,
-    enableHiding: false,
   },
   {
     accessorKey: 'name',
@@ -45,9 +32,9 @@ export const pipelineColumns: ColumnDef<Pipeline>[] = [
       const destName = row.original.destination?.name || 'Unknown Destination'
       return (
         <div className='flex items-center space-x-2'>
-          <span className='font-medium text-muted-foreground'>{sourceName}</span>
+          <span className='font-medium'>{sourceName}</span>
           <PipelineAnimatedArrow />
-          <span className='font-medium text-muted-foreground'>{destName}</span>
+          <span className='font-medium'>{destName}</span>
         </div>
       )
     },
@@ -57,7 +44,8 @@ export const pipelineColumns: ColumnDef<Pipeline>[] = [
     header: 'Initialization',
     cell: ({ row }) => {
       const progress = row.original.pipeline_progress
-      if (!progress || progress.status === 'COMPLETED') return <span className='text-muted-foreground'>-</span>
+      if (progress?.status === 'COMPLETED') return <span className='text-muted-foreground font-medium text-xs'>FINISH</span>
+      if (!progress) return <span className='text-muted-foreground'>-</span>
 
       return (
         <div className='flex flex-col space-y-1 w-[140px]'>
@@ -101,18 +89,7 @@ export const pipelineColumns: ColumnDef<Pipeline>[] = [
       return value.includes(row.getValue(id))
     },
   },
-  {
-    id: 'details',
-    header: 'Details',
-    cell: ({ row }) => {
-      // We can't use hooks here directly if it's not a component definition, 
-      // but Tanstack Table cell is rendered as a component.
-      // However, to be safe and cleaner, let's extract a component or use a simple Link if available,
-      // or just use `window.location`? No, SPA.
-      // Best to use a small component.
-      return <PipelineDetailsButton pipelineId={row.original.id} />
-    }
-  },
+
   {
     id: 'actions',
     cell: ({ row }) => <PipelineRowActions row={row} />,
@@ -123,11 +100,12 @@ function PipelineDetailsButton({ pipelineId }: { pipelineId: number }) {
   const navigate = useNavigate()
   return (
     <Button
-      variant="outline"
-      size="sm"
+      variant="ghost"
+      size="icon"
+      className='h-8 w-8 p-0'
       onClick={() => navigate({ to: '/pipelines/$pipelineId', params: { pipelineId: String(pipelineId) } })}
     >
-      Details
+      <Info className="h-4 w-4" />
     </Button>
   )
 }

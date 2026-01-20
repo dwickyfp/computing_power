@@ -9,7 +9,7 @@ import { Info } from 'lucide-react'
 export const destinationsColumns: ColumnDef<Destination>[] = [
     {
         id: 'details',
-        header: 'Action',
+        header: () => <div className="text-center font-semibold">Action</div>,
         cell: ({ row }) => (
             <div className='flex items-center justify-center'>
                 <DestinationDetailsButton destinationId={row.original.id} />

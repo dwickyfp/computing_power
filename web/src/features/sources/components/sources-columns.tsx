@@ -9,9 +9,7 @@ import { Button } from '@/components/ui/button'
 export const sourcesColumns: ColumnDef<Source>[] = [
     {
         id: 'detail',
-        header: ({ column }) => (
-            <DataTableColumnHeader column={column} title='Action' className='w-full justify-center' />
-        ),
+        header: () => <div className="text-center font-semibold">Action</div>,
         cell: ({ row }) => (
             <div className='flex justify-center'>
                <Button
