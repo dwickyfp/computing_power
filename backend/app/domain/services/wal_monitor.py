@@ -5,7 +5,7 @@ Implements PostgreSQL WAL status monitoring with retry logic and error handling.
 """
 
 import asyncio
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from typing import Optional
 
 import psycopg2
@@ -187,7 +187,7 @@ class WALMonitorService:
             try:
                 # Check WAL status
                 wal_status = await self.check_wal_status(source)
-                now = datetime.utcnow()
+                now = datetime.now(timezone(timedelta(hours=7)))
 
                 # Upsert monitor record
                 wal_monitor_repo = WALMonitorRepository(db)
@@ -238,7 +238,7 @@ class WALMonitorService:
                             source_id=source.id,
                             status="ERROR",
                             error_message=str(e),
-                            last_wal_received=datetime.utcnow(),
+                            last_wal_received=datetime.now(timezone(timedelta(hours=7))),
                         )
                         db.commit()
                     except Exception as update_error:
@@ -258,7 +258,7 @@ class WALMonitorService:
                         source_id=source.id,
                         status="ERROR",
                         error_message=str(e),
-                        last_wal_received=datetime.utcnow(),
+                        last_wal_received=datetime.now(timezone(timedelta(hours=7))),
                     )
                     db.commit()
                 except Exception as update_error:

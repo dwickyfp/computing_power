@@ -27,7 +27,7 @@ export const getSourceDetailsTablesColumns = (
         {
             id: 'message_per_day',
             header: ({ column }) => (
-                <DataTableColumnHeader column={column} title='Message Per Day' className='justify-end' />
+                <DataTableColumnHeader column={column} title='Message Per Day' className='flex w-full justify-center' />
             ),
             cell: ({ row }) => {
                 const tableName = row.getValue('table_name') as string
@@ -38,7 +38,7 @@ export const getSourceDetailsTablesColumns = (
                 const count = todayStat ? todayStat.count : 0
                 
                 return (
-                   <div className="text-right font-medium">
+                   <div className="text-center font-medium">
                        {count.toLocaleString()}
                    </div>
                 )
@@ -47,7 +47,7 @@ export const getSourceDetailsTablesColumns = (
         {
             id: 'monitoring',
             header: ({ column }) => (
-                <DataTableColumnHeader column={column} title='Monitoring (5m)' className='w-[150px]' />
+                <DataTableColumnHeader column={column} title='Monitoring' className='flex w-full justify-center' />
             ),
             cell: ({ row }) => {
                 const tableName = row.getValue('table_name') as string
@@ -65,21 +65,23 @@ export const getSourceDetailsTablesColumns = (
                 }, [stats])
 
                 return (
-                    <div className="h-[40px] w-[150px]">
-                        <ResponsiveContainer width="100%" height="100%">
-                            <LineChart data={data}>
-                                <Line 
-                                    type="monotone" 
-                                    dataKey="count" 
-                                    stroke="#8884d8" 
-                                    strokeWidth={2} 
-                                    dot={false} 
-                                    isAnimationActive={false} // Disable animation for smoother updates
-                                />
-                                {/* Optional: Add YAxis to scale properly if counts vary widely, or keep min/max auto */}
-                                {/* <YAxis domain={['auto', 'auto']} hide /> */}
-                            </LineChart>
-                        </ResponsiveContainer>
+                    <div className="flex justify-center">
+                        <div className="h-[40px] w-[150px]">
+                            <ResponsiveContainer width="100%" height="100%">
+                                <LineChart data={data}>
+                                    <Line 
+                                        type="monotone" 
+                                        dataKey="count" 
+                                        stroke="#8884d8" 
+                                        strokeWidth={2} 
+                                        dot={false} 
+                                        isAnimationActive={false} // Disable animation for smoother updates
+                                    />
+                                    {/* Optional: Add YAxis to scale properly if counts vary widely, or keep min/max auto */}
+                                    {/* <YAxis domain={['auto', 'auto']} hide /> */}
+                                </LineChart>
+                            </ResponsiveContainer>
+                        </div>
                     </div>
                 )
             }

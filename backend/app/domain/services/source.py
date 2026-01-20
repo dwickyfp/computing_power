@@ -5,7 +5,7 @@ Implements business rules and orchestrates repository operations for sources.
 """
 
 from typing import List
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 
 from sqlalchemy.orm import Session
 import psycopg2
@@ -421,7 +421,9 @@ class SourceService:
                 source.is_replication_enabled = bool(cur.fetchone())
                 
                 # 4. Update check timestamp
-                source.last_check_replication_publication = datetime.utcnow()
+                # Use Asia/Jakarta (UTC+7)
+                jakarta_tz = timezone(timedelta(hours=7))
+                source.last_check_replication_publication = datetime.now(jakarta_tz)
                 
             conn.close()
             

@@ -266,7 +266,7 @@ impl PipelineManager {
         status: &str,
         last_error: Option<&str>,
     ) -> Result<()> {
-        let now = chrono::Utc::now();
+        let now = chrono::Utc::now().with_timezone(&chrono::FixedOffset::east_opt(7 * 3600).unwrap());
         // Check if exists
         let exists: bool =
             sqlx::query("SELECT EXISTS(SELECT 1 FROM pipeline_metadata WHERE pipeline_id = $1)")
@@ -296,7 +296,7 @@ impl PipelineManager {
     }
 
     async fn update_last_start(&self, pipeline_id: i32) -> Result<()> {
-        let now = chrono::Utc::now();
+        let now = chrono::Utc::now().with_timezone(&chrono::FixedOffset::east_opt(7 * 3600).unwrap());
         sqlx::query("UPDATE pipeline_metadata SET last_start_at = $1 WHERE pipeline_id = $2")
             .bind(now)
             .bind(pipeline_id)

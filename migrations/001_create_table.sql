@@ -13,10 +13,10 @@ CREATE TABLE IF NOT EXISTS sources (
     replication_id INTEGER NOT NULL,
     is_publication_enabled BOOLEAN NOT NULL DEFAULT FALSE,
     is_replication_enabled BOOLEAN NOT NULL DEFAULT FALSE,
-    last_check_replication_publication TIMESTAMP NULL,
+    last_check_replication_publication TIMESTAMPTZ NULL,
     total_tables INTEGER NOT NULL DEFAULT 0,
-    created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP DEFAULT NOW()
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 -- Table 2: Destinations Snowflake
@@ -33,8 +33,8 @@ CREATE TABLE IF NOT EXISTS destinations (
     snowflake_private_key TEXT,
     snowflake_private_key_passphrase VARCHAR(255),
     snowflake_warehouse VARCHAR(255),
-    created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP DEFAULT NOW()
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 -- Table 3: Pipelines (connects source to destination)
@@ -44,8 +44,8 @@ CREATE TABLE IF NOT EXISTS pipelines (
     source_id INTEGER NOT NULL REFERENCES sources(id) ON DELETE CASCADE,
     destination_id INTEGER NOT NULL REFERENCES destinations(id) ON DELETE CASCADE,
     status VARCHAR(20) NOT NULL DEFAULT 'START', -- 'START' or 'PAUSE' or 'REFRESH
-    created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP DEFAULT NOW()
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 -- Table 4: Pipeline Metadata (contains runtime information)
@@ -54,10 +54,10 @@ CREATE TABLE IF NOT EXISTS pipeline_metadata (
     pipeline_id INTEGER NOT NULL REFERENCES pipelines(id) ON DELETE CASCADE,
     status VARCHAR(20) NOT NULL DEFAULT 'RUNNING', -- 'RUNNING' or 'PAUSED'
     last_error TEXT NULL,
-    last_error_at TIMESTAMP NULL,
-    last_start_at TIMESTAMP NULL,
-    created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP DEFAULT NOW()
+    last_error_at TIMESTAMPTZ NULL,
+    last_start_at TIMESTAMPTZ NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 CREATE TABLE IF NOT EXISTS system_metrics (
@@ -76,15 +76,15 @@ CREATE TABLE IF NOT EXISTS wal_monitor (
     source_id INTEGER NOT NULL REFERENCES sources(id) ON DELETE CASCADE,
     wal_lsn VARCHAR(255),           -- Log Sequence Number (e.g., '0/1234ABCD')
     wal_position BIGINT,            -- WAL position as numeric value
-    last_wal_received TIMESTAMP,   -- Last time WAL data was received
-    last_transaction_time TIMESTAMP, -- Last transaction timestamp
+    last_wal_received TIMESTAMPTZ,   -- Last time WAL data was received
+    last_transaction_time TIMESTAMPTZ, -- Last transaction timestamp
     replication_slot_name VARCHAR(255), -- Name of the replication slot
     replication_lag_bytes BIGINT,   -- Replication lag in bytes
     total_wal_size VARCHAR(255),    -- Total size of WAL files (e.g., '640 MB')
     status VARCHAR(20) DEFAULT 'ACTIVE', -- 'ACTIVE', 'IDLE', 'ERROR'
     error_message TEXT,             -- Error details if any
-    created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP DEFAULT NOW(),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
     CONSTRAINT unique_source_wal UNIQUE (source_id) -- Ensures 1 source = 1 row
 );
 
@@ -99,8 +99,8 @@ CREATE TABLE IF NOT EXISTS table_metadata_list (
     is_exists_task BOOLEAN DEFAULT FALSE, -- task in snowflake
     is_exists_table_destination BOOLEAN DEFAULT FALSE, -- table destination in snowflake
     is_changes_schema BOOLEAN DEFAULT FALSE, -- track changes schema
-    created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP DEFAULT NOW()
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 -- track schema changes based on table in table_metadata_list (Append Only)
@@ -111,8 +111,8 @@ CREATE TABLE IF NOT EXISTS history_schema_evolution (
     schema_table_new JSONB NULL,
     changes_type VARCHAR(20) NULL, -- 'NEW COLUMN', 'DROP COLUMN', 'CHANGES TYPE', 
     version_schema INTEGER NULL,
-    created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP DEFAULT NOW()
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 CREATE TABLE IF NOT EXISTS presets (
@@ -147,8 +147,8 @@ CREATE TABLE IF NOT EXISTS pipelines_progress (
     step VARCHAR(255), -- current step description e.g. "Creating Landing Table"
     status VARCHAR(20) NOT NULL DEFAULT 'PENDING', -- 'PENDING', 'IN_PROGRESS', 'COMPLETED', 'FAILED'
     details TEXT, -- JSON or text details about the progress
-    created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP DEFAULT NOW()
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 CREATE INDEX IF NOT EXISTS idx_pipelines_progress_pipeline_id ON pipelines_progress(pipeline_id);
@@ -157,9 +157,9 @@ CREATE TABLE IF NOT EXISTS credit_snowflake_monitoring(
     id SERIAL PRIMARY KEY,
     destination_id INTEGER NOT NULL REFERENCES destinations(id) ON DELETE CASCADE,
     total_credit NUMERIC(38, 9) NOT NULL,
-    usage_date TIMESTAMP NOT NULL,
-    created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP DEFAULT NOW()
+    usage_date TIMESTAMPTZ NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_credit_snowflake_monitoring_destination_id ON credit_snowflake_monitoring(destination_id);
 
@@ -170,8 +170,8 @@ CREATE TABLE IF NOT EXISTS data_flow_record_monitoring(
     source_id  INTEGER NOT NULL REFERENCES sources(id) ON DELETE CASCADE,
     table_name VARCHAR(255) NOT NULL,
     record_count BIGINT NOT NULL,
-    created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP DEFAULT NOW()
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 CREATE INDEX IF NOT EXISTS idx_data_flow_record_monitoring_pipeline_id ON data_flow_record_monitoring(pipeline_id);
