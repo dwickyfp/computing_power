@@ -10,7 +10,7 @@ from typing import Any, List, Optional
 from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-
+from zoneinfo import ZoneInfo
 from app.domain.models.base import Base
 
 
@@ -45,10 +45,10 @@ class TableMetadata(Base):
     )
 
     created_at: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow, nullable=True
+        DateTime, default=datetime.now(ZoneInfo('Asia/Jakarta')), nullable=True
     )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=True
+        DateTime, default=datetime.now(ZoneInfo('Asia/Jakarta')), onupdate=datetime.now(ZoneInfo('Asia/Jakarta')), nullable=True
     )
 
     # Relationships

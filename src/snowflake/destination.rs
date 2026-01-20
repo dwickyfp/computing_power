@@ -270,14 +270,17 @@ impl Destination for SnowflakeDestination {
         // Monitor data flow
         let record_count = rows.len() as i64;
         let real_table_name = self.resolve_real_table_name(table_id).await;
+        let now = chrono::Utc::now().with_timezone(&chrono::FixedOffset::east_opt(7 * 3600).unwrap());
 
         if let Err(e) = sqlx::query(
-            "INSERT INTO data_flow_record_monitoring (pipeline_id, source_id, table_name, record_count) VALUES ($1, $2, $3, $4)",
+            "INSERT INTO data_flow_record_monitoring (pipeline_id, source_id, table_name, record_count, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6)",
         )
         .bind(self.pipeline_id)
         .bind(self.source_id)
         .bind(&real_table_name)
         .bind(record_count)
+        .bind(now)
+        .bind(now)
         .execute(&self.metadata_pool)
         .await
         {
@@ -361,14 +364,17 @@ impl Destination for SnowflakeDestination {
 
                 // Monitor data flow
                 let real_table_name = self.resolve_real_table_name(table_id).await;
+                let now = chrono::Utc::now().with_timezone(&chrono::FixedOffset::east_opt(7 * 3600).unwrap());
 
                 if let Err(e) = sqlx::query(
-                    "INSERT INTO data_flow_record_monitoring (pipeline_id, source_id, table_name, record_count) VALUES ($1, $2, $3, $4)",
+                    "INSERT INTO data_flow_record_monitoring (pipeline_id, source_id, table_name, record_count, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6)",
                 )
                 .bind(self.pipeline_id)
                 .bind(self.source_id)
                 .bind(&real_table_name)
                 .bind(record_count)
+                .bind(now)
+                .bind(now)
                 .execute(&self.metadata_pool)
                 .await
                 {

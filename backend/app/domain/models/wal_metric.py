@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 
 from sqlalchemy import BigInteger, DateTime, ForeignKey, Integer, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-
+from zoneinfo import ZoneInfo
 from app.domain.models.base import Base
 
 if TYPE_CHECKING:
@@ -96,5 +96,5 @@ class WALMetric(Base):
         return cls(
             source_id=source_id,
             size_bytes=size_bytes,
-            recorded_at=recorded_at or datetime.utcnow(),
+            recorded_at=recorded_at or datetime.now(ZoneInfo('Asia/Jakarta'))(),
         )

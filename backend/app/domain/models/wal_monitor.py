@@ -17,7 +17,7 @@ from sqlalchemy import (
     UniqueConstraint,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-
+from zoneinfo import ZoneInfo
 from app.domain.models.base import Base
 
 if TYPE_CHECKING:
@@ -118,15 +118,15 @@ class WALMonitor(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime,
         nullable=False,
-        default=datetime.utcnow,
+        default=datetime.now(ZoneInfo('Asia/Jakarta')),
         comment="Record creation timestamp",
     )
 
     updated_at: Mapped[datetime] = mapped_column(
         DateTime,
         nullable=False,
-        default=datetime.utcnow,
-        onupdate=datetime.utcnow,
+        default=datetime.now(ZoneInfo('Asia/Jakarta')),
+        onupdate=datetime.now(ZoneInfo('Asia/Jakarta')),
         comment="Last update timestamp",
     )
 

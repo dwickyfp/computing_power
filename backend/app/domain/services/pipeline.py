@@ -16,7 +16,8 @@ from app.domain.schemas.pipeline import PipelineCreate, PipelineUpdate
 from app.domain.services.source import SourceService
 from app.domain.models.data_flow_monitoring import DataFlowRecordMonitoring
 from sqlalchemy import func, desc, and_
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 import snowflake.connector
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
@@ -349,6 +350,13 @@ class PipelineService:
                 landing_schema = pipeline.destination.snowflake_landing_schema
                 target_db = pipeline.destination.snowflake_database
                 target_schema = pipeline.destination.snowflake_schema
+
+                # Validate configuration
+                if not all([landing_db, landing_schema, target_db, target_schema]):
+                    raise ValueError(
+                        f"Destination configuration incomplete for pipeline {pipeline.name}. "
+                        "Ensure landing_database, landing_schema, database, and schema are set."
+                    )
                 
                 # Check Databases/Schemas existence? usually assumed or created.
                 # Just use them.
@@ -628,7 +636,7 @@ class PipelineService:
         source_id = pipeline.source_id
         
         # 2. Daily Stats Query
-        start_date = datetime.utcnow() - timedelta(days=days)
+        start_date = datetime.now(ZoneInfo('Asia/Jakarta')) - timedelta(days=days)
         
         daily_query = (
             self.db.query(
@@ -653,7 +661,7 @@ class PipelineService:
         daily_results = daily_query.all()
         
         # 3. Recent 5 Minutes Stats Query (for Monitoring chart)
-        five_min_ago = datetime.utcnow() - timedelta(minutes=5)
+        five_min_ago = datetime.now(ZoneInfo('Asia/Jakarta')) - timedelta(minutes=5)
         
         recent_query = (
             self.db.query(
@@ -699,7 +707,7 @@ class PipelineService:
                 }
             
             stats_by_table[table_name]["recent_stats"].append({
-                "timestamp": row.created_at.isoformat(),
+                "timestamp": row.created_at.isoformat() + "Z",
                 "count": row.record_count
             })
             

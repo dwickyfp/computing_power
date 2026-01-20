@@ -10,7 +10,7 @@ from typing import List, Optional, Dict, Any
 
 from sqlalchemy import delete, select, desc, func
 from sqlalchemy.orm import Session
-
+from zoneinfo import ZoneInfo
 from app.core.database import db_manager
 from app.core.logging import get_logger
 from app.domain.models.destination import Destination
@@ -65,7 +65,7 @@ class CreditMonitorService:
         """
         Delete data older than 2 months.
         """
-        two_months_ago = datetime.now() - timedelta(days=60)
+        two_months_ago = datetime.now(ZoneInfo('Asia/Jakarta')) - timedelta(days=60)
         
         result = session.execute(
             delete(CreditSnowflakeMonitoring).where(
@@ -228,7 +228,7 @@ class CreditMonitorService:
             if not dest:
                  return None
 
-            today = datetime.now().date()
+            today = datetime.now(ZoneInfo('Asia/Jakarta')).date()
             
             # Helper to execute aggregation query
             def get_sum(start_date, end_date=None):

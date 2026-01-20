@@ -240,7 +240,7 @@ stmt = stmt.on_conflict_do_update(
     constraint='unique_source_wal',  # The UNIQUE constraint name
     set_={
         'wal_lsn': stmt.excluded.wal_lsn,  # New value
-        'updated_at': datetime.utcnow(),
+        'updated_at': datetime.now(ZoneInfo('Asia/Jakarta'))(),
     }
 ).returning(WALMonitor)
 

@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING
 
 from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-
+from zoneinfo import ZoneInfo
 from app.domain.models.base import Base, TimestampMixin
 
 if TYPE_CHECKING:
@@ -216,7 +216,7 @@ class PipelineMetadata(Base, TimestampMixin):
     def set_running(self) -> None:
         """Set status to RUNNING."""
         self.status = PipelineMetadataStatus.RUNNING.value
-        self.last_start_at = datetime.utcnow()
+        self.last_start_at = datetime.now(ZoneInfo('Asia/Jakarta'))()
 
     def set_paused(self) -> None:
         """Set status to PAUSED."""
@@ -231,7 +231,7 @@ class PipelineMetadata(Base, TimestampMixin):
         """
         self.status = PipelineMetadataStatus.ERROR.value
         self.last_error = error_message
-        self.last_error_at = datetime.utcnow()
+        self.last_error_at = datetime.now(ZoneInfo('Asia/Jakarta'))()
 
     def clear_error(self) -> None:
         """Clear error state and set to RUNNING."""

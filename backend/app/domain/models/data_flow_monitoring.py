@@ -1,7 +1,7 @@
 from datetime import datetime
 from sqlalchemy import Column, Integer, String, BigInteger, DateTime, ForeignKey
 from sqlalchemy.orm import relationship
-
+from zoneinfo import ZoneInfo
 from app.domain.models.base import Base
 
 class DataFlowRecordMonitoring(Base):
@@ -12,8 +12,8 @@ class DataFlowRecordMonitoring(Base):
     source_id = Column(Integer, ForeignKey("sources.id", ondelete="CASCADE"), nullable=False)
     table_name = Column(String(255), nullable=False)
     record_count = Column(BigInteger, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.now(ZoneInfo('Asia/Jakarta')))
+    updated_at = Column(DateTime, default=datetime.now(ZoneInfo('Asia/Jakarta')), onupdate=datetime.now(ZoneInfo('Asia/Jakarta')))
 
     # Relationships
     pipeline = relationship("Pipeline", back_populates="data_flow_records")

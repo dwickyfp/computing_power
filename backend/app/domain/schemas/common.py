@@ -6,7 +6,7 @@ Provides reusable Pydantic models for API responses.
 
 from datetime import datetime
 from typing import Any, Generic, TypeVar
-
+from zoneinfo import ZoneInfo
 from pydantic import BaseModel, Field
 
 T = TypeVar("T")
@@ -72,7 +72,7 @@ class HealthResponse(BaseSchema):
     )
     version: str = Field(..., description="Application version")
     timestamp: datetime = Field(
-        default_factory=datetime.utcnow, description="Health check timestamp"
+        default_factory=datetime.now(ZoneInfo('Asia/Jakarta')), description="Health check timestamp"
     )
     checks: dict[str, bool] = Field(
         default_factory=dict, description="Individual component health checks"
@@ -102,7 +102,7 @@ class ErrorResponse(BaseSchema):
         default_factory=dict, description="Additional error context"
     )
     timestamp: datetime = Field(
-        default_factory=datetime.utcnow, description="Error timestamp"
+        default_factory=datetime.now(ZoneInfo('Asia/Jakarta')), description="Error timestamp"
     )
 
     class Config:

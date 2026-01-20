@@ -36,7 +36,7 @@ class SchemaEvolutionService:
         """Initialize schema evolution service."""
         self.db = db
 
-    async def handle_schema_evolution(
+    def handle_schema_evolution(
         self,
         pipeline: Pipeline,
         table_metadata: TableMetadata,
@@ -74,20 +74,20 @@ class SchemaEvolutionService:
             try:
                 # 1. Apply ALTER TABLE to target table based on change type
                 if change_type == "NEW COLUMN":
-                    await self._handle_new_columns(
+                    self._handle_new_columns(
                         cursor, destination, table_name, old_schema, new_schema
                     )
                 elif change_type == "DROP COLUMN":
-                    await self._handle_dropped_columns(
+                    self._handle_dropped_columns(
                         cursor, destination, table_name, old_schema, new_schema
                     )
                 elif change_type == "CHANGES TYPE":
-                    await self._handle_type_changes(
+                    self._handle_type_changes(
                         cursor, destination, table_name, old_schema, new_schema
                     )
 
                 # 2. Recreate the merge task with updated column list
-                await self._recreate_merge_task(
+                self._recreate_merge_task(
                     cursor, pipeline, table_name, new_schema
                 )
 
@@ -112,7 +112,7 @@ class SchemaEvolutionService:
             )
             raise
 
-    async def _handle_new_columns(
+    def _handle_new_columns(
         self,
         cursor,
         destination: Destination,
@@ -148,7 +148,7 @@ class SchemaEvolutionService:
                 logger.error(f"Failed to add column {col_name}: {e}")
                 raise
 
-    async def _handle_dropped_columns(
+    def _handle_dropped_columns(
         self,
         cursor,
         destination: Destination,
@@ -172,7 +172,7 @@ class SchemaEvolutionService:
                 logger.error(f"Failed to drop column {col_name}: {e}")
                 raise
 
-    async def _handle_type_changes(
+    def _handle_type_changes(
         self,
         cursor,
         destination: Destination,
@@ -203,7 +203,7 @@ class SchemaEvolutionService:
                     # Log but continue - type changes can fail if data is incompatible
                     logger.warning(f"Continuing despite type change failure for {col_name}")
 
-    async def _recreate_merge_task(
+    def _recreate_merge_task(
         self,
         cursor,
         pipeline: Pipeline,
