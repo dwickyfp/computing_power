@@ -88,46 +88,38 @@ class CreditMonitorService:
             logger.info(f"No credit usage data found for {destination.name}")
             return
 
-        # 2. Save/Update in database
-        # We delete existing records for the fetched dates to avoid duplicates/ensure updates
-        # The query returns last 30 days.
+        # 2. Save/Update in database using upsert logic
+        # Check if record exists for same usage_date and destination
+        # If exists, update total_credit and updated_at
+        # If not exists, insert new record
         
-        # Extract dates to clean up
-        dates = [row['usage_date'] for row in rows]
-        if dates:
-            min_date = min(dates)
-            session.execute(
-                delete(CreditSnowflakeMonitoring).where(
-                    CreditSnowflakeMonitoring.destination_id == destination.id,
-                    CreditSnowflakeMonitoring.usage_date >= min_date
-                )
-            )
-        
-        # Insert new records
         for row in rows:
-            record = CreditSnowflakeMonitoring(
-                destination_id=destination.id,
-                total_credit=row['total_credits'],  # Assuming SQL model uses numeric/float but defined as Integer in user SQL? 
-                                                    # User SQL said: total_credit INTEGER NOT NULL
-                                                    # But Snowflake credits are usually floats. 
-                                                    # User provided image shows float. 
-                                                    # I will stick to what user provided in CREATE TABLE but might need to cast if it fails.
-                                                    # Wait, user provided SQL: total_credit INTEGER NOT NULL.
-                                                    # Typically credits are small floats. If I cast to int it might be 0.
-                                                    # I should probably store as Float but the table is already defined as INTEGER by user.
-                                                    # I'll multiply by something or just try to store and see.
-                                                    # Actually, looking at the user request: 
-                                                    # usage_date TIMESTAMP NOT NULL
-                                                    # total_credit INTEGER NOT NULL
-                                                    # If the user defined it as INTEGER, I should probably respect it or ask to change.
-                                                    # But since I am implementing the model now, maybe I should check if I can change it to Float.
-                                                    # The user said: @[/Users/dwickyferiansyahputra/Public/Research/rosetta/migrations/001_create_table.sql:L156-L163]
-                                                    # The schema is already there. 
-                                                    # If I store 0.002 as Integer it becomes 0.
-                                                    # I will checking the file again.
-                usage_date=row['usage_date']
-            )
-            session.add(record)
+            # Check if record exists
+            existing_record = session.execute(
+                select(CreditSnowflakeMonitoring).where(
+                    CreditSnowflakeMonitoring.destination_id == destination.id,
+                    CreditSnowflakeMonitoring.usage_date == row['usage_date']
+                )
+            ).scalar_one_or_none()
+            
+            if existing_record:
+                # Update existing record
+                existing_record.total_credit = row['total_credits']
+                existing_record.updated_at = datetime.now(ZoneInfo('Asia/Jakarta'))
+                logger.debug(
+                    f"Updated credit record for {destination.name} on {row['usage_date']}: {row['total_credits']}"
+                )
+            else:
+                # Insert new record
+                new_record = CreditSnowflakeMonitoring(
+                    destination_id=destination.id,
+                    total_credit=row['total_credits'],
+                    usage_date=row['usage_date']
+                )
+                session.add(new_record)
+                logger.debug(
+                    f"Inserted new credit record for {destination.name} on {row['usage_date']}: {row['total_credits']}"
+                )
         
         session.commit()
         logger.info(f"Updated {len(rows)} credit records for {destination.name}")

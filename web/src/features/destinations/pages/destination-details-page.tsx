@@ -78,7 +78,7 @@ export function DestinationDetailsPage() {
                         </CardHeader>
                         <CardContent>
                             <div className="text-2xl font-bold">{summary?.current_week.toFixed(9) ?? '0.000000000'}</div>
-                            <p className="text-xs text-muted-foreground">Credits used</p>
+                            <p className="text-xs text-muted-foreground">Credits used (${((summary?.current_week ?? 0) * 3.7).toLocaleString('en-US', { minimumFractionDigits: 5, maximumFractionDigits: 5 })})</p>
                         </CardContent>
                     </Card>
                     <Card>
@@ -87,7 +87,7 @@ export function DestinationDetailsPage() {
                         </CardHeader>
                         <CardContent>
                             <div className="text-2xl font-bold">{summary?.current_month.toFixed(9) ?? '0.000000000'}</div>
-                            <p className="text-xs text-muted-foreground">Credits used</p>
+                            <p className="text-xs text-muted-foreground">Credits used (${((summary?.current_month ?? 0) * 3.7).toLocaleString('en-US', { minimumFractionDigits: 5, maximumFractionDigits: 5 })})</p>
                         </CardContent>
                     </Card>
                     <Card>
@@ -96,7 +96,7 @@ export function DestinationDetailsPage() {
                         </CardHeader>
                         <CardContent>
                             <div className="text-2xl font-bold">{summary?.previous_week.toFixed(9) ?? '0.000000000'}</div>
-                            <p className="text-xs text-muted-foreground">Credits used</p>
+                            <p className="text-xs text-muted-foreground">Credits used (${((summary?.previous_week ?? 0) * 3.7).toLocaleString('en-US', { minimumFractionDigits: 5, maximumFractionDigits: 5 })})</p>
                         </CardContent>
                     </Card>
                     <Card>
@@ -105,7 +105,7 @@ export function DestinationDetailsPage() {
                         </CardHeader>
                         <CardContent>
                             <div className="text-2xl font-bold">{summary?.previous_month.toFixed(9) ?? '0.000000000'}</div>
-                            <p className="text-xs text-muted-foreground">Credits used</p>
+                            <p className="text-xs text-muted-foreground">Credits used (${((summary?.previous_month ?? 0) * 3.7).toLocaleString('en-US', { minimumFractionDigits: 5, maximumFractionDigits: 5 })})</p>
                         </CardContent>
                     </Card>
                 </div>
