@@ -1,4 +1,6 @@
-import { Key } from 'lucide-react'
+import { Key, AlertTriangle } from 'lucide-react'
+import { Badge } from '@/components/ui/badge'
+import { type SchemaColumn, type TableSchemaDiff } from '@/repo/sources'
 import {
     Sheet,
     SheetContent,
@@ -16,20 +18,12 @@ import {
 } from '@/components/ui/table'
 import { Checkbox } from '@/components/ui/checkbox'
 
-interface SchemaColumn {
-    column_name: string
-    is_nullable: string | boolean
-    real_data_type: string
-    is_primary_key: boolean
-    has_default: boolean
-    default_value: string | null
-}
-
 interface SourceDetailsSchemaDrawerProps {
     open: boolean
     onOpenChange: (open: boolean) => void
     tableName: string
     schema: SchemaColumn[]
+    diff?: TableSchemaDiff
     isLoading?: boolean
     version?: number
 }
@@ -39,6 +33,7 @@ export function SourceDetailsSchemaDrawer({
     onOpenChange,
     tableName,
     schema,
+    diff,
     isLoading = false,
     version
 }: SourceDetailsSchemaDrawerProps) {
@@ -71,17 +66,31 @@ export function SourceDetailsSchemaDrawer({
                             {schema && schema.length > 0 ? (
                                 schema.map((col, index) => (
                                     <TableRow key={index}>
-                                        <TableCell className='font-medium flex items-center gap-2'>
-                                            {col.column_name}
-                                            {col.is_primary_key && (
-                                                <Key className="h-3.5 w-3.5 text-yellow-500" />
-                                            )}
+                                        <TableCell className='font-medium'>
+                                            <div className="flex items-center gap-2">
+                                                {col.column_name}
+                                                {col.is_primary_key && (
+                                                    <Key className="h-3.5 w-3.5 text-yellow-500" />
+                                                )}
+                                                {diff?.new_columns?.includes(col.column_name) && (
+                                                    <Badge variant="secondary" className="bg-green-100 text-green-800 border-green-200 h-5 px-1.5 ml-2">New</Badge>
+                                                )}
+                                            </div>
                                         </TableCell>
-                                        <TableCell>{col.real_data_type}</TableCell>
+                                        <TableCell>
+                                            <div className="flex items-center gap-2">
+                                                {col.real_data_type}
+                                                {diff?.type_changes?.[col.column_name] && (
+                                                     <Badge variant="outline" className="border-orange-300 text-orange-700 bg-orange-50 h-5 px-1.5">
+                                                        Changed
+                                                     </Badge>
+                                                )}
+                                            </div>
+                                        </TableCell>
                                         <TableCell className="text-center">
                                             <div className="flex justify-center">
                                                 <Checkbox 
-                                                    checked={col.is_nullable === 'YES' || col.is_nullable === true} 
+                                                    checked={col.is_nullable === 'YES'} 
                                                     disabled 
                                                     className="cursor-default opacity-100 data-[state=checked]:bg-primary data-[state=checked]:text-primary-foreground"
                                                 />
@@ -114,6 +123,61 @@ export function SourceDetailsSchemaDrawer({
                     </Table>
                     )}
                 </div>
+
+                {diff?.dropped_columns && diff.dropped_columns.length > 0 && (
+                    <div className="mt-8 space-y-3">
+                        <div className="flex items-center gap-2 text-destructive">
+                             <AlertTriangle className="h-5 w-5" />
+                             <h3 className="font-semibold text-lg">Dropped Columns</h3>
+                        </div>
+                        <div className='rounded-md border border-red-200'>
+                            <Table>
+                                <TableHeader>
+                                    <TableRow className="bg-red-50/50 hover:bg-red-50/50">
+                                        <TableHead className="w-[180px] text-red-900">Column Name</TableHead>
+                                        <TableHead className="text-red-900">Data Type</TableHead>
+                                        <TableHead className="text-center text-red-900">Nullable</TableHead>
+                                        <TableHead className="text-center text-red-900">Has Default</TableHead>
+                                        <TableHead className="text-red-900">Value</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {diff.dropped_columns.map((col, index) => (
+                                        <TableRow key={index} className="bg-red-50/30 hover:bg-red-50/50">
+                                            <TableCell className='font-medium text-red-900 strike-through decoration-red-900/50'>
+                                                <span className="line-through">{col.column_name}</span>
+                                            </TableCell>
+                                            <TableCell className="text-red-900/80">{col.real_data_type}</TableCell>
+                                            <TableCell className="text-center">
+                                                <div className="flex justify-center">
+                                                    <Checkbox 
+                                                        checked={col.is_nullable === 'YES'} 
+                                                        disabled 
+                                                        className="cursor-default opacity-50 data-[state=checked]:bg-red-900 data-[state=checked]:border-red-900"
+                                                    />
+                                                </div>
+                                            </TableCell>
+                                            <TableCell className="text-center">
+                                                <div className="flex justify-center">
+                                                     <Checkbox 
+                                                        checked={col.has_default} 
+                                                        disabled 
+                                                        className="cursor-default opacity-50 data-[state=checked]:bg-red-900 data-[state=checked]:border-red-900"
+                                                    />
+                                                </div>
+                                            </TableCell>
+                                            <TableCell>
+                                                 <span className="text-xs text-red-900/70">
+                                                     {col.default_value || '-'}
+                                                </span>
+                                            </TableCell>
+                                        </TableRow>
+                                    ))}
+                                </TableBody>
+                            </Table>
+                        </div>
+                    </div>
+                )}
             </SheetContent>
         </Sheet>
     )

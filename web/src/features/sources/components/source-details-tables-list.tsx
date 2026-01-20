@@ -22,7 +22,7 @@ import {
 } from '@/components/ui/table'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { DataTablePagination, DataTableToolbar } from '@/components/data-table'
-import { type SourceTableInfo, sourcesRepo } from '@/repo/sources'
+import { type SourceTableInfo, type TableSchemaResponse, sourcesRepo } from '@/repo/sources'
 import { getSourceDetailsTablesColumns } from './source-details-tables-columns'
 import { SourceDetailsSchemaDrawer } from './source-details-schema-drawer'
 import { useQueryClient } from '@tanstack/react-query'
@@ -54,7 +54,7 @@ export function SourceDetailsTablesList({ sourceId, tables, readOnly = false }: 
     const [drawerOpen, setDrawerOpen] = useState(false)
     const [selectedTable, setSelectedTable] = useState<SourceTableInfo | null>(null)
     const [selectedVersions, setSelectedVersions] = useState<Record<number, number>>({})
-    const [fetchedSchema, setFetchedSchema] = useState<SourceTableInfo['schema_table']>([])
+    const [fetchedSchema, setFetchedSchema] = useState<TableSchemaResponse | null>(null)
     const [isLoadingSchema, setIsLoadingSchema] = useState(false)
 
     // New state for drop confirmation
@@ -77,7 +77,7 @@ export function SourceDetailsTablesList({ sourceId, tables, readOnly = false }: 
             setFetchedSchema(schema)
         } catch (error) {
             console.error("Failed to fetch schema", error)
-            setFetchedSchema([])
+            setFetchedSchema(null)
         } finally {
             setIsLoadingSchema(false)
         }
@@ -218,7 +218,8 @@ export function SourceDetailsTablesList({ sourceId, tables, readOnly = false }: 
                     open={drawerOpen}
                     onOpenChange={setDrawerOpen}
                     tableName={selectedTable.table_name}
-                    schema={fetchedSchema || []}
+                    schema={fetchedSchema?.columns || []}
+                    diff={fetchedSchema?.diff}
                     isLoading={isLoadingSchema}
                     version={selectedVersions[selectedTable.id] || selectedTable.version}
                 />

@@ -43,14 +43,27 @@ export interface SourceTableInfo {
     is_exists_table_destination: boolean
     is_exists_stream: boolean
     version: number
-    schema_table?: {
-        column_name: string
-        is_nullable: string
-        real_data_type: string
-        is_primary_key: boolean
-        has_default: boolean
-        default_value: string | null
-    }[]
+    schema_table?: SchemaColumn[]
+}
+
+export interface SchemaColumn {
+    column_name: string
+    is_nullable: string
+    real_data_type: string
+    is_primary_key: boolean
+    has_default: boolean
+    default_value: string | null
+}
+
+export interface TableSchemaDiff {
+    new_columns: string[]
+    dropped_columns: SchemaColumn[]
+    type_changes: Record<string, { old_type: string, new_type: string }>
+}
+
+export interface TableSchemaResponse {
+    columns: SchemaColumn[]
+    diff?: TableSchemaDiff
 }
 
 export interface WALMonitorResponse {
@@ -125,7 +138,7 @@ export const sourcesRepo = {
         return data
     },
     getTableSchema: async (tableId: number, version: number) => {
-        const { data } = await api.get<SourceTableInfo['schema_table']>(`/sources/tables/${tableId}/schema`, {
+        const { data } = await api.get<TableSchemaResponse>(`/sources/tables/${tableId}/schema`, {
             params: { version }
         })
         return data

@@ -17,7 +17,7 @@ from app.domain.schemas.source import (
     SourceUpdate,
     SourceConnectionTest,
 )
-from app.domain.schemas.source_detail import SourceDetailResponse
+from app.domain.schemas.source_detail import SourceDetailResponse, TableSchemaResponse
 from app.domain.services.source import SourceService
 from app.domain.services.preset import PresetService
 from app.domain.schemas.preset import PresetCreate, PresetResponse
@@ -193,15 +193,15 @@ async def test_connection(
 
 @router.get(
     "/tables/{table_id}/schema",
-    response_model=List[dict],
+    response_model=TableSchemaResponse,
     summary="Get table schema by version",
-    description="Get schema columns for a specific table version",
+    description="Get schema columns for a specific table version with evolution info",
 )
 async def get_table_schema(
     table_id: int,
     version: int = Query(..., ge=1, description="Schema version"),
     service: SourceService = Depends(get_source_service),
-) -> List[dict]:
+) -> TableSchemaResponse:
     """
     Get table schema for a specific version.
 
@@ -211,7 +211,7 @@ async def get_table_schema(
         service: Source service instance
 
     Returns:
-        List of schema columns
+        TableSchemaResponse
     """
     return service.get_table_schema_by_version(table_id, version)
 

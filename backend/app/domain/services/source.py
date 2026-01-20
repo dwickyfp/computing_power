@@ -26,7 +26,12 @@ from app.domain.schemas.source import (
     SourceUpdate,
     SourceResponse
 )
-from app.domain.schemas.source_detail import SourceDetailResponse, SourceTableInfo
+from app.domain.schemas.source_detail import (
+    SourceDetailResponse, 
+    SourceTableInfo,
+    TableSchemaResponse,
+    TableSchemaDiff
+)
 from app.domain.schemas.wal_monitor import WALMonitorResponse
 from app.domain.services.schema_monitor import SchemaMonitorService
 
@@ -300,16 +305,16 @@ class SourceService:
             destinations=destination_names
         )
 
-    def get_table_schema_by_version(self, table_id: int, version: int) -> List[dict]:
+    def get_table_schema_by_version(self, table_id: int, version: int) -> TableSchemaResponse:
         """
-        Get table schema for a specific version.
+        Get table schema for a specific version with evolution info.
         
         Args:
             table_id: Table ID
             version: Schema version
             
         Returns:
-            List of schema columns
+            TableSchemaResponse containing columns and diff
         """
         table_repo = TableMetadataRepository(self.db)
         history_repo = HistorySchemaEvolutionRepository(self.db)
@@ -327,29 +332,54 @@ class SourceService:
         if version < 1 or version > current_version:
              raise ValueError(f"Version must be between 1 and {current_version}")
              
-        # If requesting current version
+        # 1. Fetch Schema Column Data
         if version == current_version:
             schema_data = table.schema_table
         else:
             history = history_repo.get_by_table_and_version(table.id, version)
-            # Logic: If requesting V1, and history for V1 exists, it contains OLD schema (V1) and NEW schema (V2).
-            # So we return schema_table_old.
-            
             if not history:
-                 # Fallback logic: 
-                 # If we requested a valid version < current, history SHOULD exist.
-                 # But if not found (maybe gap?), try to find nearest? 
-                 # For now, strict.
                  raise EntityNotFoundError(entity_type="HistorySchemaEvolution", entity_id=f"{table.id}-v{version}")
-            
             schema_data = history.schema_table_old
             
-        # Convert dictionary to list if needed
+        columns = []
         if isinstance(schema_data, dict):
-            return list(schema_data.values())
+            columns = list(schema_data.values())
         elif isinstance(schema_data, list):
-            return schema_data
-        return []
+            columns = schema_data
+            
+        # 2. Calculate Diff (Changes introduced IN this version)
+        diff = None
+        if version > 1:
+            # Fetch history for "creation of this version" (Transition V(N-1) -> V(N))
+            # History record with version_schema = N - 1
+            hist_diff = history_repo.get_by_table_and_version(table.id, version - 1)
+            if hist_diff:
+                old = hist_diff.schema_table_old or {}
+                new = hist_diff.schema_table_new or {}
+                
+                # New Columns: Present in NEW but not OLD
+                new_cols = list(set(new.keys()) - set(old.keys()))
+                
+                # Dropped Columns: Present in OLD but not NEW
+                dropped_keys = set(old.keys()) - set(new.keys())
+                dropped_cols = [old[k] for k in dropped_keys]
+                
+                # Type Changes: Present in both, different types
+                type_changes = {}
+                common = set(old.keys()) & set(new.keys())
+                for k in common:
+                    old_t = old[k].get('real_data_type') or old[k].get('data_type')
+                    new_t = new[k].get('real_data_type') or new[k].get('data_type')
+                    if old_t != new_t:
+                        type_changes[k] = {"old_type": old_t, "new_type": new_t}
+                
+                diff = TableSchemaDiff(
+                    new_columns=new_cols,
+                    dropped_columns=dropped_cols,
+                    type_changes=type_changes
+                )
+
+        return TableSchemaResponse(columns=columns, diff=diff)
 
     def _get_connection(self, source: Source):
         """Helper to get postgres connection"""

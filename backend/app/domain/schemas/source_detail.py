@@ -29,6 +29,21 @@ class SourceTableInfo(BaseModel):
         orm_mode = True
 
 
+class TableSchemaDiff(BaseModel):
+    """
+    Schema for schema differences/evolution.
+    """
+    new_columns: List[str] = []
+    dropped_columns: List[dict] = []
+    type_changes: dict = {} # col_name -> {old_type: str, new_type: str}
+
+class TableSchemaResponse(BaseModel):
+    """
+    Response schema for table schema with evolution info.
+    """
+    columns: List[dict]
+    diff: Optional[TableSchemaDiff] = None
+
 class SourceDetailResponse(BaseModel):
     """
     Schema for detailed source response.
