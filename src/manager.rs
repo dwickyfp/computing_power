@@ -192,7 +192,7 @@ impl PipelineManager {
             .unwrap_or(4);
 
         let config = PipelineConfig {
-            id: pipeline_id as u64,
+            id: source_row.try_get::<i32, _>("replication_id")? as u64,
             publication_name: source_row.try_get("publication_name")?,
             pg_connection: pg_config.clone(),
             batch: BatchConfig {
