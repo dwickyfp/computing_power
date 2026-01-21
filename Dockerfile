@@ -58,10 +58,9 @@ RUN pnpm install --frozen-lockfile
 COPY web/ ./
 
 # Build the frontend
+# Note: VITE_API_URL is left empty so client.ts uses window.location.origin dynamically
 ARG VITE_CLERK_PUBLISHABLE_KEY=""
-ARG VITE_API_URL="/api"
 ENV VITE_CLERK_PUBLISHABLE_KEY=${VITE_CLERK_PUBLISHABLE_KEY}
-ENV VITE_API_URL=${VITE_API_URL}
 
 RUN pnpm build
 
