@@ -254,7 +254,18 @@ export function SourcesMutateDrawer({
                                     <FormItem>
                                         <FormLabel>Slot ID</FormLabel>
                                         <FormControl>
-                                            <Input type='number' {...field} onChange={e => field.onChange(Number(e.target.value))} />
+                                            <Input 
+                                                type='number' 
+                                                {...field} 
+                                                onChange={e => {
+                                                    const val = e.target.value;
+                                                    if (val.length <= 1) {
+                                                        field.onChange(Number(val));
+                                                    }
+                                                }}
+                                                max={9}
+                                                min={0}
+                                            />
                                         </FormControl>
                                         <FormMessage />
                                     </FormItem>
