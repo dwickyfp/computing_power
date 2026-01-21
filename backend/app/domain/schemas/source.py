@@ -5,11 +5,15 @@ Defines schemas for creating, updating, and retrieving source configurations.
 """
 
 from datetime import datetime
-from typing import Optional
+from typing import List, Optional
 
-from pydantic import Field, validator
+from pydantic import BaseModel, Field, validator
 
 from app.domain.schemas.common import BaseSchema, TimestampSchema
+
+
+
+
 
 
 class SourceBase(BaseSchema):
@@ -218,6 +222,7 @@ class SourceResponse(SourceBase, TimestampSchema):
     last_check_replication_publication: Optional[datetime] = Field(default=None, description="Last timestamp of replication/publication check")
     total_tables: int = Field(default=0, description="Total tables in publication")
 
+
     class Config:
         orm_mode = True
         fields = {
@@ -240,3 +245,6 @@ class SourceResponse(SourceBase, TimestampSchema):
                 "updated_at": "2024-01-01T00:00:00Z",
             }
         }
+
+class PublicationCreateRequest(BaseModel):
+    tables: List[str] = Field(..., min_items=1, description="List of tables to include in publication")

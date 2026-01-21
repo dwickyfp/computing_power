@@ -5,7 +5,7 @@ Implements PostgreSQL replication and publication status monitoring.
 """
 
 import asyncio
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from typing import Optional
 
 import psycopg2
@@ -165,7 +165,7 @@ class ReplicationMonitorService:
             source.is_replication_enabled = status_result["is_replication_enabled"]
             source.is_publication_enabled = status_result["is_publication_enabled"]
             source.total_tables = status_result["total_tables"]
-            source.last_check_replication_publication = datetime.utcnow()
+            source.last_check_replication_publication = datetime.now(timezone(timedelta(hours=7)))
             
             db.add(source)
             db.commit()
@@ -190,7 +190,7 @@ class ReplicationMonitorService:
             # So even on failure we might want to update the timestamp to show we tried?
             # But if we failed to connect, maybe we shouldn't update the status flags.
             try:
-                source.last_check_replication_publication = datetime.utcnow()
+                source.last_check_replication_publication = datetime.now(timezone(timedelta(hours=7)))
                 db.add(source)
                 db.commit()
             except:

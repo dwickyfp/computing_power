@@ -10,7 +10,7 @@ from typing import Any, Optional
 from sqlalchemy import DateTime, ForeignKey, Integer, String
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-
+from zoneinfo import ZoneInfo
 from app.domain.models.base import Base
 
 
@@ -33,10 +33,10 @@ class HistorySchemaEvolution(Base):
     version_schema: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow, nullable=True
+        DateTime, default=datetime.now(ZoneInfo('Asia/Jakarta')), nullable=True
     )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=True
+        DateTime, default=datetime.now(ZoneInfo('Asia/Jakarta')), onupdate=datetime.now(ZoneInfo('Asia/Jakarta')), nullable=True
     )
 
     # Relationships

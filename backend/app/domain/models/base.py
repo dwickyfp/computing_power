@@ -59,15 +59,15 @@ class TimestampMixin:
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        server_default=func.now(),
+        server_default=func.timezone('Asia/Jakarta', func.now()),
         nullable=False,
         comment="Record creation timestamp",
     )
 
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        server_default=func.now(),
-        onupdate=func.now(),
+        server_default=func.timezone('Asia/Jakarta', func.now()),
+        onupdate=func.timezone('Asia/Jakarta', func.now()),
         nullable=False,
         comment="Record last update timestamp",
     )

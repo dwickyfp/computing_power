@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING
 
 from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-
+from zoneinfo import ZoneInfo
 from app.domain.models.base import Base, TimestampMixin
 
 if TYPE_CHECKING:
@@ -105,6 +105,20 @@ class Pipeline(Base, TimestampMixin):
         uselist=False,
         cascade="all, delete-orphan",
         lazy="selectin",
+    )
+
+    pipeline_progress: Mapped["PipelineProgress"] = relationship(
+        "PipelineProgress",
+        back_populates="pipeline",
+        uselist=False,
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )
+
+    data_flow_records: Mapped[list["DataFlowRecordMonitoring"]] = relationship(
+        "DataFlowRecordMonitoring",
+        back_populates="pipeline",
+        cascade="all, delete-orphan",
     )
 
     def __repr__(self) -> str:
@@ -202,7 +216,7 @@ class PipelineMetadata(Base, TimestampMixin):
     def set_running(self) -> None:
         """Set status to RUNNING."""
         self.status = PipelineMetadataStatus.RUNNING.value
-        self.last_start_at = datetime.utcnow()
+        self.last_start_at = datetime.now(ZoneInfo('Asia/Jakarta'))
 
     def set_paused(self) -> None:
         """Set status to PAUSED."""
@@ -217,10 +231,68 @@ class PipelineMetadata(Base, TimestampMixin):
         """
         self.status = PipelineMetadataStatus.ERROR.value
         self.last_error = error_message
-        self.last_error_at = datetime.utcnow()
+        self.last_error_at = datetime.now(ZoneInfo('Asia/Jakarta'))
 
     def clear_error(self) -> None:
         """Clear error state and set to RUNNING."""
         self.status = PipelineMetadataStatus.RUNNING.value
         self.last_error = None
         self.last_error_at = None
+
+
+class PipelineProgress(Base, TimestampMixin):
+    """
+    Pipeline initialization progress tracking.
+    """
+
+    __tablename__ = "pipelines_progress"
+    __table_args__ = {"comment": "Pipeline initialization progress tracking"}
+
+    # Primary Key
+    id: Mapped[int] = mapped_column(
+        Integer,
+        primary_key=True,
+        autoincrement=True,
+        comment="Unique progress identifier",
+    )
+
+    # Pipeline Reference
+    pipeline_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("pipelines.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+        comment="Reference to pipeline",
+    )
+
+    # Progress Details
+    progress: Mapped[int] = mapped_column(
+        Integer,
+        default=0,
+        nullable=False,
+        comment="Progress percentage (0-100)",
+    )
+
+    step: Mapped[str | None] = mapped_column(
+        String(255),
+        nullable=True,
+        comment="Current step description",
+    )
+
+    status: Mapped[str] = mapped_column(
+        String(20),
+        default="PENDING",
+        nullable=False,
+        comment="Status: PENDING, IN_PROGRESS, COMPLETED, FAILED",
+    )
+
+    details: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+        comment="Additional details about progress",
+    )
+
+    # Relationships
+    pipeline: Mapped["Pipeline"] = relationship(
+        "Pipeline", back_populates="pipeline_progress"
+    )

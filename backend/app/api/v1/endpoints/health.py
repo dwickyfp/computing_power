@@ -4,7 +4,7 @@ Health check endpoints.
 Provides application health and status information.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 
 from fastapi import APIRouter, Depends
 
@@ -39,6 +39,6 @@ async def health_check() -> HealthResponse:
     return HealthResponse(
         status=overall_status,
         version=__version__,
-        timestamp=datetime.utcnow(),
+        timestamp=datetime.now(timezone(timedelta(hours=7))),
         checks={"database": db_healthy, "wal_monitor": settings.wal_monitor_enabled},
     )

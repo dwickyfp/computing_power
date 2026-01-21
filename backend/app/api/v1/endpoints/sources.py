@@ -7,15 +7,21 @@ Provides REST API for managing data sources.
 from typing import List
 
 from fastapi import APIRouter, Depends, Query, status
+from pydantic import BaseModel
 
 from app.api.deps import get_source_service
 from app.domain.schemas.source import (
+    PublicationCreateRequest,
     SourceCreate,
     SourceResponse,
     SourceUpdate,
     SourceConnectionTest,
 )
+from app.domain.schemas.source_detail import SourceDetailResponse, TableSchemaResponse
 from app.domain.services.source import SourceService
+from app.domain.services.preset import PresetService
+from app.domain.schemas.preset import PresetCreate, PresetResponse
+from app.api.deps import get_source_service, get_preset_service
 
 router = APIRouter()
 
@@ -95,6 +101,28 @@ async def get_source(
     return SourceResponse.from_orm(source)
 
 
+@router.get(
+    "/{source_id}/details",
+    response_model=SourceDetailResponse,
+    summary="Get source details",
+    description="Get detailed source information including WAL monitor metrics and table metadata",
+)
+async def get_source_details(
+    source_id: int, service: SourceService = Depends(get_source_service)
+) -> SourceDetailResponse:
+    """
+    Get source details.
+
+    Args:
+        source_id: Source identifier
+        service: Source service instance
+
+    Returns:
+        Source details
+    """
+    return service.get_source_details(source_id)
+
+
 @router.put(
     "/{source_id}",
     response_model=SourceResponse,
@@ -161,3 +189,197 @@ async def test_connection(
         True if connection is successful, False otherwise
     """
     return service.test_connection_config(config)
+
+
+@router.get(
+    "/tables/{table_id}/schema",
+    response_model=TableSchemaResponse,
+    summary="Get table schema by version",
+    description="Get schema columns for a specific table version with evolution info",
+)
+async def get_table_schema(
+    table_id: int,
+    version: int = Query(..., ge=1, description="Schema version"),
+    service: SourceService = Depends(get_source_service),
+) -> TableSchemaResponse:
+    """
+    Get table schema for a specific version.
+
+    Args:
+        table_id: Table identifier
+        version: Schema version
+        service: Source service instance
+
+    Returns:
+        TableSchemaResponse
+    """
+    return service.get_table_schema_by_version(table_id, version)
+
+
+class TableRegisterRequest(BaseModel):
+    table_name: str
+
+
+@router.post(
+    "/{source_id}/tables/register",
+    status_code=status.HTTP_200_OK,
+    summary="Register table to publication",
+    description="Add a table to the source's publication",
+)
+async def register_table(
+    source_id: int,
+    request: TableRegisterRequest,
+    service: SourceService = Depends(get_source_service),
+) -> None:
+    """
+    Register table to publication.
+
+    Args:
+        source_id: Source identifier
+        request: Registration request
+        service: Source service instance
+    """
+    service.register_table_to_publication(source_id, request.table_name)
+    
+@router.delete(
+    "/{source_id}/tables/{table_name}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Unregister/Drop table from publication",
+    description="Remove a table from the source's publication",
+)
+async def unregister_table(
+    source_id: int,
+    table_name: str,
+    service: SourceService = Depends(get_source_service),
+) -> None:
+    service.unregister_table_from_publication(source_id, table_name)
+
+
+@router.post(
+    "/{source_id}/refresh",
+    status_code=status.HTTP_200_OK,
+    summary="Refresh source metadata",
+    description="Manually checks and updates table list and status",
+)
+async def refresh_source(
+    source_id: int,
+    service: SourceService = Depends(get_source_service),
+) -> None:
+    service.refresh_source_metadata(source_id)
+
+@router.post(
+    "/{source_id}/publication",
+    status_code=status.HTTP_201_CREATED,
+    summary="Create Publication",
+)
+async def create_publication(
+    source_id: int,
+    request: PublicationCreateRequest,
+    service: SourceService = Depends(get_source_service),
+) -> None:
+    service.create_publication(source_id, request.tables)
+
+@router.delete(
+    "/{source_id}/publication",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Drop Publication",
+)
+async def drop_publication(
+    source_id: int,
+    service: SourceService = Depends(get_source_service),
+) -> None:
+    service.drop_publication(source_id)
+
+@router.post(
+    "/{source_id}/replication",
+    status_code=status.HTTP_201_CREATED,
+    summary="Create Replication Slot",
+)
+async def create_replication_slot(
+    source_id: int,
+    service: SourceService = Depends(get_source_service),
+) -> None:
+    service.create_replication_slot(source_id)
+
+@router.delete(
+    "/{source_id}/replication",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Drop Replication Slot",
+)
+async def drop_replication_slot(
+    source_id: int,
+    service: SourceService = Depends(get_source_service),
+) -> None:
+    service.drop_replication_slot(source_id)
+
+
+@router.get(
+    "/{source_id}/available_tables",
+    response_model=List[str],
+    summary="Fetch all available tables from source",
+)
+async def fetch_available_tables(
+    source_id: int,
+    service: SourceService = Depends(get_source_service),
+) -> List[str]:
+    """
+    Fetch all available tables from source database in real-time.
+    """
+    return service.fetch_available_tables(source_id)
+
+# --- Presets ---
+
+@router.post(
+    "/{source_id}/presets",
+    response_model=PresetResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Create a new preset",
+)
+async def create_preset(
+    source_id: int,
+    preset_data: PresetCreate,
+    service: PresetService = Depends(get_preset_service),
+) -> PresetResponse:
+    """Create a new preset."""
+    preset = service.create_preset(source_id, preset_data)
+    return PresetResponse.from_orm(preset)
+
+@router.get(
+    "/{source_id}/presets",
+    response_model=List[PresetResponse],
+    summary="Get all presets for a source",
+)
+async def get_presets(
+    source_id: int,
+    service: PresetService = Depends(get_preset_service),
+) -> List[PresetResponse]:
+    """Get all presets for a source."""
+    presets = service.get_presets(source_id)
+    return [PresetResponse.from_orm(p) for p in presets]
+
+@router.delete(
+    "/presets/{preset_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Delete a preset",
+)
+async def delete_preset(
+    preset_id: int,
+    service: PresetService = Depends(get_preset_service),
+) -> None:
+    """Delete a preset."""
+    service.delete_preset(preset_id)
+
+
+@router.put(
+    "/presets/{preset_id}",
+    response_model=PresetResponse,
+    summary="Update a preset",
+)
+async def update_preset(
+    preset_id: int,
+    preset_data: PresetCreate,
+    service: PresetService = Depends(get_preset_service),
+) -> PresetResponse:
+    """Update a preset."""
+    preset = service.update_preset(preset_id, preset_data)
+    return PresetResponse.from_orm(preset)

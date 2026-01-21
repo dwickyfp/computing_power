@@ -33,6 +33,7 @@ class TableMetadataBase(BaseModel):
     table_name: str
     schema_table: Optional[Any] = None
     is_exists_table_landing: bool = False
+    is_exists_stream: bool = False
     is_exists_task: bool = False
     is_exists_table_destination: bool = False
     is_changes_schema: bool = False

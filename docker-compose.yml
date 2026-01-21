@@ -10,6 +10,7 @@ services:
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: postgres
       POSTGRES_HOST_AUTH_METHOD: trust
+      TZ: Asia/Jakarta
     ports:
       - "5433:5432"
     volumes:
@@ -19,6 +20,7 @@ services:
       -c wal_level=logical 
       -c max_replication_slots=10 
       -c max_wal_senders=10
+      -c timezone='Asia/Jakarta'
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d postgres"]
       interval: 10s
@@ -28,13 +30,14 @@ services:
       - etl-network
 
   pg_postgis_cdc:
-    image: postgis/postgis:16-3.4-alpine
+    image: postgis/postgis:16-3.4
     container_name: postgis_container
     restart: always
     environment:
       POSTGRES_DB: postgres
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
+      TZ: Asia/Jakarta
     ports:
       - "5434:5432"
     volumes:
@@ -44,6 +47,7 @@ services:
       -c wal_level=logical 
       -c max_replication_slots=10 
       -c max_wal_senders=10
+      -c timezone='Asia/Jakarta'
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d postgres"]
       interval: 10s

@@ -8,6 +8,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 
 from sqlalchemy import Integer, String, UniqueConstraint
+from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.domain.models.base import Base, TimestampMixin
@@ -16,7 +17,9 @@ if TYPE_CHECKING:
     from app.domain.models.pipeline import Pipeline
     from app.domain.models.wal_metric import WALMetric
     from app.domain.models.wal_monitor import WALMonitor
+    from app.domain.models.wal_monitor import WALMonitor
     from app.domain.models.table_metadata import TableMetadata
+    from app.domain.models.preset import Preset
 
 
 class Source(Base, TimestampMixin):
@@ -96,6 +99,8 @@ class Source(Base, TimestampMixin):
         Integer, default=0, nullable=False, comment="Total tables in publication"
     )
 
+
+
     # Relationships
     pipelines: Mapped[list["Pipeline"]] = relationship(
         "Pipeline",
@@ -122,6 +127,19 @@ class Source(Base, TimestampMixin):
     tables: Mapped[list["TableMetadata"]] = relationship(
         "TableMetadata",
         back_populates="source",
+        cascade="all, delete-orphan",
+        lazy="select",
+    )
+
+    data_flow_records: Mapped[list["DataFlowRecordMonitoring"]] = relationship(
+        "DataFlowRecordMonitoring",
+        back_populates="source",
+        cascade="all, delete-orphan",
+    )
+
+    presets: Mapped[list["Preset"]] = relationship(
+        "Preset",
+        # back_populates="source", # Enable if added to Preset
         cascade="all, delete-orphan",
         lazy="select",
     )

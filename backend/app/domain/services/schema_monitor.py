@@ -215,6 +215,11 @@ class SchemaMonitorService:
         db.commit()
         logger.info(f"Schema change detected for {table.table_name}: {change_type}")
 
+        # Handle schema evolution for connected pipelines
+        await self._apply_schema_evolution(
+            source, table, old_schema_dict, new_schema_dict, change_type, db
+        )
+
 
     def fetch_table_schema(self, conn, table_name: str) -> List[Dict]:
         """
@@ -223,31 +228,61 @@ class SchemaMonitorService:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             # Complex query with PostGIS support
             complex_query = f"""
-                SELECT
-                   c.column_name,
-                   c.is_nullable,
-                   CASE
-                       WHEN c.udt_name = 'geometry' THEN 'GEOMETRY'
-                       WHEN c.udt_name = 'geography' THEN 'GEOGRAPHY'
-                       ELSE UPPER(c.data_type)
-                   END AS real_data_type
-                FROM
-                   information_schema.columns c
-                LEFT JOIN
-                   geometry_columns gc
-                   ON c.table_schema = gc.f_table_schema
-                   AND c.table_name = gc.f_table_name
-                   AND c.column_name = gc.f_geometry_column
-                LEFT JOIN
-                   geography_columns gg
-                   ON c.table_schema = gg.f_table_schema
-                   AND c.table_name = gg.f_table_name
-                   AND c.column_name = gg.f_geography_column
-                WHERE
-                   c.table_schema = 'public' 
-                   and c.table_name = '{table_name}'
-                ORDER BY
-                   c.ordinal_position;
+                SELECT 
+                    c.column_name,
+                    c.is_nullable,
+                    c.numeric_precision,
+                    c.numeric_scale,
+                    CASE 
+                        WHEN c.udt_name = 'geometry' THEN 'GEOMETRY'
+                        WHEN c.udt_name = 'geography' THEN 'GEOGRAPHY'
+                        ELSE UPPER(c.data_type)
+                    END AS real_data_type,
+                    CASE 
+                        WHEN pk.column_name IS NOT NULL THEN TRUE 
+                        ELSE FALSE 
+                    END AS is_primary_key,
+
+                    CASE 
+                        WHEN c.column_default IS NOT NULL THEN TRUE 
+                        ELSE FALSE 
+                    END AS has_default,
+                    c.column_default AS default_value
+                FROM 
+                    information_schema.columns c
+                LEFT JOIN 
+                    geometry_columns gc 
+                    ON c.table_schema = gc.f_table_schema 
+                    AND c.table_name = gc.f_table_name 
+                    AND c.column_name = gc.f_geometry_column
+                LEFT JOIN 
+                    geography_columns gg 
+                    ON c.table_schema = gg.f_table_schema 
+                    AND c.table_name = gg.f_table_name 
+                    AND c.column_name = gg.f_geography_column
+                LEFT JOIN (
+                    SELECT 
+                        kcu.table_schema, 
+                        kcu.table_name, 
+                        kcu.column_name
+                    FROM 
+                        information_schema.key_column_usage kcu
+                    JOIN 
+                        information_schema.table_constraints tc 
+                        ON kcu.constraint_name = tc.constraint_name 
+                        AND kcu.table_schema = tc.table_schema
+                    WHERE 
+                        tc.constraint_type = 'PRIMARY KEY'
+                ) pk 
+                    ON c.table_schema = pk.table_schema 
+                    AND c.table_name = pk.table_name 
+                    AND c.column_name = pk.column_name
+                WHERE 
+                    c.table_schema = 'public' 
+                    and c.table_name = '{table_name}'
+                ORDER BY 
+                    c.table_name, 
+                    c.ordinal_position;
             """
             
             try:
@@ -268,19 +303,114 @@ class SchemaMonitorService:
             # Fallback Query
             fallback_query = f"""
                 SELECT
-                   c.column_name,
-                   c.is_nullable,
-                   UPPER(c.data_type) aS real_data_type
-                FROM
-                   information_schema.columns c
-                WHERE
-                   c.table_schema = 'public' 
-                   and c.table_name = '{table_name}'
-                ORDER BY
-                   c.ordinal_position;
+                    c.column_name,
+                    c.is_nullable,
+                    c.numeric_precision,
+                    c.numeric_scale,
+                    UPPER(c.data_type) aS real_data_type,
+                    CASE 
+                            WHEN pk.column_name IS NOT NULL THEN TRUE 
+                            ELSE FALSE 
+                        END AS is_primary_key,
+
+                        CASE 
+                            WHEN c.column_default IS NOT NULL THEN TRUE 
+                            ELSE FALSE 
+                        END AS has_default,
+                        c.column_default AS default_value
+                    FROM
+                    information_schema.columns c
+                    LEFT JOIN (
+                        SELECT 
+                            kcu.table_schema, 
+                            kcu.table_name, 
+                            kcu.column_name
+                        FROM 
+                            information_schema.key_column_usage kcu
+                        JOIN 
+                            information_schema.table_constraints tc 
+                            ON kcu.constraint_name = tc.constraint_name 
+                            AND kcu.table_schema = tc.table_schema
+                        WHERE 
+                            tc.constraint_type = 'PRIMARY KEY'
+                    ) pk 
+                        ON c.table_schema = pk.table_schema 
+                        AND c.table_name = pk.table_name 
+                        AND c.column_name = pk.column_name
+                    WHERE
+                    c.table_schema = 'public' 
+                    and c.table_name = '{table_name}'
+                    ORDER BY
+                    c.ordinal_position;
             """
             cur.execute(fallback_query)
             return cur.fetchall()
+
+    async def _apply_schema_evolution(
+        self,
+        source: Source,
+        table: TableMetadata,
+        old_schema: dict,
+        new_schema: dict,
+        change_type: str,
+        db: Session
+    ) -> None:
+        """
+        Apply schema evolution to connected pipelines.
+        
+        When a schema change is detected, this method:
+        1. Finds pipelines connected to the source
+        2. For each pipeline, applies the schema evolution to Snowflake
+        3. Updates pipeline status to REFRESH
+        """
+        from app.domain.repositories.pipeline import PipelineRepository
+        from app.domain.services.schema_evolution import SchemaEvolutionService
+        
+        pipeline_repo = PipelineRepository(db)
+        pipelines = pipeline_repo.get_by_source_id(source.id)
+        
+        if not pipelines:
+            logger.info(
+                f"No pipelines connected to source {source.name}, skipping schema evolution",
+                extra={"source_id": source.id, "table_name": table.table_name}
+            )
+            return
+        
+        logger.info(
+            f"Found {len(pipelines)} pipeline(s) connected to source {source.name}",
+            extra={"source_id": source.id, "table_name": table.table_name}
+        )
+        
+        evolution_service = SchemaEvolutionService(db)
+        
+        for pipeline in pipelines:
+            try:
+                logger.info(
+                    f"Applying schema evolution to pipeline {pipeline.name}",
+                    extra={
+                        "pipeline_id": pipeline.id,
+                        "table_name": table.table_name,
+                        "change_type": change_type
+                    }
+                )
+                await evolution_service.handle_schema_evolution(
+                    pipeline, table, old_schema, new_schema, change_type
+                )
+                logger.info(
+                    f"Schema evolution completed for pipeline {pipeline.name}",
+                    extra={"pipeline_id": pipeline.id}
+                )
+            except Exception as e:
+                logger.error(
+                    f"Schema evolution failed for pipeline {pipeline.name}: {e}",
+                    extra={
+                        "pipeline_id": pipeline.id,
+                        "table_name": table.table_name,
+                        "error": str(e)
+                    },
+                    exc_info=True
+                )
+                # Continue with other pipelines even if one fails
 
     def stop(self):
         self._stop_event.set()

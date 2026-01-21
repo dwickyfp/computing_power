@@ -7,7 +7,7 @@ real-time WAL status with automatic upsert (1 source = 1 row).
 
 import asyncio
 from datetime import datetime
-
+from zoneinfo import ZoneInfo
 import httpx
 
 
@@ -35,7 +35,7 @@ async def example_wal_monitor_workflow():
             "source_id": source_id,
             "wal_lsn": "0/1A2B3C4D",
             "wal_position": 440401997,
-            "last_wal_received": datetime.utcnow().isoformat(),
+            "last_wal_received": datetime.now(ZoneInfo('Asia/Jakarta'))().isoformat(),
             "replication_slot_name": "slot_replication_1",
             "replication_lag_bytes": 1024,
             "status": "ACTIVE",
@@ -70,7 +70,7 @@ async def example_wal_monitor_workflow():
             "source_id": source_id,
             "wal_lsn": "0/1A2B3C5E",  # Advanced LSN
             "wal_position": 440402014,  # Advanced position
-            "last_wal_received": datetime.utcnow().isoformat(),
+            "last_wal_received": datetime.now(ZoneInfo('Asia/Jakarta'))().isoformat(),
             "replication_slot_name": "slot_replication_1",
             "replication_lag_bytes": 512,  # Reduced lag
             "status": "ACTIVE",
@@ -194,7 +194,7 @@ async def example_multiple_sources():
                 "source_id": source_id,
                 "wal_lsn": f"0/{source_id}A2B3C4D",
                 "wal_position": 440401997 + (source_id * 1000),
-                "last_wal_received": datetime.utcnow().isoformat(),
+                "last_wal_received": datetime.now(ZoneInfo('Asia/Jakarta'))().isoformat(),
                 "status": "ACTIVE",
             }
 

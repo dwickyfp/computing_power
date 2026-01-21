@@ -36,7 +36,7 @@ impl PipelineManager {
 
     pub async fn run_migrations(&self) -> Result<()> {
         info!("Running database migrations...");
-        let migrations = include_str!("../migrations/001_create_table.sql");
+        let migrations = format!("{}", include_str!("../migrations/001_create_table.sql"));
         // Split by semicolon to execute separate statements
         for query in migrations.split(';') {
             let query = query.trim();
@@ -44,6 +44,7 @@ impl PipelineManager {
                 sqlx::query(query).execute(&self.db_pool).await?;
             }
         }
+
         info!("Migrations completed successfully.");
         Ok(())
     }
@@ -191,9 +192,17 @@ impl PipelineManager {
             role: dest_row
                 .try_get("snowflake_role")
                 .unwrap_or_else(|_| "PUBLIC".to_string()),
-            private_key_path: dest_row.try_get("snowflake_private_key_path")?,
+            private_key: dest_row.try_get("snowflake_private_key")?,
             private_key_passphrase: dest_row
                 .try_get("snowflake_private_key_passphrase")
+                .ok()
+                .filter(|s: &String| !s.is_empty()),
+            landing_database: dest_row
+                .try_get("snowflake_landing_database")
+                .ok()
+                .filter(|s: &String| !s.is_empty()),
+            landing_schema: dest_row
+                .try_get("snowflake_landing_schema")
                 .ok()
                 .filter(|s: &String| !s.is_empty()),
         };
@@ -216,7 +225,13 @@ impl PipelineManager {
             .connect(&source_pool_url)
             .await?;
 
-        let destination = SnowflakeDestination::new(snowflake_config, source_pool)?;
+        let destination = SnowflakeDestination::new(
+            snowflake_config,
+            source_pool,
+            self.db_pool.clone(),
+            pipeline_id,
+            source_id,
+        )?;
 
         let store = CustomStore::new();
 
@@ -251,7 +266,7 @@ impl PipelineManager {
         status: &str,
         last_error: Option<&str>,
     ) -> Result<()> {
-        let now = chrono::Utc::now();
+        let now = chrono::Utc::now().with_timezone(&chrono::FixedOffset::east_opt(7 * 3600).unwrap());
         // Check if exists
         let exists: bool =
             sqlx::query("SELECT EXISTS(SELECT 1 FROM pipeline_metadata WHERE pipeline_id = $1)")
@@ -281,7 +296,7 @@ impl PipelineManager {
     }
 
     async fn update_last_start(&self, pipeline_id: i32) -> Result<()> {
-        let now = chrono::Utc::now();
+        let now = chrono::Utc::now().with_timezone(&chrono::FixedOffset::east_opt(7 * 3600).unwrap());
         sqlx::query("UPDATE pipeline_metadata SET last_start_at = $1 WHERE pipeline_id = $2")
             .bind(now)
             .bind(pipeline_id)

@@ -5,7 +5,7 @@ Implements PostgreSQL WAL status monitoring with retry logic and error handling.
 """
 
 import asyncio
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from typing import Optional
 
 import psycopg2
@@ -73,70 +73,93 @@ class WALMonitorService:
             """Synchronous WAL check using psycopg2."""
             connection = None
             try:
-                logger.debug(
-                    "Checking WAL status",
-                    extra={
-                        "source_id": source.id,
-                        "host": source.pg_host,
-                        "database": source.pg_database,
-                        "slot_name": source.publication_name,
-                    },
-                )
-
-                # Create connection to source database
-                connection = psycopg2.connect(
-                    host=source.pg_host,
-                    port=source.pg_port,
-                    database=source.pg_database,
-                    user=source.pg_username,
-                    password=source.pg_password,
-                    connect_timeout=self.settings.wal_monitor_timeout_seconds,
-                )
-
-                # Execute WAL status query
-                with connection.cursor(
-                    cursor_factory=psycopg2.extras.RealDictCursor
-                ) as cursor:
-                    # Pass the publication name as the slot name
-                    cursor.execute(
-                        self.WAL_STATUS_QUERY, {"slot_name": source.publication_name}
+                # 1. Test Connection explicitly
+                try:
+                    logger.debug(
+                        "Testing DB connection",
+                        extra={
+                            "source_id": source.id,
+                            "host": source.pg_host,
+                            "database": source.pg_database,
+                        },
                     )
-                    result = cursor.fetchone()
-                    wal_lsn = result["wal_lsn"]
-                    wal_position = result["wal_position"]
-                    replication_lag = result["replication_lag"]
-                    total_wal_size = result["total_wal_size"]
+                    connection = psycopg2.connect(
+                        host=source.pg_host,
+                        port=source.pg_port,
+                        database=source.pg_database,
+                        user=source.pg_username,
+                        password=source.pg_password,
+                        connect_timeout=self.settings.wal_monitor_timeout_seconds,
+                    )
+                except psycopg2.OperationalError as e:
+                    logger.error(
+                        "Database connection failed",
+                        extra={"source_id": source.id, "error": str(e)},
+                    )
+                    raise WALMonitorError(
+                        source_id=source.id, 
+                        message=f"Connection failed: {str(e)}"
+                    ) from e
 
-                logger.info(
-                    "WAL status checked successfully",
-                    extra={
-                        "source_id": source.id,
+                # 2. Execute Query
+                try:
+                    with connection.cursor(
+                        cursor_factory=psycopg2.extras.RealDictCursor
+                    ) as cursor:
+                        logger.debug(
+                            "Checking WAL status query",
+                            extra={"slot_name": source.publication_name}
+                        )
+                        # Pass the publication name as the slot name
+                        cursor.execute(
+                            self.WAL_STATUS_QUERY, {"slot_name": source.publication_name}
+                        )
+                        result = cursor.fetchone()
+                        
+                        if not result:
+                            raise WALMonitorError(
+                                source_id=source.id,
+                                message="Query returned no results"
+                            )
+
+                        wal_lsn = result["wal_lsn"]
+                        wal_position = result["wal_position"]
+                        replication_lag = result["replication_lag"]
+                        total_wal_size = result["total_wal_size"]
+
+                    logger.info(
+                        "WAL status checked successfully",
+                        extra={
+                            "source_id": source.id,
+                            "wal_lsn": wal_lsn,
+                            "wal_position": wal_position,
+                            "replication_lag": replication_lag,
+                            "total_wal_size": total_wal_size,
+                            "wal_position_mb": wal_position / (1024 * 1024) if wal_position else 0,
+                        },
+                    )
+
+                    return {
                         "wal_lsn": wal_lsn,
                         "wal_position": wal_position,
                         "replication_lag": replication_lag,
                         "total_wal_size": total_wal_size,
-                        "wal_position_mb": wal_position / (1024 * 1024),
-                    },
-                )
+                    }
 
-                return {
-                    "wal_lsn": wal_lsn,
-                    "wal_position": wal_position,
-                    "replication_lag": replication_lag,
-                    "total_wal_size": total_wal_size,
-                }
+                except psycopg2.Error as e:
+                    logger.error(
+                        "PostgreSQL query error",
+                        extra={"source_id": source.id, "error": str(e)},
+                    )
+                    raise WALMonitorError(
+                        source_id=source.id, message=f"Query error: {str(e)}"
+                    ) from e
 
-            except psycopg2.Error as e:
-                logger.error(
-                    "PostgreSQL error while checking WAL size",
-                    extra={"source_id": source.id, "error": str(e)},
-                )
-                raise WALMonitorError(
-                    source_id=source.id, message=f"PostgreSQL error: {str(e)}"
-                ) from e
+            except WALMonitorError:
+                raise
             except Exception as e:
                 logger.error(
-                    "Unexpected error while checking WAL size",
+                    "Unexpected error in WAL check",
                     extra={"source_id": source.id, "error": str(e)},
                 )
                 raise WALMonitorError(
@@ -164,7 +187,7 @@ class WALMonitorService:
             try:
                 # Check WAL status
                 wal_status = await self.check_wal_status(source)
-                now = datetime.utcnow()
+                now = datetime.now(timezone(timedelta(hours=7)))
 
                 # Upsert monitor record
                 wal_monitor_repo = WALMonitorRepository(db)
@@ -215,7 +238,7 @@ class WALMonitorService:
                             source_id=source.id,
                             status="ERROR",
                             error_message=str(e),
-                            last_wal_received=datetime.utcnow(),
+                            last_wal_received=datetime.now(timezone(timedelta(hours=7))),
                         )
                         db.commit()
                     except Exception as update_error:
@@ -235,7 +258,7 @@ class WALMonitorService:
                         source_id=source.id,
                         status="ERROR",
                         error_message=str(e),
-                        last_wal_received=datetime.utcnow(),
+                        last_wal_received=datetime.now(timezone(timedelta(hours=7))),
                     )
                     db.commit()
                 except Exception as update_error:

@@ -6,9 +6,7 @@ production-ready observability.
 """
 
 import logging
-import logging.handlers
 import sys
-from pathlib import Path
 from typing import Any, Dict
 
 import structlog
@@ -29,9 +27,6 @@ def setup_logging() -> None:
     """
     settings = get_settings()
 
-    # Create logs directory if it doesn't exist
-    log_path = Path(settings.log_file_path)
-    log_path.parent.mkdir(parents=True, exist_ok=True)
 
     # Configure logging level
     log_level = getattr(logging, settings.log_level.upper(), logging.INFO)
@@ -53,22 +48,11 @@ def setup_logging() -> None:
     console_handler.setLevel(log_level)
     console_handler.setFormatter(formatter)
 
-    # File handler with rotation
-    file_handler = logging.handlers.RotatingFileHandler(
-        filename=settings.log_file_path,
-        maxBytes=settings.log_file_max_bytes,
-        backupCount=settings.log_file_backup_count,
-        encoding="utf-8",
-    )
-    file_handler.setLevel(log_level)
-    file_handler.setFormatter(formatter)
-
     # Configure root logger
     root_logger = logging.getLogger()
     root_logger.setLevel(log_level)
     root_logger.handlers.clear()
     root_logger.addHandler(console_handler)
-    root_logger.addHandler(file_handler)
 
     # Configure structlog
     structlog.configure(

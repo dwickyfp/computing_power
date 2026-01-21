@@ -1,0 +1,44 @@
+"""
+Configuration schemas.
+
+Defines schemas for configuration settings.
+"""
+
+from pydantic import BaseModel, Field
+
+
+class ConfigurationBase(BaseModel):
+    """Base configuration schema."""
+    
+    config_key: str = Field(..., description="Configuration key")
+    config_value: str = Field(..., description="Configuration value")
+
+
+class ConfigurationCreate(ConfigurationBase):
+    """Schema for creating configuration."""
+    pass
+
+
+class ConfigurationUpdate(BaseModel):
+    """Schema for updating configuration."""
+    
+    config_value: str = Field(..., description="New configuration value")
+
+
+class ConfigurationResponse(ConfigurationBase):
+    """Schema for configuration response."""
+    
+    id: int
+    created_at: str
+    updated_at: str
+    
+    class Config:
+        from_attributes = True
+
+
+class WALThresholds(BaseModel):
+    """WAL monitoring threshold configuration."""
+    
+    warning: int = Field(..., description="Warning threshold in bytes")
+    error: int = Field(..., description="Error threshold in bytes")
+    webhook_url: str = Field(default="", description="Webhook URL for alerts")

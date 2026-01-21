@@ -89,18 +89,13 @@ export function SourcesTable({ data }: DataTableProps) {
     }, [pageCount, ensurePageInRange])
 
     return (
-        <div
-            className={cn(
-                'max-sm:has-[div[role="toolbar"]]:mb-16',
-                'flex flex-1 flex-col gap-4'
-            )}
-        >
+        <div className='space-y-4'>
             <DataTableToolbar
                 table={table}
                 searchPlaceholder='Filter by name or host...'
             />
-            <div className='overflow-hidden rounded-md border'>
-                <Table className='min-w-xl'>
+            <div className='rounded-md border'>
+                <Table>
                     <TableHeader>
                         {table.getHeaderGroups().map((headerGroup) => (
                             <TableRow key={headerGroup.id}>
@@ -162,7 +157,7 @@ export function SourcesTable({ data }: DataTableProps) {
                     </TableBody>
                 </Table>
             </div>
-            <DataTablePagination table={table} className='mt-auto' />
+            <DataTablePagination table={table} />
             {/* <DataTableBulkActions table={table} /> */}
         </div>
     )

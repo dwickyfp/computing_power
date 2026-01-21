@@ -138,3 +138,31 @@ async def delete_destination(
         service: Destination service instance
     """
     service.delete_destination(destination_id)
+
+
+@router.post(
+    "/test-connection",
+    status_code=status.HTTP_200_OK,
+    summary="Test destination connection",
+    description="Test connection using provided configuration",
+)
+async def test_connection(
+    destination_data: DestinationCreate,
+    service: DestinationService = Depends(get_destination_service),
+) -> dict:
+    """
+    Test Snowflake connection.
+
+    Args:
+        destination_data: Destination configuration to test
+        service: Destination service instance
+
+    Returns:
+        Connection status message
+    """
+    try:
+        service.test_connection(destination_data)
+        return {"message": "Connection successful"}
+    except Exception as e:
+        # Return error message to client
+        return {"message": f"Connection failed: {str(e)}", "error": True}

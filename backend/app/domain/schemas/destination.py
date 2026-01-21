@@ -54,17 +54,28 @@ class DestinationCreate(DestinationBase):
         description="Snowflake schema name",
         examples=["PUBLIC", "RAW_DATA"],
     )
+    snowflake_landing_database: str | None = Field(
+        default=None,
+        max_length=255,
+        description="Snowflake landing database name",
+        examples=["LANDING", "RAW_LANDING"],
+    )
+    snowflake_landing_schema: str | None = Field(
+        default=None,
+        max_length=255,
+        description="Snowflake landing schema name",
+        examples=["PUBLIC", "RAW"],
+    )
     snowflake_role: str | None = Field(
         default=None,
         max_length=255,
         description="Snowflake role name",
         examples=["ACCOUNTADMIN", "SYSADMIN"],
     )
-    snowflake_private_key_path: str | None = Field(
+    snowflake_private_key: str | None = Field(
         default=None,
-        max_length=255,
-        description="Path to Snowflake private key file",
-        examples=["/keys/snowflake_key.p8", "user/snowflake_key.p8"],
+        description="Snowflake private key content (PEM)",
+        examples=["-----BEGIN PRIVATE KEY-----\nMII..."],
     )
     snowflake_private_key_passphrase: str | None = Field(
         default=None,
@@ -72,11 +83,11 @@ class DestinationCreate(DestinationBase):
         description="Private key passphrase (will be encrypted)",
         examples=["MySecurePassphrase123!"],
     )
-    snowflake_host: str | None = Field(
+    snowflake_warehouse: str | None = Field(
         default=None,
         max_length=255,
-        description="Snowflake host/endpoint",
-        examples=["xy12345.snowflakecomputing.com"],
+        description="Snowflake warehouse name",
+        examples=["COMPUTE_WH"],
     )
 
     @validator("name")
@@ -110,9 +121,8 @@ class DestinationCreate(DestinationBase):
                 "snowflake_database": "ANALYTICS",
                 "snowflake_schema": "RAW_DATA",
                 "snowflake_role": "SYSADMIN",
-                "snowflake_private_key_path": "user/snowflake_key.p8",
+                "snowflake_warehouse": "COMPUTE_WH",
                 "snowflake_private_key_passphrase": "MySecurePassphrase123!",
-                "snowflake_host": "xy12345.snowflakecomputing.com",
             }
         }
 
@@ -142,19 +152,25 @@ class DestinationUpdate(BaseSchema):
     snowflake_schema: str | None = Field(
         default=None, max_length=255, description="Snowflake schema name"
     )
+    snowflake_landing_database: str | None = Field(
+        default=None, max_length=255, description="Snowflake landing database name"
+    )
+    snowflake_landing_schema: str | None = Field(
+        default=None, max_length=255, description="Snowflake landing schema name"
+    )
     snowflake_role: str | None = Field(
         default=None, max_length=255, description="Snowflake role name"
     )
-    snowflake_private_key_path: str | None = Field(
-        default=None, max_length=255, description="Path to Snowflake private key file"
+    snowflake_private_key: str | None = Field(
+        default=None, description="Snowflake private key content (PEM)"
     )
     snowflake_private_key_passphrase: str | None = Field(
         default=None,
         max_length=255,
         description="Private key passphrase (will be encrypted)",
     )
-    snowflake_host: str | None = Field(
-        default=None, max_length=255, description="Snowflake host/endpoint"
+    snowflake_warehouse: str | None = Field(
+        default=None, max_length=255, description="Snowflake warehouse name"
     )
 
     @validator("name")
@@ -188,13 +204,22 @@ class DestinationResponse(DestinationBase, TimestampSchema):
     snowflake_schema: str | None = Field(
         default=None, description="Snowflake schema name"
     )
-    snowflake_role: str | None = Field(default=None, description="Snowflake role name")
-    snowflake_private_key_path: str | None = Field(
-        default=None, description="Path to Snowflake private key file"
+    snowflake_landing_database: str | None = Field(
+        default=None, description="Snowflake landing database name"
     )
-
-    snowflake_host: str | None = Field(
-        default=None, description="Snowflake host/endpoint"
+    snowflake_landing_schema: str | None = Field(
+        default=None, description="Snowflake landing schema name"
+    )
+    snowflake_role: str | None = Field(default=None, description="Snowflake role name")
+    snowflake_private_key: str | None = Field(
+        default=None, description="Snowflake private key content"
+    )
+    snowflake_warehouse: str | None = Field(
+        default=None, description="Snowflake warehouse name"
+    )
+    is_used_in_active_pipeline: bool = Field(
+        default=False,
+        description="Indicates if destination is used in any active pipeline"
     )
 
     class Config:
@@ -209,8 +234,7 @@ class DestinationResponse(DestinationBase, TimestampSchema):
                 "snowflake_database": "ANALYTICS",
                 "snowflake_schema": "RAW_DATA",
                 "snowflake_role": "SYSADMIN",
-                "snowflake_private_key_path": "user/snowflake_key.p8",
-                "snowflake_host": "xy12345.snowflakecomputing.com",
+                "snowflake_warehouse": "COMPUTE_WH",
                 "created_at": "2024-01-01T00:00:00Z",
                 "updated_at": "2024-01-01T00:00:00Z",
             }

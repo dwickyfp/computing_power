@@ -4,7 +4,7 @@ WAL Monitor repository with upsert support.
 Implements upsert pattern to maintain 1 row per source.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from typing import List, Optional
 
 from sqlalchemy import select
@@ -92,7 +92,7 @@ class WALMonitorRepository(BaseRepository[WALMonitor]):
         Returns:
             Created or updated WAL monitor record
         """
-        now = datetime.utcnow()
+        now = datetime.now(timezone(timedelta(hours=7)))
 
         # Build the insert statement with ON CONFLICT
         stmt = insert(WALMonitor).values(
@@ -168,7 +168,7 @@ class WALMonitorRepository(BaseRepository[WALMonitor]):
 
         monitor.status = status
         monitor.error_message = error_message
-        monitor.updated_at = datetime.utcnow()
+        monitor.updated_at = datetime.now(timezone(timedelta(hours=7)))
 
         self.db.flush()
         self.db.refresh(monitor)

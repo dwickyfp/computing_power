@@ -9,7 +9,7 @@ from typing import List
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
-from app.domain.models.pipeline import Pipeline, PipelineMetadata, PipelineStatus
+from app.domain.models.pipeline import Pipeline, PipelineMetadata, PipelineStatus, PipelineProgress
 from app.domain.repositories.base import BaseRepository
 
 
@@ -40,6 +40,7 @@ class PipelineRepository(BaseRepository[Pipeline]):
                 selectinload(Pipeline.source),
                 selectinload(Pipeline.destination),
                 selectinload(Pipeline.pipeline_metadata),
+                selectinload(Pipeline.pipeline_progress),
             )
             .where(Pipeline.id == pipeline_id)
         )
@@ -69,6 +70,7 @@ class PipelineRepository(BaseRepository[Pipeline]):
                 selectinload(Pipeline.source),
                 selectinload(Pipeline.destination),
                 selectinload(Pipeline.pipeline_metadata),
+                selectinload(Pipeline.pipeline_progress),
             )
             .offset(skip)
             .limit(limit)
@@ -113,7 +115,27 @@ class PipelineRepository(BaseRepository[Pipeline]):
         # Create associated metadata
         metadata = PipelineMetadata(pipeline_id=pipeline.id, status="RUNNING")
         self.db.add(metadata)
+        
+        progress = PipelineProgress(pipeline_id=pipeline.id, status="PENDING")
+        self.db.add(progress)
+
         self.db.flush()
         self.db.refresh(pipeline)
 
         return pipeline
+    def get_by_source_id(self, source_id: int) -> List[Pipeline]:
+        """
+        Get all pipelines for a specific source.
+        
+        Args:
+            source_id: Source identifier
+            
+        Returns:
+            List of pipelines with destination loaded
+        """
+        result = self.db.execute(
+            select(Pipeline)
+            .options(selectinload(Pipeline.destination))
+            .where(Pipeline.source_id == source_id)
+        )
+        return list(result.scalars().all())

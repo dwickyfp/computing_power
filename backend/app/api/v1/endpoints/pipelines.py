@@ -6,7 +6,7 @@ Provides REST API for managing ETL pipelines.
 
 from typing import List
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Query, status, BackgroundTasks
 
 from app.api.deps import get_pipeline_service
 from app.domain.schemas.pipeline import (
@@ -29,6 +29,7 @@ router = APIRouter()
 )
 async def create_pipeline(
     pipeline_data: PipelineCreate,
+    background_tasks: BackgroundTasks,
     service: PipelineService = Depends(get_pipeline_service),
 ) -> PipelineResponse:
     """
@@ -42,6 +43,7 @@ async def create_pipeline(
         Created pipeline with source and destination details
     """
     pipeline = service.create_pipeline(pipeline_data)
+    background_tasks.add_task(service.initialize_pipeline, pipeline.id)
     return PipelineResponse.from_orm(pipeline)
 
 
@@ -208,3 +210,28 @@ async def refresh_pipeline(
     """
     pipeline = service.refresh_pipeline(pipeline_id)
     return PipelineResponse.from_orm(pipeline)
+
+
+@router.get(
+    "/{pipeline_id}/stats",
+    response_model=List[dict],
+    summary="Get pipeline data flow stats",
+    description="Get data flow statistics for a pipeline, including daily counts and recent activity",
+)
+async def get_pipeline_stats(
+    pipeline_id: int,
+    days: int = Query(7, ge=1, le=30, description="Number of days to look back"),
+    service: PipelineService = Depends(get_pipeline_service),
+) -> List[dict]:
+    """
+    Get pipeline data flow statistics.
+
+    Args:
+        pipeline_id: Pipeline identifier
+        days: Number of days to look back
+        service: Pipeline service instance
+
+    Returns:
+        List of statistics per table
+    """
+    return service.get_pipeline_data_flow_stats(pipeline_id, days)

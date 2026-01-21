@@ -31,6 +31,8 @@ class WALMonitorBase(BaseModel):
         None, description="Replication lag in bytes"
     )
     total_wal_size: Optional[str] = Field(None, description="Total WAL size")
+    wal_size_bytes: Optional[int] = Field(None, description="WAL size in bytes for threshold comparison")
+    wal_threshold_status: Optional[str] = Field(None, description="Threshold status: OK, WARNING, ERROR")
     status: str = Field(default="ACTIVE", description="Status: ACTIVE, IDLE, ERROR")
     error_message: Optional[str] = Field(None, description="Error details if any")
 

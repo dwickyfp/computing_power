@@ -40,8 +40,15 @@ class DestinationService:
         """
         logger.info("Creating new destination", extra={"name": destination_data.name})
 
+        # Default landing configuration to standard configuration if not provided
+        if not destination_data.snowflake_landing_database and destination_data.snowflake_database:
+            destination_data.snowflake_landing_database = destination_data.snowflake_database
+
+        if not destination_data.snowflake_landing_schema and destination_data.snowflake_schema:
+            destination_data.snowflake_landing_schema = destination_data.snowflake_schema
+
         # TODO: In production, encrypt passphrase before storing
-        destination = self.repository.create(**destination_data.model_dump())
+        destination = self.repository.create(**destination_data.dict())
 
         logger.info(
             "Destination created successfully",
@@ -112,7 +119,7 @@ class DestinationService:
         logger.info("Updating destination", extra={"destination_id": destination_id})
 
         # Filter out None values for partial updates
-        update_data = destination_data.model_dump(exclude_unset=True)
+        update_data = destination_data.dict(exclude_unset=True)
 
         # TODO: In production, encrypt passphrase if provided
         destination = self.repository.update(destination_id, **update_data)
@@ -138,33 +145,101 @@ class DestinationService:
             "Destination deleted successfully", extra={"destination_id": destination_id}
         )
 
-    def test_connection(self, destination_id: int) -> bool:
+    def test_connection(self, config: DestinationCreate) -> bool:
         """
-        Test Snowflake connection for a destination.
+        Test Snowflake connection for a destination configuration.
 
         Args:
-            destination_id: Destination identifier
+            config: Destination configuration to test
 
         Returns:
-            True if connection successful, False otherwise
+            True if connection successful
+
+        Raises:
+            Exception: If connection fails, with error details
         """
-        destination = self.repository.get_by_id(destination_id)
+        import snowflake.connector
+        from cryptography.hazmat.backends import default_backend
+        from cryptography.hazmat.primitives import serialization
+
+        logger.info(
+            "Testing connection for destination",
+            extra={
+                "account": config.snowflake_account,
+                "user": config.snowflake_user,
+            },
+        )
 
         try:
-            # TODO: Implement actual Snowflake connection test
-            # This would involve creating a Snowflake connection
-            # and executing a simple query
-            logger.info(
-                "Testing connection for destination",
-                extra={
-                    "destination_id": destination_id,
-                    "account": destination.snowflake_account,
-                },
+            if not config.snowflake_private_key:
+                raise ValueError("Private key is required for connection test")
+
+            # Clean private key string
+            private_key_str = config.snowflake_private_key.strip()
+            
+            # Handle passphrase
+            passphrase = None
+            if config.snowflake_private_key_passphrase:
+                passphrase = config.snowflake_private_key_passphrase.encode()
+
+            try:
+                # Load private key
+                p_key = serialization.load_pem_private_key(
+                    private_key_str.encode(),
+                    password=passphrase,
+                    backend=default_backend(),
+                )
+            except ValueError as ve:
+                logger.error(f"Failed to load private key: {ve}")
+                raise ValueError("Invalid Private Key or Passphrase. Please check your credentials.")
+
+            pkb = p_key.private_bytes(
+                encoding=serialization.Encoding.DER,
+                format=serialization.PrivateFormat.PKCS8,
+                encryption_algorithm=serialization.NoEncryption(),
             )
-            return True
+
+            # Connect to Snowflake
+            # Note: snowflake-connector-python usually uppercases the user for JWT unless quoted.
+            # We pass the parameters as is.
+            ctx = snowflake.connector.connect(
+                user=config.snowflake_user,
+                account=config.snowflake_account,
+                private_key=pkb,
+                role=config.snowflake_role,
+                warehouse=config.snowflake_warehouse,
+                database=config.snowflake_database,
+                schema=config.snowflake_schema,
+                client_session_keep_alive=False,
+                application="Rosetta_ETL"
+            )
+
+            # Test query
+            cs = ctx.cursor()
+            cs.execute("SELECT 1")
+            result = cs.fetchone()
+            
+            cs.close()
+            ctx.close()
+
+            if result and result[0] == 1:
+                return True
+            return False
+
+        except snowflake.connector.errors.ProgrammingError as pe:
+             logger.error(
+                "Snowflake programming error",
+                extra={"error": str(pe)},
+            )
+             # Catch specific JWT errors to give better hints
+             if "JWT token is invalid" in str(pe):
+                 raise Exception("Authentication Failed: JWT token is invalid. Please check if the Public Key is correctly assigned to the user in Snowflake, and the Username matches.")
+             raise pe
+
         except Exception as e:
             logger.error(
                 "Connection test failed",
-                extra={"destination_id": destination_id, "error": str(e)},
+                extra={"error": str(e)},
             )
-            return False
+            # Re-raise with clear message if possible
+            raise e

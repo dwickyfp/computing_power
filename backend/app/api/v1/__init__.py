@@ -1,9 +1,3 @@
-"""
-API v1 initialization module.
-
-Exports the main API router.
-"""
-
 from fastapi import APIRouter
 
 from app.api.v1.endpoints import (
@@ -14,6 +8,12 @@ from app.api.v1.endpoints import (
     wal_metrics,
     wal_monitor,
     system_metrics,
+    credits,
+    wal_monitor,
+    system_metrics,
+    credits,
+    configuration,
+    dashboard,
 )
 
 # Create v1 router
@@ -28,6 +28,10 @@ api_router.include_router(
     destinations.router, prefix="/destinations", tags=["destinations"]
 )
 
+api_router.include_router(
+    credits.router, prefix="/destinations", tags=["credits"]
+)
+
 api_router.include_router(pipelines.router, prefix="/pipelines", tags=["pipelines"])
 
 api_router.include_router(wal_metrics.router, prefix="/metrics", tags=["metrics"])
@@ -36,4 +40,12 @@ api_router.include_router(wal_monitor.router, tags=["wal-monitor"])
 
 api_router.include_router(
     system_metrics.router, tags=["system-metrics"]
+)
+
+api_router.include_router(
+    configuration.router, tags=["configuration"]
+)
+
+api_router.include_router(
+    dashboard.router, prefix="/dashboard", tags=["dashboard"]
 )
