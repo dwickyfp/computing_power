@@ -320,11 +320,17 @@ async def drop_replication_slot(
 )
 async def fetch_available_tables(
     source_id: int,
+    refresh: bool = Query(False, description="Force refresh from source database"),
     service: SourceService = Depends(get_source_service),
 ) -> List[str]:
     """
-    Fetch all available tables from source database in real-time.
+    Fetch all available tables from source database.
+    
+    If refresh is True, ignores cache and fetches directly from DB, updating cache.
+    Otherwise, returns cached result or fetches if cache miss.
     """
+    if refresh:
+        return service.refresh_available_tables(source_id)
     return service.fetch_available_tables(source_id)
 
 # --- Presets ---

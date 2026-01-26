@@ -36,6 +36,8 @@ from app.domain.schemas.wal_monitor import WALMonitorResponse
 from app.domain.services.schema_monitor import SchemaMonitorService
 
 
+from app.infrastructure.redis import RedisClient
+
 logger = get_logger(__name__)
 
 
@@ -499,6 +501,7 @@ class SourceService:
         """Manually refresh source metadata."""
         source = self.get_source(source_id)
         self._update_source_table_list(source)
+        self._sync_publication_tables(source)
         self.db.commit()
         self.db.refresh(source)
 
@@ -655,6 +658,21 @@ class SourceService:
             List of table names
         """
         source = self.get_source(source_id)
+        
+        # Redis Key
+        cache_key = f"source:{source_id}:tables"
+        
+        try:
+            # 1. Try Cache
+            redis_client = RedisClient.get_instance()
+            cached_tables = redis_client.get(cache_key)
+            if cached_tables:
+                import json
+                return json.loads(cached_tables)
+        except Exception as e:
+            logger.warning(f"Redis cache error: {e}")
+            
+        # 2. Fetch from DB
         try:
             conn = self._get_connection(source)
             with conn.cursor() as cur:
@@ -668,7 +686,51 @@ class SourceService:
                 cur.execute(query)
                 tables = [row[0] for row in cur.fetchall()]
             conn.close()
+            
+            # 3. Set Cache (TTL 5 minutes)
+            try:
+                import json
+                redis_client = RedisClient.get_instance()
+                redis_client.setex(cache_key, 300, json.dumps(tables))
+            except Exception as e:
+                logger.warning(f"Failed to cache tables for source {source_id}: {e}")
+                
             return tables
         except Exception as e:
             logger.error(f"Failed to fetch available tables for source {source.name}: {e}")
             raise ValueError(f"Failed to fetch tables: {str(e)}")
+
+    def refresh_available_tables(self, source_id: int) -> List[str]:
+        """
+        Force refresh available tables from source and update cache.
+        """
+        source = self.get_source(source_id)
+        cache_key = f"source:{source_id}:tables"
+        
+        try:
+            conn = self._get_connection(source)
+            with conn.cursor() as cur:
+                query = """
+                    SELECT table_name
+                    FROM information_schema.tables
+                    WHERE table_schema = 'public'
+                    AND table_type = 'BASE TABLE'
+                    ORDER BY table_name;
+                """
+                cur.execute(query)
+                tables = [row[0] for row in cur.fetchall()]
+            conn.close()
+            
+            # Update Cache
+            try:
+                import json
+                redis_client = RedisClient.get_instance()
+                redis_client.setex(cache_key, 300, json.dumps(tables))
+            except Exception as e:
+                logger.error(f"Failed to update cache during refresh for source {source_id}: {e}")
+                
+            return tables
+        except Exception as e:
+            logger.error(f"Failed to refresh table list for source {source.name}: {e}")
+            raise ValueError(f"Failed to refresh tables: {str(e)}")
+

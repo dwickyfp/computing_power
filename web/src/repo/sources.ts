@@ -164,8 +164,10 @@ export const sourcesRepo = {
     dropReplication: async (sourceId: number) => {
         await api.delete(`/sources/${sourceId}/replication`)
     },
-    getAvailableTables: async (sourceId: number) => {
-        const { data } = await api.get<string[]>(`/sources/${sourceId}/available_tables`)
+    getAvailableTables: async (sourceId: number, refresh: boolean = false) => {
+        const { data } = await api.get<string[]>(`/sources/${sourceId}/available_tables`, {
+            params: { refresh }
+        })
         return data
     },
     createPreset: async (sourceId: number, preset: PresetCreate) => {

@@ -26,7 +26,8 @@ import {
     TableRow,
 } from '@/components/ui/table'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
-import { Loader2, Save, Search, Download } from 'lucide-react'
+import { Loader2, Save, Search, Download, RefreshCcw } from 'lucide-react'
+import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 import {
     Dialog,
@@ -275,6 +276,20 @@ export function SourceDetailsListTable({ sourceId: propSourceId, isPublicationEn
         toast.success(`Loaded preset. Selected ${matchCount} tables.`)
     }
 
+    const refreshTablesMutation = useMutation({
+        mutationFn: async () => {
+             return sourcesRepo.getAvailableTables(id, true)
+        },
+        onSuccess: (data) => {
+            queryClient.setQueryData(['source-available-tables', id], data)
+            toast.success("Table list refreshed successfully")
+        },
+        onError: (err) => {
+            toast.error("Failed to refresh table list")
+            console.error(err)
+        }
+    })
+
     const isFiltered = table.getState().columnFilters.length > 0
     const selectedCount = Object.keys(rowSelection).length
 
@@ -286,6 +301,15 @@ export function SourceDetailsListTable({ sourceId: propSourceId, isPublicationEn
                     <CardDescription>Select tables to save as a preset.</CardDescription>
                 </div>
                 <div className="flex gap-2">
+                    <Button 
+                        variant="outline" 
+                        size="icon"
+                        onClick={() => refreshTablesMutation.mutate()}
+                        disabled={refreshTablesMutation.isPending}
+                        title="Refresh table list from source"
+                    >
+                         <RefreshCcw className={cn("h-4 w-4", refreshTablesMutation.isPending && "animate-spin")} />
+                    </Button>
                     <Dialog open={isLoadPresetOpen} onOpenChange={setIsLoadPresetOpen}>
                         <DialogTrigger asChild>
                             <Button variant="outline">
@@ -348,7 +372,7 @@ export function SourceDetailsListTable({ sourceId: propSourceId, isPublicationEn
                                                 name="saveMode"
                                                 checked={saveMode === 'replace'}
                                                 onChange={() => setSaveMode('replace')}
-                                                className="aspect-square h-4 w-4 rounded-full border border-primary text-primary ring-offset-background focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                                                className="aspect-square h-4 w-4 rounded-full border border-primary text-primary ring-offset-background focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus:visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                                             />
                                             <Label htmlFor="replace">Replace Existing</Label>
                                         </div>

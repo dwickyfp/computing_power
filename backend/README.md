@@ -31,34 +31,41 @@ backend/
 
 ## Setup
 
-1. **Install Dependencies**
+1. **Install uv**
+
+Follow the [official installation guide](https://docs.astral.sh/uv/getting-started/installation/) or:
 
 ```bash
-python -m venv venv
+# Windows (PowerShell)
+powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
 
-venv\Scripts\activate.bat => for windows
-source venv/bin/activate => mac os
-
-pip install -r requirements.txt
+# macOS/Linux
+curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
-2. **Configure Environment**
+2. **Install Dependencies**
+
+```bash
+uv sync
+```
+
+3. **Configure Environment**
 
 ```bash
 cp .env.example .env
 # Edit .env with your configuration
 ```
 
-3. **Run Database Migrations**
+4. **Run Database Migrations**
 
 ```bash
-alembic upgrade head
+uv run alembic upgrade head
 ```
 
-4. **Start the Application**
+5. **Start the Application**
 
 ```bash
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
 ## API Endpoints

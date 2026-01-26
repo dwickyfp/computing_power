@@ -77,9 +77,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements and install dependencies
-COPY backend/requirements.txt ./
-RUN pip install --no-cache-dir -r requirements.txt
+# Copy uv lock file and pyproject.toml
+COPY backend/pyproject.toml backend/uv.lock ./
+
+# Install uv
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
+
+# Install dependencies
+RUN uv sync --frozen --no-install-project
 
 # =============================================================================
 # STAGE 4: COMPUTE-NODE (RUST RUNTIME)
@@ -133,9 +138,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-# Copy Python dependencies from backend-deps
-COPY --from=backend-deps /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
-COPY --from=backend-deps /usr/local/bin /usr/local/bin
+# Copy virtual environment
+COPY --from=backend-deps /app/.venv /app/.venv
+
+# Enable virtual environment
+ENV PATH="/app/.venv/bin:$PATH"
 
 # Copy backend source code
 COPY backend/ ./backend/

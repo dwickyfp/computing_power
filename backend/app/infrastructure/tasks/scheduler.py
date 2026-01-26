@@ -80,6 +80,39 @@ class BackgroundScheduler:
         except Exception as e:
             logger.error("Error running credit monitor task", extra={"error": str(e)})
 
+    def _run_table_list_refresh(self) -> None:
+        """
+        Synchronous wrapper for table list refresh task.
+        """
+        try:
+            # We need to run this in a way that doesn't block, 
+            # but since it's IO bound and we are in a thread (APScheduler default), 
+            # we can just run it or use asyncio.run if we make the service method async.
+            # But the service method is sync (using psycopg2).
+            # So we can just call it.
+            
+            # However, we need a DB session. 
+            # Best practice is to create a new session here.
+            from app.core.database import db_manager
+            from app.domain.services.source import SourceService
+            
+            # Use session factory directly from db_manager
+            session_factory = db_manager.session_factory
+            db = session_factory()
+            try:
+                service = SourceService(db)
+                sources = service.list_sources(limit=1000) # Assuming reasonable count
+                for source in sources:
+                    try:
+                        service.refresh_available_tables(source.id)
+                    except Exception as e:
+                        logger.error(f"Failed to auto-refresh tables for source {source.id}: {e}")
+            finally:
+                db.close()
+                
+        except Exception as e:
+            logger.error("Error running table list refresh task", extra={"error": str(e)})
+
     def start(self) -> None:
         """
         Start the background scheduler.
@@ -167,7 +200,20 @@ class BackgroundScheduler:
             coalesce=True,
         )
 
-        logger.info("Replication and Credit monitoring scheduled")
+        # Schedule Table List Refresh (every 10 minutes)
+        self.scheduler.add_job(
+            self._run_table_list_refresh,
+            trigger=IntervalTrigger(
+                minutes=10
+            ),
+            id="table_list_refresh",
+            name="Table List Refresh",
+            replace_existing=True,
+            max_instances=1,
+            coalesce=True,
+        )
+
+        logger.info("Replication, Credit and Table Refresh monitoring scheduled")
 
         # Start scheduler
         self.scheduler.start()
