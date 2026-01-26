@@ -103,6 +103,26 @@ class TableMetadataRepository(BaseRepository[TableMetadata]):
         ).delete()
         self.db.flush()
 
+    def get_by_source_and_name(self, source_id: int, table_name: str) -> TableMetadata | None:
+        """
+        Get table metadata by source ID and table name.
+
+        Args:
+            source_id: Source identifier
+            table_name: Table name
+
+        Returns:
+            TableMetadata object or None
+        """
+        return (
+            self.db.query(TableMetadata)
+            .filter(
+                TableMetadata.source_id == source_id,
+                TableMetadata.table_name == table_name
+            )
+            .first()
+        )
+
     def update_status(self, table_id: int, **kwargs) -> TableMetadata:
         """
         Update status flags for a table metadata.

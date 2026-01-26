@@ -124,7 +124,7 @@ export function PipelineCreateDrawer({ open, setOpen }: PipelineCreateDrawerProp
                     <FormLabel>Source</FormLabel>
                     <Select onValueChange={field.onChange} defaultValue={field.value}>
                       <FormControl>
-                        <SelectTrigger>
+                        <SelectTrigger className="w-full">
                           <SelectValue placeholder='Select a source' />
                         </SelectTrigger>
                       </FormControl>
@@ -152,7 +152,7 @@ export function PipelineCreateDrawer({ open, setOpen }: PipelineCreateDrawerProp
                     <FormLabel>Destination</FormLabel>
                     <Select onValueChange={field.onChange} defaultValue={field.value}>
                       <FormControl>
-                        <SelectTrigger>
+                        <SelectTrigger className="w-full">
                           <SelectValue placeholder='Select a destination' />
                         </SelectTrigger>
                       </FormControl>

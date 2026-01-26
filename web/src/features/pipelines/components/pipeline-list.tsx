@@ -13,7 +13,7 @@ import { useState } from 'react'
 import { PipelineCreateDrawer } from './pipeline-create-drawer.tsx'
 
 export default function PipelineList() {
-    const { data: pipelines, isLoading } = useQuery({
+    const { data: pipelines } = useQuery({
         queryKey: ['pipelines'],
         queryFn: pipelinesRepo.getAll,
         refetchInterval: (query) => {
@@ -31,7 +31,8 @@ export default function PipelineList() {
 
     const [open, setOpen] = useState(false)
 
-    if (isLoading) return <div>Loading...</div>
+    // Remove blocking loading state to allow layout rendering
+    // if (isLoading) return <div>Loading...</div>
     // if (error) return <div>Error loading pipelines</div>
 
     return (

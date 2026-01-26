@@ -103,6 +103,11 @@ class Settings(BaseSettings):
         default="UTC", description="Timezone for task scheduler"
     )
 
+    # Redis Configuration
+    redis_url: str = Field(
+        default="redis://localhost:6379/0", description="Redis connection URL"
+    )
+
     # Logging
     log_format: str = Field(default="json", description="Log format: json or text")
     log_file_path: str = Field(default="logs/app.log", description="Path to log file")
