@@ -133,7 +133,7 @@ export function PipelineDetailsTable({ pipelineId, tables }: PipelineDetailsTabl
                                                  <TableCell
                                                      key={cell.id}
                                                      className={cn(
-                                                         'py-4',
+                                                         'py-2',
                                                          cell.column.columnDef.meta?.className,
                                                          cell.column.columnDef.meta?.tdClassName
                                                      )}
