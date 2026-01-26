@@ -435,18 +435,23 @@ class PipelineService:
                  # But let's check what source_details.tables actually contains.
                  pass
                  
-            # Re-evaluating table_info structure from initialize_pipeline context
-            # In initialize_pipeline: tables = source_details.tables
-            # source_details is SourceDetailResponse.
-            # tables is List[SourceTableInfo].
-            # SourceTableInfo has 'schema_definition' ? No, let's check source.py/schema.py
-            # logic in initialize_pipeline used:
-            # table_name = table.table_name
-            # columns = table.schema_definition
-            # table_id = table.id
-             
-            # So we just proceed with attribute access
-            columns = table_info.schema_definition
+            # Ensure we get the columns correctly, handling potential alias or missing fields
+            columns = getattr(table_info, 'schema_definition', None)
+            if not columns and hasattr(table_info, 'schema_table'):
+                # Fallback to schema_table if schema_definition is missing/empty
+                st = getattr(table_info, 'schema_table')
+                if isinstance(st, list):
+                    columns = st
+                elif isinstance(st, dict):
+                    columns = list(st.values())
+
+            # Final validation
+            if not columns:
+                logger.error(f"Table {table_name} has no schema definition (columns). Skipping provisioning.")
+                # We can either raise an error or skip. Skipping is safer for partial failures, 
+                # but might leave pipeline incomplete. For now, let's Raise to alert user/logs clearly why it failed before SQL error.
+                raise ValueError(f"Table {table_name} has no columns defined. Please refresh source metadata.")
+
             table_id = table_info.id
 
             # A. Landing Table

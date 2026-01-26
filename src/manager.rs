@@ -2,7 +2,7 @@ use crate::snowflake::SnowflakeDestination;
 use crate::store::memory::CustomStore;
 use anyhow::Result;
 use etl::config::{
-    BatchConfig, PgConnectionConfig, PipelineConfig, TableSyncCopyConfig, TcpKeepaliveConfig,
+    BatchConfig, PgConnectionConfig, PipelineConfig, TableSyncCopyConfig,
     TlsConfig,
 };
 use etl::pipeline::Pipeline;
@@ -163,11 +163,6 @@ impl PipelineManager {
                 trusted_root_certs: "".into(),
             },
             keepalive: None,
-            // keepalive: Some(TcpKeepaliveConfig {
-            //     idle_secs: 60,
-            //     interval_secs: 5,
-            //     retries: 5,
-            // }),
         };
 
         // Read config from environment with defaults
