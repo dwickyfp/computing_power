@@ -37,10 +37,17 @@ export const destinationsColumns: ColumnDef<Destination>[] = [
         cell: ({ row }) => {
             const type = row.getValue('type') as string
             const isSnowflake = type.toLowerCase() === 'snowflake'
+            const isPostgres = type.toLowerCase() === 'postgres'
             return (
                 <div className={`flex items-center gap-2 w-[200px] ${isSnowflake ? 'text-[#29b5e8]' : ''}`}>
                     {isSnowflake && <Snowflake className='h-4 w-4' />}
-                    <span className='truncate font-medium capitalize'>{type}</span>
+                    <span className='truncate font-medium capitalize'>
+                        {isPostgres ? (
+                            <span>Postgre<span style={{ color: '#316192' }}>SQL</span></span>
+                        ) : (
+                            type
+                        )}
+                    </span>
                 </div>
             )
         },

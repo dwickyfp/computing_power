@@ -158,6 +158,27 @@ class DestinationService:
         Raises:
             Exception: If connection fails, with error details
         """
+        if config.type == "POSTGRES":
+            import psycopg2
+            try:
+                conn = psycopg2.connect(
+                    host=config.config.get("host"),
+                    port=config.config.get("port"),
+                    dbname=config.config.get("database"),
+                    user=config.config.get("user"),
+                    password=config.config.get("password"),
+                    connect_timeout=5
+                )
+                conn.close()
+                return True
+            except Exception as e:
+                logger.error(
+                    "Postgres connection test failed",
+                    extra={"error": str(e)},
+                )
+                raise Exception(f"Connection failed: {str(e)}")
+
+        # Default to SNOWFLAKE
         import snowflake.connector
         from cryptography.hazmat.backends import default_backend
         from cryptography.hazmat.primitives import serialization
@@ -230,7 +251,7 @@ class DestinationService:
              logger.error(
                 "Snowflake programming error",
                 extra={"error": str(pe)},
-            )
+             )
              # Catch specific JWT errors to give better hints
              if "JWT token is invalid" in str(pe):
                  raise Exception("Authentication Failed: JWT token is invalid. Please check if the Public Key is correctly assigned to the user in Snowflake, and the Username matches.")

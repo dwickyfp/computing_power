@@ -26,6 +26,10 @@ export const destinationFormSchema = z.object({
         private_key: z.string().optional(),
         private_key_passphrase: z.string().optional(),
         warehouse: z.string().optional(),
+        // Postgres
+        host: z.string().optional(),
+        port: z.number().optional(),
+        password: z.string().optional(),
     }).optional(),
 })
 

@@ -167,7 +167,9 @@ export function DestinationsMutateDrawer({
                                         <SelectContent>
                                             <SelectItem value='SNOWFLAKE'>Snowflake</SelectItem>
                                             <SelectItem value='KAFKA'>Kafka</SelectItem>
-                                            <SelectItem value='POSTGRES'>PostgreSQL</SelectItem>
+                                            <SelectItem value='POSTGRES'>
+                                                <span>Postgre<span style={{ color: '#316192' }}>SQL</span></span>
+                                            </SelectItem>
                                         </SelectContent>
                                     </Select>
                                     <FormMessage />
@@ -334,6 +336,79 @@ export function DestinationsMutateDrawer({
                                 </FormItem>
                             )}
                         />
+                            </>
+                        )}
+                        {form.watch('type') === 'POSTGRES' && (
+                            <>
+                                <div className='grid grid-cols-2 gap-4'>
+                                    <FormField
+                                        control={form.control}
+                                        name='config.host'
+                                        render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel>Host</FormLabel>
+                                                <FormControl>
+                                                    <Input {...field} placeholder='localhost' />
+                                                </FormControl>
+                                                <FormMessage />
+                                            </FormItem>
+                                        )}
+                                    />
+                                    <FormField
+                                        control={form.control}
+                                        name='config.port'
+                                        render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel>Port</FormLabel>
+                                                <FormControl>
+                                                    <Input type='number' {...field} onChange={e => field.onChange(Number(e.target.value))} placeholder='5432' />
+                                                </FormControl>
+                                                <FormMessage />
+                                            </FormItem>
+                                        )}
+                                    />
+                                </div>
+                                <div className='grid grid-cols-2 gap-4'>
+                                    <FormField
+                                        control={form.control}
+                                        name='config.database'
+                                        render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel>Database</FormLabel>
+                                                <FormControl>
+                                                    <Input {...field} placeholder='postgres' />
+                                                </FormControl>
+                                                <FormMessage />
+                                            </FormItem>
+                                        )}
+                                    />
+                                    <FormField
+                                        control={form.control}
+                                        name='config.user'
+                                        render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel>User</FormLabel>
+                                                <FormControl>
+                                                    <Input {...field} placeholder='postgres' />
+                                                </FormControl>
+                                                <FormMessage />
+                                            </FormItem>
+                                        )}
+                                    />
+                                </div>
+                                <FormField
+                                    control={form.control}
+                                    name='config.password'
+                                    render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel>Password</FormLabel>
+                                            <FormControl>
+                                                <Input type='password' {...field} placeholder='password' />
+                                            </FormControl>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}
+                                />
                             </>
                         )}
                     </form>
