@@ -10,11 +10,16 @@ export const destinationsColumns: ColumnDef<Destination>[] = [
     {
         id: 'details',
         header: () => <div className="text-center font-semibold w-[50px]">Action</div>,
-        cell: ({ row }) => (
-            <div className='flex items-center justify-center w-[50px]'>
-                <DestinationDetailsButton destinationId={row.original.id} />
-            </div>
-        ),
+        cell: ({ row }) => {
+            const isSnowflake = row.original.type === 'SNOWFLAKE'
+            if (!isSnowflake) return <div className='w-[50px]' />
+            
+            return (
+                <div className='flex items-center justify-center w-[50px]'>
+                    <DestinationDetailsButton destinationId={row.original.id} />
+                </div>
+            )
+        },
         meta: { title: 'Detail' },
     },
     {

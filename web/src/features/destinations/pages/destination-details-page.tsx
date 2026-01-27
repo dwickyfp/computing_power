@@ -1,4 +1,5 @@
-import { useParams, Link } from '@tanstack/react-router'
+import { useParams, Link, useNavigate } from '@tanstack/react-router'
+import { useEffect } from 'react'
 import { useCreditUsage, useRefreshCredits } from '@/repo/credits'
 import { Main } from '@/components/layout/main'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
@@ -96,10 +97,19 @@ export function DestinationDetailsPage() {
     const { data, isLoading, refetch } = useCreditUsage(destinationId)
     const { mutate: refreshCredits, isPending: isRefreshing } = useRefreshCredits()
 
-    const { data: destination } = useQuery({
+    const { data: destination, isError, isLoading: isDestinationLoading } = useQuery({
         queryKey: ['destination', destinationId],
         queryFn: () => destinationsRepo.get(Number(destinationId)),
+        retry: false, // Don't retry if it's a 404
     })
+
+    const navigate = useNavigate()
+
+    useEffect(() => {
+        if (!isDestinationLoading && (isError || !destination || (destination && destination.type !== 'SNOWFLAKE'))) {
+            navigate({ to: '/destinations' })
+        }
+    }, [destination, isError, isDestinationLoading, navigate])
 
     const handleRefresh = () => {
         refreshCredits(destinationId, {
