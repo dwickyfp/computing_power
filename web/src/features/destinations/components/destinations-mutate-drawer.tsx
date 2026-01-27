@@ -3,6 +3,13 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select'
+import {
     Form,
     FormControl,
     FormField,
@@ -21,7 +28,7 @@ import {
     SheetTitle,
 } from '@/components/ui/sheet'
 import { type Destination, destinationFormSchema, type DestinationForm } from '../data/schema'
-import { destinationsRepo } from '@/repo/destinations'
+import { destinationsRepo, type DestinationListResponse } from '@/repo/destinations'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Loader2 } from 'lucide-react'
 
@@ -44,36 +51,28 @@ export function DestinationsMutateDrawer({
         defaultValues: currentRow
             ? {
                 name: currentRow.name,
-                snowflake_account: currentRow.snowflake_account || '',
-                snowflake_user: currentRow.snowflake_user || '',
-                snowflake_database: currentRow.snowflake_database || '',
-                snowflake_schema: currentRow.snowflake_schema || '',
-                snowflake_landing_database: currentRow.snowflake_landing_database || '',
-                snowflake_landing_schema: currentRow.snowflake_landing_schema || '',
-                snowflake_role: currentRow.snowflake_role || '',
-                snowflake_private_key: currentRow.snowflake_private_key || '',
-                snowflake_private_key_passphrase: '',
-                snowflake_warehouse: currentRow.snowflake_warehouse || '',
+                type: currentRow.type || 'SNOWFLAKE',
+                config: currentRow.config || {},
             }
             : {
                 name: '',
-                snowflake_account: '',
-                snowflake_user: '',
-                snowflake_database: '',
-                snowflake_schema: '',
-                snowflake_landing_database: '',
-                snowflake_landing_schema: '',
-                snowflake_role: '',
-                snowflake_private_key: '',
-                snowflake_private_key_passphrase: '',
-                snowflake_warehouse: '',
+                type: 'SNOWFLAKE',
+                config: {},
             },
     })
 
     const createMutation = useMutation({
         mutationFn: destinationsRepo.create,
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['destinations'] })
+        onSuccess: async (newDestination) => {
+            queryClient.setQueryData<DestinationListResponse>(['destinations'], (old) => {
+                if (!old) return old
+                return {
+                    ...old,
+                    destinations: [newDestination, ...old.destinations],
+                    total: old.total + 1
+                }
+            })
+            await queryClient.invalidateQueries({ queryKey: ['destinations'] })
             onOpenChange(false)
             form.reset()
             toast.success('Destination created successfully')
@@ -87,8 +86,18 @@ export function DestinationsMutateDrawer({
     const updateMutation = useMutation({
         mutationFn: (data: DestinationForm) =>
             destinationsRepo.update(currentRow!.id, data),
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['destinations'] })
+        onSuccess: async (updatedDestination) => {
+            queryClient.setQueryData<DestinationListResponse>(['destinations'], (old) => {
+                if (!old) return old
+                return {
+                    ...old,
+                    destinations: old.destinations.map((d) => d.id === updatedDestination.id ? updatedDestination : d)
+                }
+            })
+            queryClient.setQueryData(['destination', updatedDestination.id], updatedDestination)
+
+            await queryClient.invalidateQueries({ queryKey: ['destinations'] })
+            await queryClient.invalidateQueries({ queryKey: ['destination', currentRow?.id] })
             onOpenChange(false)
             form.reset()
             toast.success('Destination updated successfully')
@@ -143,10 +152,34 @@ export function DestinationsMutateDrawer({
                                 </FormItem>
                             )}
                         />
+                        <FormField
+                            control={form.control}
+                            name='type'
+                            render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel>Type</FormLabel>
+                                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                                        <FormControl>
+                                            <SelectTrigger>
+                                                <SelectValue placeholder='Select destination type' />
+                                            </SelectTrigger>
+                                        </FormControl>
+                                        <SelectContent>
+                                            <SelectItem value='SNOWFLAKE'>Snowflake</SelectItem>
+                                            <SelectItem value='KAFKA'>Kafka</SelectItem>
+                                            <SelectItem value='POSTGRES'>PostgreSQL</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                    <FormMessage />
+                                </FormItem>
+                            )}
+                        />
+                        {form.watch('type') === 'SNOWFLAKE' && (
+                            <>
                         <div className='grid grid-cols-2 gap-4'>
                             <FormField
                                 control={form.control}
-                                name='snowflake_account'
+                                name='config.account'
                                 render={({ field }) => (
                                     <FormItem>
                                         <FormLabel>Account</FormLabel>
@@ -159,7 +192,7 @@ export function DestinationsMutateDrawer({
                             />
                             <FormField
                                 control={form.control}
-                                name='snowflake_user'
+                                name='config.user'
                                 render={({ field }) => (
                                     <FormItem>
                                         <FormLabel>User</FormLabel>
@@ -174,7 +207,7 @@ export function DestinationsMutateDrawer({
                         <div className='grid grid-cols-2 gap-4'>
                             <FormField
                                 control={form.control}
-                                name='snowflake_landing_database'
+                                name='config.landing_database'
                                 render={({ field }) => (
                                     <FormItem>
                                         <FormLabel>Landing Database <span className="text-xs text-muted-foreground">(Optional)</span></FormLabel>
@@ -187,7 +220,7 @@ export function DestinationsMutateDrawer({
                             />
                             <FormField
                                 control={form.control}
-                                name='snowflake_landing_schema'
+                                name='config.landing_schema'
                                 render={({ field }) => (
                                     <FormItem>
                                         <FormLabel>Landing Schema <span className="text-xs text-muted-foreground">(Optional)</span></FormLabel>
@@ -202,7 +235,7 @@ export function DestinationsMutateDrawer({
                         <div className='grid grid-cols-2 gap-4'>
                             <FormField
                                 control={form.control}
-                                name='snowflake_database'
+                                name='config.database'
                                 render={({ field }) => (
                                     <FormItem>
                                         <FormLabel>Database</FormLabel>
@@ -215,7 +248,7 @@ export function DestinationsMutateDrawer({
                             />
                             <FormField
                                 control={form.control}
-                                name='snowflake_schema'
+                                name='config.schema'
                                 render={({ field }) => (
                                     <FormItem>
                                         <FormLabel>Schema</FormLabel>
@@ -229,7 +262,7 @@ export function DestinationsMutateDrawer({
                         </div>
                         <FormField
                             control={form.control}
-                            name='snowflake_role'
+                            name='config.role'
                             render={({ field }) => (
                                 <FormItem>
                                     <FormLabel>Role</FormLabel>
@@ -242,7 +275,7 @@ export function DestinationsMutateDrawer({
                         />
                         <FormField
                             control={form.control}
-                            name='snowflake_warehouse'
+                            name='config.warehouse'
                             render={({ field }) => (
                                 <FormItem>
                                     <FormLabel>Warehouse</FormLabel>
@@ -255,7 +288,7 @@ export function DestinationsMutateDrawer({
                         />
                         <FormField
                             control={form.control}
-                            name='snowflake_private_key'
+                            name='config.private_key'
                             render={({ field: { value, onChange, ...fieldProps } }) => (
                                 <FormItem>
                                     <FormLabel>Private Key</FormLabel>
@@ -290,7 +323,7 @@ export function DestinationsMutateDrawer({
                         />
                         <FormField
                             control={form.control}
-                            name='snowflake_private_key_passphrase'
+                            name='config.private_key_passphrase'
                             render={({ field }) => (
                                 <FormItem>
                                     <FormLabel>Private Key Passphrase</FormLabel>
@@ -301,6 +334,8 @@ export function DestinationsMutateDrawer({
                                 </FormItem>
                             )}
                         />
+                            </>
+                        )}
                     </form>
                 </Form>
                 <SheetFooter className='gap-2 sm:space-x-0'>

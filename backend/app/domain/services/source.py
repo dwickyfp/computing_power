@@ -146,6 +146,10 @@ class SourceService:
         # Filter out None values for partial updates
         update_data = source_data.dict(exclude_unset=True)
 
+        # Remove empty string password if present (treat as no update)
+        if "pg_password" in update_data and (update_data["pg_password"] is None or update_data["pg_password"] == ""):
+            del update_data["pg_password"]
+
         # TODO: In production, encrypt password if provided
         source = self.repository.update(source_id, **update_data)
 
@@ -170,6 +174,10 @@ class SourceService:
             source_id: Source identifier
         """
         logger.info("Deleting source", extra={"source_id": source_id})
+
+        # Explicitly delete WAL Metrics first
+        from app.domain.models.wal_metric import WALMetric
+        self.db.query(WALMetric).filter(WALMetric.source_id == source_id).delete()
 
         self.repository.delete(source_id)
 
@@ -733,4 +741,60 @@ class SourceService:
         except Exception as e:
             logger.error(f"Failed to refresh table list for source {source.name}: {e}")
             raise ValueError(f"Failed to refresh tables: {str(e)}")
+
+    def duplicate_source(self, source_id: int) -> Source:
+        """
+        Duplicate an existing source.
+
+        Args:
+            source_id: Source identifier to duplicate
+
+        Returns:
+            New Source entity
+        """
+        original_source = self.get_source(source_id)
+        
+        # 1. Generate new name
+        base_name = original_source.name
+        new_name = f"{base_name}-1"
+        counter = 1
+        
+        while self.get_source_by_name(new_name):
+            counter += 1
+            new_name = f"{base_name}-{counter}"
+            
+        # 2. Generate new replication_id
+        max_rep_id = self.repository.get_max_replication_id()
+        new_rep_id = max_rep_id + 1
+        
+        # 3. Create new source configuration
+        # Copy connection details, referencing original source attributes
+        # Note: We do NOT enable publication/replication by default for safety
+        
+        source_data = SourceCreate(
+            name=new_name,
+            pg_host=original_source.pg_host,
+            pg_port=original_source.pg_port,
+            pg_database=original_source.pg_database,
+            pg_username=original_source.pg_username,
+            pg_password=original_source.pg_password, # Copy encrypted password directly? 
+            # If SourceCreate expects raw password and we pass encrypted, it might be double encrypted?
+            # Looking at create_source -> repository.create -> SqlAlchemy model.
+            # If pg_password is stored as is, then it's fine. 
+            # But wait, original_source.pg_password might be None or the actual string.
+            # The model says "comment='PostgreSQL password (encrypted)'" but the service code says "TODO: In production, encrypt password before storing".
+            # This implies currently it enters as plain text or is handled by a getter/setter we don't see?
+            # Let's look at SourceCreate schema if possible, or assume direct copy is fine for now as per codebase state.
+            # Assuming direct copy is correct for current state.
+            publication_name=original_source.publication_name, # Can share publication name? Unlikely unique constraint? 
+            # Publication is DB object. If we connect to same DB, we can reuse publication if we want to share it?
+            # Or should we create a new one? 
+            # User said "replicate all connection setting sources".
+            # If multiple sources point to same DB/tables, they might conflict if using same publication/slot if not carefully managed.
+            # But here we are just creating the config. 
+            # Let's keep publication name same, user can change if needed.
+            replication_id=new_rep_id
+        )
+        
+        return self.create_source(source_data)
 

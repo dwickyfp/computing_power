@@ -4,7 +4,7 @@ Destination Pydantic schemas for request/response validation.
 Defines schemas for creating, updating, and retrieving destination configurations.
 """
 
-from typing import Optional
+from typing import Any, Optional
 
 from pydantic import Field, validator
 
@@ -21,6 +21,11 @@ class DestinationBase(BaseSchema):
         description="Unique destination name",
         examples=["snowflake-prod", "analytics-warehouse"],
     )
+    type: str = Field(
+        default="SNOWFLAKE",
+        description="Destination type",
+        examples=["SNOWFLAKE", "KAFKA", "POSTGRES"],
+    )
 
 
 class DestinationCreate(DestinationBase):
@@ -30,65 +35,30 @@ class DestinationCreate(DestinationBase):
     Requires Snowflake connection details.
     """
 
-    snowflake_account: str | None = Field(
-        default=None,
-        max_length=255,
-        description="Snowflake account identifier",
-        examples=["xy12345", "xy12345.us-east-1"],
+    config: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Destination configuration (JSON)",
+        examples=[
+            {
+                "account": "xy12345.us-east-1",
+                "user": "ETL_USER",
+                "database": "ANALYTICS",
+                "schema": "RAW_DATA",
+                "role": "SYSADMIN",
+                "warehouse": "COMPUTE_WH"
+            }
+        ],
     )
-    snowflake_user: str | None = Field(
-        default=None,
-        max_length=255,
-        description="Snowflake username",
-        examples=["ETL_USER", "admin"],
-    )
-    snowflake_database: str | None = Field(
-        default=None,
-        max_length=255,
-        description="Snowflake database name",
-        examples=["ANALYTICS", "PRODUCTION"],
-    )
-    snowflake_schema: str | None = Field(
-        default=None,
-        max_length=255,
-        description="Snowflake schema name",
-        examples=["PUBLIC", "RAW_DATA"],
-    )
-    snowflake_landing_database: str | None = Field(
-        default=None,
-        max_length=255,
-        description="Snowflake landing database name",
-        examples=["LANDING", "RAW_LANDING"],
-    )
-    snowflake_landing_schema: str | None = Field(
-        default=None,
-        max_length=255,
-        description="Snowflake landing schema name",
-        examples=["PUBLIC", "RAW"],
-    )
-    snowflake_role: str | None = Field(
-        default=None,
-        max_length=255,
-        description="Snowflake role name",
-        examples=["ACCOUNTADMIN", "SYSADMIN"],
-    )
-    snowflake_private_key: str | None = Field(
-        default=None,
-        description="Snowflake private key content (PEM)",
-        examples=["-----BEGIN PRIVATE KEY-----\nMII..."],
-    )
-    snowflake_private_key_passphrase: str | None = Field(
-        default=None,
-        max_length=255,
-        description="Private key passphrase (will be encrypted)",
-        examples=["MySecurePassphrase123!"],
-    )
-    snowflake_warehouse: str | None = Field(
-        default=None,
-        max_length=255,
-        description="Snowflake warehouse name",
-        examples=["COMPUTE_WH"],
-    )
+    
+    @validator("type")
+    def validate_type(cls, v: str) -> str:
+        """Validate destination type."""
+        allowed_types = ["SNOWFLAKE", "KAFKA", "POSTGRES"] # Extend as needed
+        if v.upper() not in allowed_types:
+             # For now, we optionally allow other types if needed, but warning/error is better.
+             # Let's just Upper it.
+             pass
+        return v.upper()
 
     @validator("name")
     def validate_name(cls, v: str) -> str:
@@ -100,29 +70,30 @@ class DestinationCreate(DestinationBase):
             )
         return v.lower()
 
-    @validator("snowflake_account")
-    def validate_snowflake_account(cls, v: str | None) -> str | None:
-        """Validate Snowflake account format."""
-        if v is not None:
-            # Basic validation - can be enhanced
-            if not v.replace(".", "").replace("-", "").isalnum():
-                raise ValueError(
-                    "Snowflake account must contain only alphanumeric characters, "
-                    "dots, and hyphens"
-                )
+        return v.upper()
+
+    @validator("config")
+    def validate_config(cls, v: dict[str, Any], values: dict[str, Any]) -> dict[str, Any]:
+        """Validate config based on type."""
+        # Simple validation for now. 
+        # Ideally we'd inspect 'type' from values, but validation order matters.
+        # If type is SNOWFLAKE, ensure required fields exist.
         return v
 
     class Config:
         schema_extra = {
             "example": {
                 "name": "snowflake-production",
-                "snowflake_account": "xy12345.us-east-1",
-                "snowflake_user": "ETL_USER",
-                "snowflake_database": "ANALYTICS",
-                "snowflake_schema": "RAW_DATA",
-                "snowflake_role": "SYSADMIN",
-                "snowflake_warehouse": "COMPUTE_WH",
-                "snowflake_private_key_passphrase": "MySecurePassphrase123!",
+                "type": "SNOWFLAKE",
+                "config": {
+                    "account": "xy12345.us-east-1",
+                    "user": "ETL_USER",
+                    "database": "ANALYTICS",
+                    "schema": "RAW_DATA",
+                    "role": "SYSADMIN",
+                    "warehouse": "COMPUTE_WH",
+                    "private_key_passphrase": "MySecurePassphrase123!",
+                }
             }
         }
 
@@ -140,37 +111,12 @@ class DestinationUpdate(BaseSchema):
         max_length=255,
         description="Unique destination name",
     )
-    snowflake_account: str | None = Field(
-        default=None, max_length=255, description="Snowflake account identifier"
-    )
-    snowflake_user: str | None = Field(
-        default=None, max_length=255, description="Snowflake username"
-    )
-    snowflake_database: str | None = Field(
-        default=None, max_length=255, description="Snowflake database name"
-    )
-    snowflake_schema: str | None = Field(
-        default=None, max_length=255, description="Snowflake schema name"
-    )
-    snowflake_landing_database: str | None = Field(
-        default=None, max_length=255, description="Snowflake landing database name"
-    )
-    snowflake_landing_schema: str | None = Field(
-        default=None, max_length=255, description="Snowflake landing schema name"
-    )
-    snowflake_role: str | None = Field(
-        default=None, max_length=255, description="Snowflake role name"
-    )
-    snowflake_private_key: str | None = Field(
-        default=None, description="Snowflake private key content (PEM)"
-    )
-    snowflake_private_key_passphrase: str | None = Field(
+    type: str | None = Field(
         default=None,
-        max_length=255,
-        description="Private key passphrase (will be encrypted)",
+        description="Destination type",
     )
-    snowflake_warehouse: str | None = Field(
-        default=None, max_length=255, description="Snowflake warehouse name"
+    config: dict[str, Any] | None = Field(
+        default=None, description="Destination configuration (JSON)"
     )
 
     @validator("name")
@@ -194,28 +140,9 @@ class DestinationResponse(DestinationBase, TimestampSchema):
     """
 
     id: int = Field(..., description="Unique destination identifier", examples=[1, 42])
-    snowflake_account: str | None = Field(
-        default=None, description="Snowflake account identifier"
-    )
-    snowflake_user: str | None = Field(default=None, description="Snowflake username")
-    snowflake_database: str | None = Field(
-        default=None, description="Snowflake database name"
-    )
-    snowflake_schema: str | None = Field(
-        default=None, description="Snowflake schema name"
-    )
-    snowflake_landing_database: str | None = Field(
-        default=None, description="Snowflake landing database name"
-    )
-    snowflake_landing_schema: str | None = Field(
-        default=None, description="Snowflake landing schema name"
-    )
-    snowflake_role: str | None = Field(default=None, description="Snowflake role name")
-    snowflake_private_key: str | None = Field(
-        default=None, description="Snowflake private key content"
-    )
-    snowflake_warehouse: str | None = Field(
-        default=None, description="Snowflake warehouse name"
+    type: str = Field(..., description="Destination type", examples=["SNOWFLAKE"])
+    config: dict[str, Any] = Field(
+        default_factory=dict, description="Destination configuration (JSON)"
     )
     is_used_in_active_pipeline: bool = Field(
         default=False,
@@ -224,17 +151,20 @@ class DestinationResponse(DestinationBase, TimestampSchema):
 
     class Config:
         orm_mode = True
-        fields = {"snowflake_private_key_passphrase": {"exclude": True}}
+        fields = {}
         schema_extra = {
             "example": {
                 "id": 1,
                 "name": "snowflake-production",
-                "snowflake_account": "xy12345.us-east-1",
-                "snowflake_user": "ETL_USER",
-                "snowflake_database": "ANALYTICS",
-                "snowflake_schema": "RAW_DATA",
-                "snowflake_role": "SYSADMIN",
-                "snowflake_warehouse": "COMPUTE_WH",
+                "type": "SNOWFLAKE",
+                "config": {
+                    "account": "xy12345.us-east-1",
+                    "user": "ETL_USER",
+                    "database": "ANALYTICS",
+                    "schema": "RAW_DATA",
+                    "role": "SYSADMIN",
+                    "warehouse": "COMPUTE_WH",
+                },
                 "created_at": "2024-01-01T00:00:00Z",
                 "updated_at": "2024-01-01T00:00:00Z",
             }

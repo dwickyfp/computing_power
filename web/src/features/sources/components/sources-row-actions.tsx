@@ -1,6 +1,9 @@
 import { DotsHorizontalIcon } from '@radix-ui/react-icons'
 import { type Row } from '@tanstack/react-table'
-import { Trash2 } from 'lucide-react'
+import { Trash2, Copy } from 'lucide-react'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { toast } from 'sonner'
+import { sourcesRepo } from '@/repo/sources'
 import { Button } from '@/components/ui/button'
 import {
     DropdownMenu,
@@ -23,6 +26,18 @@ export function SourcesRowActions<TData>({
     const source = sourceSchema.parse(row.original)
 
     const { setOpen, setCurrentRow } = useSources()
+    const queryClient = useQueryClient()
+
+    const duplicateMutation = useMutation({
+        mutationFn: sourcesRepo.duplicate,
+        onSuccess: async () => {
+            await queryClient.invalidateQueries({ queryKey: ['sources'] })
+            toast.success('Source duplicated successfully')
+        },
+        onError: () => {
+            toast.error('Failed to duplicate source')
+        }
+    })
 
     return (
         <DropdownMenu modal={false}>
@@ -43,6 +58,16 @@ export function SourcesRowActions<TData>({
                     }}
                 >
                     Edit
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                    onClick={() => {
+                        duplicateMutation.mutate(source.id)
+                    }}
+                >
+                    Duplicate
+                    <DropdownMenuShortcut>
+                        <Copy size={16} />
+                    </DropdownMenuShortcut>
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem

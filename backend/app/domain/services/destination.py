@@ -41,11 +41,11 @@ class DestinationService:
         logger.info("Creating new destination", extra={"name": destination_data.name})
 
         # Default landing configuration to standard configuration if not provided
-        if not destination_data.snowflake_landing_database and destination_data.snowflake_database:
-            destination_data.snowflake_landing_database = destination_data.snowflake_database
+        if not destination_data.config.get("landing_database") and destination_data.config.get("database"):
+            destination_data.config["landing_database"] = destination_data.config.get("database")
 
-        if not destination_data.snowflake_landing_schema and destination_data.snowflake_schema:
-            destination_data.snowflake_landing_schema = destination_data.snowflake_schema
+        if not destination_data.config.get("landing_schema") and destination_data.config.get("schema"):
+            destination_data.config["landing_schema"] = destination_data.config.get("schema")
 
         # TODO: In production, encrypt passphrase before storing
         destination = self.repository.create(**destination_data.dict())
@@ -165,22 +165,22 @@ class DestinationService:
         logger.info(
             "Testing connection for destination",
             extra={
-                "account": config.snowflake_account,
-                "user": config.snowflake_user,
+                "account": config.config.get("account"),
+                "user": config.config.get("user"),
             },
         )
 
         try:
-            if not config.snowflake_private_key:
+            if not config.config.get("private_key"):
                 raise ValueError("Private key is required for connection test")
 
             # Clean private key string
-            private_key_str = config.snowflake_private_key.strip()
+            private_key_str = config.config.get("private_key", "").strip()
             
             # Handle passphrase
             passphrase = None
-            if config.snowflake_private_key_passphrase:
-                passphrase = config.snowflake_private_key_passphrase.encode()
+            if config.config.get("private_key_passphrase"):
+                passphrase = config.config.get("private_key_passphrase").encode()
 
             try:
                 # Load private key
@@ -203,13 +203,13 @@ class DestinationService:
             # Note: snowflake-connector-python usually uppercases the user for JWT unless quoted.
             # We pass the parameters as is.
             ctx = snowflake.connector.connect(
-                user=config.snowflake_user,
-                account=config.snowflake_account,
+                user=config.config.get("user"),
+                account=config.config.get("account"),
                 private_key=pkb,
-                role=config.snowflake_role,
-                warehouse=config.snowflake_warehouse,
-                database=config.snowflake_database,
-                schema=config.snowflake_schema,
+                role=config.config.get("role"),
+                warehouse=config.config.get("warehouse"),
+                database=config.config.get("database"),
+                schema=config.config.get("schema"),
                 client_session_keep_alive=False,
                 application="Rosetta_ETL"
             )

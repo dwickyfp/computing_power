@@ -1,3 +1,4 @@
+use crate::destination_enum::DestinationEnum;
 use crate::snowflake::SnowflakeDestination;
 use crate::store::memory::CustomStore;
 use anyhow::Result;
@@ -44,7 +45,7 @@ impl PipelineManager {
                 sqlx::query(query).execute(&self.db_pool).await?;
             }
         }
-
+        
         info!("Migrations completed successfully.");
         Ok(())
     }
@@ -201,55 +202,66 @@ impl PipelineManager {
             table_sync_copy: TableSyncCopyConfig::SkipAllTables,
         };
 
-        let snowflake_config = crate::config::SnowflakeConfig {
-            account_id: dest_row.try_get("snowflake_account")?,
-            user: dest_row.try_get("snowflake_user")?,
-            database: dest_row.try_get("snowflake_database")?,
-            schema: dest_row.try_get("snowflake_schema")?,
-            table: pipeline_name,
-            role: dest_row
-                .try_get("snowflake_role")
-                .unwrap_or_else(|_| "PUBLIC".to_string()),
-            private_key: dest_row.try_get("snowflake_private_key")?,
-            private_key_passphrase: dest_row
-                .try_get("snowflake_private_key_passphrase")
-                .ok()
-                .filter(|s: &String| !s.is_empty()),
-            landing_database: dest_row
-                .try_get("snowflake_landing_database")
-                .ok()
-                .filter(|s: &String| !s.is_empty()),
-            landing_schema: dest_row
-                .try_get("snowflake_landing_schema")
-                .ok()
-                .filter(|s: &String| !s.is_empty()),
+        // Determine Destination Type
+        // Determine Destination Type
+        let dest_type: String = dest_row.try_get("type").unwrap_or_else(|_| "SNOWFLAKE".to_string());
+        let dest_config_json: serde_json::Value = dest_row.try_get("config")?;
+
+        let destination: DestinationEnum = match dest_type.as_str() {
+            "SNOWFLAKE" => {
+                let snowflake_config = crate::config::SnowflakeConfig {
+                    account_id: dest_config_json["account"].as_str().unwrap_or("").to_string(),
+                    user: dest_config_json["user"].as_str().unwrap_or("").to_string(),
+                    database: dest_config_json["database"].as_str().unwrap_or("").to_string(),
+                    schema: dest_config_json["schema"].as_str().unwrap_or("").to_string(),
+                    table: pipeline_name,
+                    role: dest_config_json["role"].as_str().unwrap_or("PUBLIC").to_string(),
+                    private_key: dest_config_json["private_key"].as_str().unwrap_or("").to_string(),
+                    private_key_passphrase: dest_config_json["private_key_passphrase"]
+                        .as_str()
+                        .map(|s| s.to_string())
+                        .filter(|s| !s.is_empty()),
+                    landing_database: dest_config_json["landing_database"]
+                        .as_str()
+                        .map(|s| s.to_string())
+                        .filter(|s| !s.is_empty()),
+                    landing_schema: dest_config_json["landing_schema"]
+                        .as_str()
+                        .map(|s| s.to_string())
+                        .filter(|s| !s.is_empty()),
+                };
+                
+                // Create Source Pool for Name Resolution (used by Destination)
+                let source_pool_url = format!(
+                    "postgres://{}:{}@{}:{}/{}",
+                    pg_config.username,
+                    pg_config
+                        .password
+                        .as_ref()
+                        .map(|p| p.expose_secret())
+                        .unwrap_or(""),
+                    pg_config.host,
+                    pg_config.port,
+                    pg_config.name
+                );
+
+                let source_pool = PgPoolOptions::new()
+                    .max_connections(2)
+                    .connect(&source_pool_url)
+                    .await?;
+        
+                DestinationEnum::Snowflake(SnowflakeDestination::new(
+                    snowflake_config,
+                    source_pool,
+                    self.db_pool.clone(),
+                    pipeline_id,
+                    source_id,
+                )?)
+            },
+            _ => {
+                return Err(anyhow::anyhow!("Unsupported destination type: {}", dest_type));
+            }
         };
-        // Create Source Pool for Name Resolution (used by Destination)
-        let source_pool_url = format!(
-            "postgres://{}:{}@{}:{}/{}",
-            pg_config.username,
-            pg_config
-                .password
-                .as_ref()
-                .map(|p| p.expose_secret())
-                .unwrap_or(""),
-            pg_config.host,
-            pg_config.port,
-            pg_config.name
-        );
-
-        let source_pool = PgPoolOptions::new()
-            .max_connections(2)
-            .connect(&source_pool_url)
-            .await?;
-
-        let destination = SnowflakeDestination::new(
-            snowflake_config,
-            source_pool,
-            self.db_pool.clone(),
-            pipeline_id,
-            source_id,
-        )?;
 
         let store = CustomStore::new();
 

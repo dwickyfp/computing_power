@@ -23,16 +23,8 @@ CREATE TABLE IF NOT EXISTS sources (
 CREATE TABLE IF NOT EXISTS destinations (
     id SERIAL PRIMARY KEY,
     name VARCHAR(255) NOT NULL UNIQUE,
-    snowflake_account VARCHAR(255),
-    snowflake_user VARCHAR(255),
-    snowflake_database VARCHAR(255),
-    snowflake_schema VARCHAR(255),
-    snowflake_landing_database VARCHAR(255),
-    snowflake_landing_schema VARCHAR(255),
-    snowflake_role VARCHAR(255),
-    snowflake_private_key TEXT,
-    snowflake_private_key_passphrase VARCHAR(255),
-    snowflake_warehouse VARCHAR(255),
+    type VARCHAR(50) NOT NULL DEFAULT 'SNOWFLAKE',
+    config JSONB NOT NULL DEFAULT '{}',
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -87,6 +79,16 @@ CREATE TABLE IF NOT EXISTS wal_monitor (
     updated_at TIMESTAMPTZ DEFAULT NOW(),
     CONSTRAINT unique_source_wal UNIQUE (source_id) -- Ensures 1 source = 1 row
 );
+
+-- Table 5A: WAL Metrics (stores historical WAL size data)
+CREATE TABLE IF NOT EXISTS wal_metrics (
+    id SERIAL PRIMARY KEY,
+    source_id INTEGER NOT NULL REFERENCES sources(id) ON DELETE CASCADE,
+    size_bytes BIGINT NOT NULL,
+    recorded_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_wal_metrics_source_id ON wal_metrics(source_id);
+CREATE INDEX IF NOT EXISTS idx_wal_metrics_recorded_at ON wal_metrics(recorded_at);
 
 -- Save lisat table based on publication, schema table, check table name
 CREATE TABLE IF NOT EXISTS table_metadata_list (
@@ -197,4 +199,6 @@ CREATE INDEX IF NOT EXISTS idx_credit_snowflake_monitoring_usage_date ON credit_
 -- Add unique constraint to table_metadata_list (Added retroactively for new deployments)
 ALTER TABLE table_metadata_list DROP CONSTRAINT IF EXISTS uq_table_metadata_source_table;
 ALTER TABLE table_metadata_list ADD CONSTRAINT uq_table_metadata_source_table UNIQUE (source_id, table_name);
+
+
 

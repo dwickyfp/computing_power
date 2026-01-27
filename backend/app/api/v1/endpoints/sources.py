@@ -389,3 +389,28 @@ async def update_preset(
     """Update a preset."""
     preset = service.update_preset(preset_id, preset_data)
     return PresetResponse.from_orm(preset)
+
+
+@router.post(
+    "/{source_id}/duplicate",
+    response_model=SourceResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Duplicate source",
+    description="Duplicate an existing source configuration",
+)
+async def duplicate_source(
+    source_id: int,
+    service: SourceService = Depends(get_source_service),
+) -> SourceResponse:
+    """
+    Duplicate source.
+
+    Args:
+        source_id: Source identifier to duplicate
+        service: Source service instance
+
+    Returns:
+        New source
+    """
+    source = service.duplicate_source(source_id)
+    return SourceResponse.from_orm(source)
