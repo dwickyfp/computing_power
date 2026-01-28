@@ -182,8 +182,6 @@ class SourceUpdate(BaseSchema):
     )
     pg_password: str | None = Field(
         default=None,
-        min_length=1,
-        max_length=255,
         description="PostgreSQL password (will be encrypted)",
     )
     publication_name: str | None = Field(

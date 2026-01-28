@@ -56,9 +56,48 @@ services:
     networks:
       - etl-network
 
+  pg_postgis_cdc_target:
+    image: postgis/postgis:16-3.4
+    container_name: postgis_container_target
+    restart: always
+    environment:
+      POSTGRES_DB: postgres
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      TZ: Asia/Jakarta
+    ports:
+      - "5435:5432"
+    volumes:
+      - postgis_data:/var/lib/postgresql/data
+    command: >
+      postgres 
+      -c wal_level=logical 
+      -c max_replication_slots=10 
+      -c max_wal_senders=10
+      -c timezone='Asia/Jakarta'
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - etl-network
+  
+  rosetta-redis:
+    image: redis:7
+    command: ["redis-server", "--port", "6379"]
+    volumes:
+      - rosetta_redis_data:/data
+    ports:
+      - "6379:6379"
+    networks:
+      - etl-network
+    restart: unless-stopped
+
 volumes:
   postgres_data:
   postgis_data:
+  rosetta_redis_data:
 
 networks:
   etl-network:

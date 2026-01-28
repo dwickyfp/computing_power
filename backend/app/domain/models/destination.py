@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 
 from sqlalchemy import Integer, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.dialects.postgresql import JSONB
 
 from app.domain.models.base import Base, TimestampMixin
 
@@ -46,46 +47,19 @@ class Destination(Base, TimestampMixin):
         comment="Unique destination name",
     )
 
-    # Snowflake Connection Details
-    snowflake_account: Mapped[str | None] = mapped_column(
-        String(255), nullable=True, comment="Snowflake account identifier"
+    type: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+        default="SNOWFLAKE",
+        comment="Destination type (e.g. SNOWFLAKE, KAFKA)",
     )
 
-    snowflake_user: Mapped[str | None] = mapped_column(
-        String(255), nullable=True, comment="Snowflake username"
-    )
-
-    snowflake_database: Mapped[str | None] = mapped_column(
-        String(255), nullable=True, comment="Snowflake database name"
-    )
-
-    snowflake_schema: Mapped[str | None] = mapped_column(
-        String(255), nullable=True, comment="Snowflake schema name"
-    )
-
-    snowflake_role: Mapped[str | None] = mapped_column(
-        String(255), nullable=True, comment="Snowflake role name"
-    )
-
-    snowflake_landing_database: Mapped[str | None] = mapped_column(
-        String(255), nullable=True, comment="Snowflake landing database name"
-    )
-
-    snowflake_landing_schema: Mapped[str | None] = mapped_column(
-        String(255), nullable=True, comment="Snowflake landing schema name"
-    )
-
-    # Authentication
-    snowflake_private_key: Mapped[str | None] = mapped_column(
-        "snowflake_private_key", String, nullable=True, comment="Snowflake private key (PEM content)"
-    )
-
-    snowflake_private_key_passphrase: Mapped[str | None] = mapped_column(
-        String(255), nullable=True, comment="Private key passphrase (encrypted)"
-    )
-
-    snowflake_warehouse: Mapped[str | None] = mapped_column(
-        String(255), nullable=True, comment="Snowflake warehouse name"
+    # Configuration (JSONB)
+    config: Mapped[dict] = mapped_column(
+        JSONB,
+        nullable=False,
+        default=dict,
+        comment="Destination configuration (JSON)",
     )
 
     # Relationships
@@ -100,45 +74,17 @@ class Destination(Base, TimestampMixin):
         """String representation."""
         return (
             f"Destination(id={self.id}, name={self.name!r}, "
-            f"account={self.snowflake_account!r})"
+            f"type={self.type!r})"
         )
 
     @property
     def connection_config(self) -> dict[str, str]:
         """
-        Get Snowflake connection configuration.
-
-        Returns dictionary with connection parameters for Snowflake client.
+        Get connection configuration from JSONB config.
+        
+        Returns dictionary with connection parameters.
         """
-        config = {
-            "account": self.snowflake_account or "",
-            "user": self.snowflake_user or "",
-            "database": self.snowflake_database or "",
-            "schema": self.snowflake_schema or "",
-            "role": self.snowflake_role or "",
-        }
-
-        if self.snowflake_warehouse:
-            config["warehouse"] = self.snowflake_warehouse
-
-        if self.snowflake_landing_database:
-            config["landing_database"] = self.snowflake_landing_database
-
-        if self.snowflake_landing_schema:
-            config["landing_schema"] = self.snowflake_landing_schema
-
-        if self.snowflake_private_key:
-            config["private_key"] = self.snowflake_private_key
-
-        if self.snowflake_private_key_passphrase:
-            config["private_key_passphrase"] = self.snowflake_private_key_passphrase
-
-        return config
-
-        if self.snowflake_private_key_passphrase:
-            config["private_key_passphrase"] = self.snowflake_private_key_passphrase
-
-        return config
+        return self.config
 
     @property
     def is_used_in_active_pipeline(self) -> bool:

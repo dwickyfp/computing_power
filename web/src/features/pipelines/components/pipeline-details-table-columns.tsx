@@ -68,7 +68,7 @@ const MonitoringSparkline = ({ stats }: { stats: PipelineStats | undefined }) =>
 
     return (
         <div className="flex h-full items-center justify-center">
-            <div className="h-[100px] w-[300px]">
+            <div className="h-[40px] w-[200px]">
                 <ResponsiveContainer width="100%" height="100%">
                     <AreaChart data={data}>
                         <defs>
@@ -91,8 +91,8 @@ const MonitoringSparkline = ({ stats }: { stats: PipelineStats | undefined }) =>
                             tickFormatter={formatYAxis}
                         />
                         <Tooltip 
-                            contentStyle={{ fontSize: '12px' }}
-                            labelStyle={{ fontSize: '10px', color: '#666' }}
+                            contentStyle={{ fontSize: '10px', padding: '2px 4px' }}
+                            labelStyle={{ fontSize: '8px', color: '#666' }}
                         />
                         <Area 
                             type="monotone" 
@@ -123,8 +123,8 @@ export const getPipelineDetailsTableColumns = (
             cell: ({ row }) => {
                 const tableName = row.getValue('table_name') as string
                 return (
-                    <div className="flex h-full items-center px-3">
-                        <span className='font-medium uppercase'>{tableName}</span>
+                    <div className="flex h-full items-center px-2">
+                        <span className='font-medium uppercase text-sm'>{tableName}</span>
                     </div>
                 )
             },
@@ -147,7 +147,7 @@ export const getPipelineDetailsTableColumns = (
                 
                 return (
                    <div className="flex h-full items-center justify-center">
-                       <span className="text-lg font-semibold tabular-nums">
+                       <span className="text-sm font-semibold tabular-nums">
                            {count.toLocaleString()}
                        </span>
                    </div>

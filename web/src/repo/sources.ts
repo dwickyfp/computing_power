@@ -184,5 +184,9 @@ export const sourcesRepo = {
     updatePreset: async (presetId: number, preset: PresetCreate) => {
         const { data } = await api.put<PresetResponse>(`/sources/presets/${presetId}`, preset)
         return data
+    },
+    duplicate: async (sourceId: number) => {
+        const { data } = await api.post<Source>(`/sources/${sourceId}/duplicate`)
+        return data
     }
 }

@@ -4,17 +4,22 @@ import { type Destination } from '../data/schema'
 import { DestinationsRowActions } from './destinations-row-actions'
 import { useNavigate } from '@tanstack/react-router'
 import { Button } from '@/components/ui/button'
-import { Info } from 'lucide-react'
+import { Info, Snowflake } from 'lucide-react'
 
 export const destinationsColumns: ColumnDef<Destination>[] = [
     {
         id: 'details',
-        header: () => <div className="text-center font-semibold">Action</div>,
-        cell: ({ row }) => (
-            <div className='flex items-center justify-center'>
-                <DestinationDetailsButton destinationId={row.original.id} />
-            </div>
-        ),
+        header: () => <div className="text-center font-semibold w-[50px]">Action</div>,
+        cell: ({ row }) => {
+            const isSnowflake = row.original.type === 'SNOWFLAKE'
+            if (!isSnowflake) return <div className='w-[50px]' />
+            
+            return (
+                <div className='flex items-center justify-center w-[50px]'>
+                    <DestinationDetailsButton destinationId={row.original.id} />
+                </div>
+            )
+        },
         meta: { title: 'Detail' },
     },
     {
@@ -30,68 +35,32 @@ export const destinationsColumns: ColumnDef<Destination>[] = [
         meta: { title: 'Name' },
     },
     {
-        accessorKey: 'snowflake_account',
+        accessorKey: 'type',
         header: ({ column }) => (
-            <DataTableColumnHeader column={column} title='Account' />
+            <DataTableColumnHeader column={column} title='Type' className="w-[200px]" />
         ),
-        cell: ({ row }) => (
-            <div className='flex items-center'>
-                <span className='truncate'>{row.getValue('snowflake_account')}</span>
-            </div>
-        ),
-        meta: { title: 'Account' },
-    },
-    {
-        accessorKey: 'snowflake_user',
-        header: ({ column }) => (
-            <DataTableColumnHeader column={column} title='User' />
-        ),
-        cell: ({ row }) => (
-            <div className='flex items-center'>
-                <span>{row.getValue('snowflake_user')}</span>
-            </div>
-        ),
-        meta: { title: 'User' },
-    },
-    {
-        accessorKey: 'snowflake_database',
-        header: ({ column }) => (
-            <DataTableColumnHeader column={column} title='Database' />
-        ),
-        cell: ({ row }) => (
-            <div className='flex items-center'>
-                <span>{row.getValue('snowflake_database')}</span>
-            </div>
-        ),
-        meta: { title: 'Database' },
-    },
-    {
-        accessorKey: 'snowflake_role',
-        header: ({ column }) => (
-            <DataTableColumnHeader column={column} title='Role' />
-        ),
-        cell: ({ row }) => (
-            <div className='flex items-center'>
-                <span>{row.getValue('snowflake_role')}</span>
-            </div>
-        ),
-        meta: { title: 'Role' },
-    },
-    {
-        accessorKey: 'snowflake_warehouse',
-        header: ({ column }) => (
-            <DataTableColumnHeader column={column} title='Warehouse' />
-        ),
-        cell: ({ row }) => (
-            <div className='flex items-center'>
-                <span>{row.getValue('snowflake_warehouse')}</span>
-            </div>
-        ),
-        meta: { title: 'Warehouse' },
+        cell: ({ row }) => {
+            const type = row.getValue('type') as string
+            const isSnowflake = type.toLowerCase() === 'snowflake'
+            const isPostgres = type.toLowerCase() === 'postgres'
+            return (
+                <div className={`flex items-center gap-2 w-[200px] ${isSnowflake ? 'text-[#29b5e8]' : ''}`}>
+                    {isSnowflake && <Snowflake className='h-4 w-4' />}
+                    <span className='truncate font-medium capitalize'>
+                        {isPostgres ? (
+                            <span>Postgre<span style={{ color: '#316192' }}>SQL</span></span>
+                        ) : (
+                            type
+                        )}
+                    </span>
+                </div>
+            )
+        },
+        meta: { title: 'Type' },
     },
     {
         id: 'actions',
-        cell: ({ row }) => <DestinationsRowActions row={row} />,
+        cell: ({ row }) => <div className="w-[50px] flex justify-end"><DestinationsRowActions row={row} /></div>,
         meta: { title: 'Actions' },
     },
 ]

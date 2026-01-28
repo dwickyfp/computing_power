@@ -346,10 +346,11 @@ class PipelineService:
             
             try:
                 # Set context
-                landing_db = pipeline.destination.snowflake_landing_database
-                landing_schema = pipeline.destination.snowflake_landing_schema
-                target_db = pipeline.destination.snowflake_database
-                target_schema = pipeline.destination.snowflake_schema
+                config = pipeline.destination.config
+                landing_db = config.get("landing_database")
+                landing_schema = config.get("landing_schema")
+                target_db = config.get("database")
+                target_schema = config.get("schema")
 
                 # Validate configuration
                 if not all([landing_db, landing_schema, target_db, target_schema]):
@@ -413,10 +414,11 @@ class PipelineService:
             close_cursor = True
             
         try:
-            target_db = pipeline.destination.snowflake_database
-            target_schema = pipeline.destination.snowflake_schema
-            landing_db = pipeline.destination.snowflake_landing_database
-            landing_schema = pipeline.destination.snowflake_landing_schema
+            config = pipeline.destination.config
+            target_db = config.get("database")
+            target_schema = config.get("schema")
+            landing_db = config.get("landing_database")
+            landing_schema = config.get("landing_schema")
             
             table_name = table_info.table_name
             # Handle different object structures (SourceTableInfo vs Pydantic model)
@@ -529,10 +531,11 @@ class PipelineService:
         self.db.commit()
 
     def _get_snowflake_connection(self, destination):
-        private_key_str = destination.snowflake_private_key.strip()
+        config = destination.config
+        private_key_str = config.get("private_key", "").strip()
         passphrase = None
-        if destination.snowflake_private_key_passphrase:
-            passphrase = destination.snowflake_private_key_passphrase.encode()
+        if config.get("private_key_passphrase"):
+            passphrase = config.get("private_key_passphrase").encode()
 
         p_key = serialization.load_pem_private_key(
             private_key_str.encode(),
@@ -546,13 +549,13 @@ class PipelineService:
         )
 
         return snowflake.connector.connect(
-            user=destination.snowflake_user,
-            account=destination.snowflake_account,
+            user=config.get("user"),
+            account=config.get("account"),
             private_key=pkb,
-            role=destination.snowflake_role,
-            warehouse=destination.snowflake_warehouse,
-            database=destination.snowflake_database,
-            schema=destination.snowflake_schema,
+            role=config.get("role"),
+            warehouse=config.get("warehouse"),
+            database=config.get("database"),
+            schema=config.get("schema"),
             client_session_keep_alive=False,
             application="Rosetta_ETL"
         )
@@ -715,7 +718,7 @@ class PipelineService:
         # Use Snowflake scripting block to run MERGE then DELETE from landing table
         task_ddl = f"""
         CREATE OR REPLACE TASK {l_db}.{l_schema}.TASK_MERGE_{t_table}
-        WAREHOUSE = {pipeline.destination.snowflake_warehouse}
+        WAREHOUSE = {pipeline.destination.config.get("warehouse")}
         SCHEDULE = '60 MINUTE'
         WHEN SYSTEM$STREAM_HAS_DATA('{l_db}.{l_schema}.{stream}')
         AS

@@ -12,8 +12,8 @@ export function SourcesDialogs() {
 
     const deleteMutation = useMutation({
         mutationFn: sourcesRepo.delete,
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['sources'] })
+        onSuccess: async () => {
+            await queryClient.invalidateQueries({ queryKey: ['sources'] })
             setOpen(null)
             setTimeout(() => {
                 setCurrentRow(null)

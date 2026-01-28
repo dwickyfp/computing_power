@@ -36,10 +36,10 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '4'
+          cpus: 4
           memory: 16G
         reservations:
-          cpus: '2'
+          cpus: 2
           memory: 8G
 
   rosetta-web:

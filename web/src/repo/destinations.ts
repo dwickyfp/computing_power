@@ -3,6 +3,7 @@ import { api } from './client'
 export interface Destination {
     id: number
     name: string
+    type: string
     snowflake_account: string | null
     snowflake_user: string | null
     snowflake_database: string | null
@@ -44,7 +45,13 @@ export const destinationsRepo = {
         // but often it might be { data: [], total: ... } or just [].
         // Looking at backend sources endpoint it returned List[SourceResponse].
         // Checking sourcesRepo: it maps data to { sources: data, total: data.length }.
-        const { data } = await api.get<Destination[]>('/destinations')
+        const { data } = await api.get<Destination[]>('/destinations', {
+            headers: {
+                'Cache-Control': 'no-cache',
+                'Pragma': 'no-cache',
+                'Expires': '0',
+            }
+        })
         return {
             destinations: data,
             total: data.length
