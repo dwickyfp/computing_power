@@ -12,6 +12,7 @@ import { PostgresTableConfig } from '@/features/pipelines/components/postgres-ta
 import { SnowflakeTableConfig } from '@/features/pipelines/components/snowflake-table-config'
 import { TableFilterCard } from '@/features/pipelines/components/table-filter-card'
 import { TableCustomSqlCard } from '@/features/pipelines/components/table-custom-sql-card'
+import { TableTargetNameCard } from '@/features/pipelines/components/table-target-name-card'
 import { Loader2, Search } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { toast } from 'sonner'
@@ -36,7 +37,7 @@ export function SourceTableDrawer({
 
   // Floating Card State
   const [activeTable, setActiveTable] = useState<TableWithSyncInfo | null>(null)
-  const [activeMode, setActiveMode] = useState<'filter' | 'custom' | null>(null)
+  const [activeMode, setActiveMode] = useState<'filter' | 'custom' | 'target' | null>(null)
 
   // Get destinations
   const destinations = pipeline.destinations || []
@@ -92,6 +93,7 @@ export function SourceTableDrawer({
         table_name: activeTable.table_name,
         filter_sql: filterSql,
         custom_sql: activeTable.sync_config?.custom_sql,
+        table_name_target: activeTable.sync_config?.table_name_target,
       })
       toast.success('Filter saved successfully')
       setActiveMode(null)
@@ -109,12 +111,31 @@ export function SourceTableDrawer({
         table_name: activeTable.table_name,
         custom_sql: customSql,
         filter_sql: activeTable.sync_config?.filter_sql,
+        table_name_target: activeTable.sync_config?.table_name_target,
       })
       toast.success('Custom SQL saved successfully')
       setActiveMode(null)
       loadTables()
     } catch (error) {
       toast.error('Failed to save custom SQL')
+    }
+  }
+
+  const handleSaveTargetName = async (targetName: string) => {
+    if (!activeTable || !selectedDestinationId) return
+
+    try {
+      await tableSyncRepo.saveTableSync(pipeline.id, selectedDestinationId, {
+        table_name: activeTable.table_name,
+        table_name_target: targetName,
+        custom_sql: activeTable.sync_config?.custom_sql,
+        filter_sql: activeTable.sync_config?.filter_sql,
+      })
+      toast.success('Target table name saved successfully')
+      setActiveMode(null)
+      loadTables()
+    } catch (error) {
+      toast.error('Failed to save target table name')
     }
   }
 
@@ -205,6 +226,10 @@ export function SourceTableDrawer({
                       setActiveTable(table)
                       setActiveMode('custom')
                     }}
+                    onEditTargetName={(table) => {
+                      setActiveTable(table)
+                      setActiveMode('target')
+                    }}
                   />
                 )}
               </div>
@@ -232,6 +257,16 @@ export function SourceTableDrawer({
           onSave={handleSaveCustomSql}
         />
       )}
+
+      {open && activeMode === 'target' && (
+        <TableTargetNameCard
+          table={activeTable}
+          open={true}
+          onClose={() => setActiveMode(null)}
+          onSave={handleSaveTargetName}
+        />
+      )}
     </>
   )
 }
+

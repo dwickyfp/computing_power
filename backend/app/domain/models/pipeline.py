@@ -235,7 +235,13 @@ class PipelineDestinationTableSync(Base, TimestampMixin):
     table_name: Mapped[str] = mapped_column(
         String(255),
         nullable=False,
-        comment="Name of the table",
+        comment="Name of the source table",
+    )
+
+    table_name_target: Mapped[str] = mapped_column(
+        String(255),
+        nullable=False,
+        comment="Name of the target table (defaults to table_name)",
     )
 
     custom_sql: Mapped[str | None] = mapped_column(

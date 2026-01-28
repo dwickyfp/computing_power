@@ -68,7 +68,7 @@ services:
     ports:
       - "5435:5432"
     volumes:
-      - postgis_data:/var/lib/postgresql/data
+      - postgis_data_target:/var/lib/postgresql/data
     command: >
       postgres 
       -c wal_level=logical 
@@ -97,6 +97,7 @@ services:
 volumes:
   postgres_data:
   postgis_data:
+  postgis_data_target:
   rosetta_redis_data:
 
 networks:

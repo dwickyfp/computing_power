@@ -53,6 +53,7 @@ CREATE TABLE IF NOT EXISTS pipelines_destination_table_sync(
     id SERIAL PRIMARY KEY,
     pipeline_destination_id INTEGER NOT NULL REFERENCES pipelines_destination(id) ON DELETE CASCADE,
     table_name VARCHAR(255) NOT NULL,
+    table_name_target VARCHAR(255) NOT NULL,
     custom_sql TEXT NULL,
     filter_sql TEXT NULL,
     created_at TIMESTAMPTZ DEFAULT NOW(),
@@ -149,7 +150,6 @@ CREATE TABLE IF NOT EXISTS presets (
 -- Create indexes for common queries
 CREATE INDEX IF NOT EXISTS idx_pipelines_status ON pipelines(status);
 CREATE INDEX IF NOT EXISTS idx_pipelines_source_id ON pipelines(source_id);
-CREATE INDEX IF NOT EXISTS idx_pipelines_destination_id ON pipelines(destination_id);
 CREATE INDEX IF NOT EXISTS idx_pipeline_metadata_pipeline_id ON pipeline_metadata(pipeline_id);
 CREATE INDEX IF NOT EXISTS idx_pipeline_metadata_status ON pipeline_metadata(status);
 CREATE INDEX IF NOT EXISTS idx_wal_monitor_source_id ON wal_monitor(source_id);

@@ -86,6 +86,10 @@ export const pipelinesRepo = {
       params: { destination_id: destinationId }
     })
     return response.data
+  },
+  removeDestination: async (id: number, destinationId: number): Promise<Pipeline> => {
+    const response: AxiosResponse<Pipeline> = await api.delete(`/pipelines/${id}/destinations/${destinationId}`)
+    return response.data
   }
 }
 
@@ -118,6 +122,7 @@ export interface TableSyncConfig {
   id: number
   pipeline_destination_id: number
   table_name: string
+  table_name_target: string
   custom_sql: string | null
   filter_sql: string | null
   created_at: string
@@ -136,6 +141,7 @@ export interface TableWithSyncInfo {
 
 export interface TableSyncRequest {
   table_name: string
+  table_name_target?: string | null
   custom_sql?: string | null
   filter_sql?: string | null
   enabled?: boolean

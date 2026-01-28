@@ -115,6 +115,46 @@ class PipelineService:
 
         return self.repository.get_by_id_with_relations(pipeline_id)
 
+    def remove_pipeline_destination(self, pipeline_id: int, destination_id: int) -> Pipeline:
+        """
+        Remove a destination from an existing pipeline.
+
+        Args:
+            pipeline_id: Pipeline identifier
+            destination_id: Destination identifier
+
+        Returns:
+            Updated pipeline
+        """
+        logger.info(
+            "Removing destination from pipeline",
+            extra={"pipeline_id": pipeline_id, "destination_id": destination_id},
+        )
+
+        pipeline = self.repository.get_by_id(pipeline_id)
+
+        # Check if destination exists
+        existing = (
+            self.db.query(PipelineDestination)
+            .filter_by(pipeline_id=pipeline_id, destination_id=destination_id)
+            .first()
+        )
+        if not existing:
+             # If not found, just return current pipeline (idempotent) or raise error?
+             # For idempotency, let's log and return.
+             logger.warning(
+                 "Destination not found in pipeline",
+                 extra={"pipeline_id": pipeline_id, "destination_id": destination_id}
+             )
+             return self.repository.get_by_id_with_relations(pipeline_id)
+
+        # Remove destination
+        self.db.delete(existing)
+        self.db.commit()
+        self.db.refresh(pipeline)
+
+        return self.repository.get_by_id_with_relations(pipeline_id)
+
     def get_pipeline(self, pipeline_id: int) -> Pipeline:
         """
         Get pipeline by ID with all related entities.
@@ -1041,14 +1081,19 @@ class PipelineService:
             # Update existing
             existing.custom_sql = table_sync_data.custom_sql
             existing.filter_sql = table_sync_data.filter_sql
+            # Update target table name if provided, otherwise keep existing
+            if table_sync_data.table_name_target:
+                existing.table_name_target = table_sync_data.table_name_target
             self.db.commit()
             self.db.refresh(existing)
             return existing
         else:
-            # Create new
+            # Create new - default table_name_target to table_name if not provided
+            target_name = table_sync_data.table_name_target or table_sync_data.table_name
             new_sync = PipelineDestinationTableSync(
                 pipeline_destination_id=pipeline_destination_id,
                 table_name=table_sync_data.table_name,
+                table_name_target=target_name,
                 custom_sql=table_sync_data.custom_sql,
                 filter_sql=table_sync_data.filter_sql,
             )

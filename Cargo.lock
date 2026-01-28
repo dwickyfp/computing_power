@@ -803,7 +803,7 @@ dependencies = [
 [[package]]
 name = "etl"
 version = "0.1.0"
-source = "git+https://github.com/supabase/etl#6c0d642ce832e6c3bdbe5f7963404e333a5413d0"
+source = "git+https://github.com/supabase/etl#46166ddac1aec5822f1b75beb5326dd63fc87b52"
 dependencies = [
  "aws-lc-rs",
  "byteorder",
@@ -832,7 +832,7 @@ dependencies = [
 [[package]]
 name = "etl-config"
 version = "0.1.0"
-source = "git+https://github.com/supabase/etl#6c0d642ce832e6c3bdbe5f7963404e333a5413d0"
+source = "git+https://github.com/supabase/etl#46166ddac1aec5822f1b75beb5326dd63fc87b52"
 dependencies = [
  "config",
  "secrecy",
@@ -845,7 +845,7 @@ dependencies = [
 [[package]]
 name = "etl-postgres"
 version = "0.1.0"
-source = "git+https://github.com/supabase/etl#6c0d642ce832e6c3bdbe5f7963404e333a5413d0"
+source = "git+https://github.com/supabase/etl#46166ddac1aec5822f1b75beb5326dd63fc87b52"
 dependencies = [
  "bytes",
  "chrono",
@@ -1446,9 +1446,9 @@ dependencies = [
 
 [[package]]
 name = "iana-time-zone"
-version = "0.1.64"
+version = "0.1.65"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "33e57f83510bb73707521ebaffa789ec8caf86f9657cad665b092b581d40e9fb"
+checksum = "e31bc9ad994ba00e440a8aa5c9ef0ec67d5cb5e5cb0cc7f8b744a35b389cc470"
 dependencies = [
  "android_system_properties",
  "core-foundation-sys",

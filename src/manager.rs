@@ -3,8 +3,7 @@ use crate::snowflake::SnowflakeDestination;
 use crate::store::memory::CustomStore;
 use anyhow::Result;
 use etl::config::{
-    BatchConfig, PgConnectionConfig, PipelineConfig, TableSyncCopyConfig,
-    TlsConfig,
+    BatchConfig, PgConnectionConfig, PipelineConfig, TableSyncCopyConfig, TlsConfig,
 };
 use etl::pipeline::Pipeline;
 use secrecy::ExposeSecret;
@@ -45,7 +44,7 @@ impl PipelineManager {
                 sqlx::query(query).execute(&self.db_pool).await?;
             }
         }
-        
+
         info!("Migrations completed successfully.");
         Ok(())
     }
@@ -63,7 +62,7 @@ impl PipelineManager {
 
     async fn sync_pipelines(&self) -> Result<()> {
         // Fetch all pipelines from DB
-        let rows = sqlx::query("SELECT id, name, status, source_id, destination_id FROM pipelines")
+        let rows = sqlx::query("SELECT id, name, status, source_id FROM pipelines")
             .fetch_all(&self.db_pool)
             .await?;
 
@@ -74,7 +73,6 @@ impl PipelineManager {
             let name: String = row.get("name");
             let status: String = row.get("status");
             let source_id: i32 = row.get("source_id");
-            let destination_id: i32 = row.get("destination_id");
 
             if status == "PAUSE" {
                 if let Some(handle) = pipelines_lock.remove(&id) {
@@ -85,10 +83,7 @@ impl PipelineManager {
             } else if status == "START" {
                 if !pipelines_lock.contains_key(&id) {
                     info!("Starting pipeline {}: {}", id, name);
-                    match self
-                        .start_pipeline(id, name.clone(), source_id, destination_id)
-                        .await
-                    {
+                    match self.start_pipeline(id, name.clone(), source_id).await {
                         Ok(handle) => {
                             pipelines_lock.insert(id, handle);
                             self.update_metadata(id, "RUNNING", None).await?;
@@ -106,10 +101,7 @@ impl PipelineManager {
                 if let Some(handle) = pipelines_lock.remove(&id) {
                     handle.abort();
                 }
-                match self
-                    .start_pipeline(id, name.clone(), source_id, destination_id)
-                    .await
-                {
+                match self.start_pipeline(id, name.clone(), source_id).await {
                     Ok(handle) => {
                         pipelines_lock.insert(id, handle);
                         // SQL triggers or manual update to set status back to START might be needed
@@ -136,17 +128,10 @@ impl PipelineManager {
         pipeline_id: i32,
         pipeline_name: String,
         source_id: i32,
-        dest_id: i32,
     ) -> Result<JoinHandle<()>> {
         // Fetch Source Config
         let source_row = sqlx::query("SELECT * FROM sources WHERE id = $1")
             .bind(source_id)
-            .fetch_one(&self.db_pool)
-            .await?;
-
-        // Fetch Destination Config
-        let dest_row = sqlx::query("SELECT * FROM destinations WHERE id = $1")
-            .bind(dest_id)
             .fetch_one(&self.db_pool)
             .await?;
 
@@ -202,65 +187,160 @@ impl PipelineManager {
             table_sync_copy: TableSyncCopyConfig::SkipAllTables,
         };
 
-        // Determine Destination Type
-        // Determine Destination Type
-        let dest_type: String = dest_row.try_get("type").unwrap_or_else(|_| "SNOWFLAKE".to_string());
-        let dest_config_json: serde_json::Value = dest_row.try_get("config")?;
+        // Fetch all destinations for this pipeline from pipelines_destination
+        let destinations_rows = sqlx::query(
+            "SELECT pd.id as pd_id, d.* 
+             FROM pipelines_destination pd
+             JOIN destinations d ON pd.destination_id = d.id
+             WHERE pd.pipeline_id = $1",
+        )
+        .bind(pipeline_id)
+        .fetch_all(&self.db_pool)
+        .await?;
 
-        let destination: DestinationEnum = match dest_type.as_str() {
-            "SNOWFLAKE" => {
-                let snowflake_config = crate::config::SnowflakeConfig {
-                    account_id: dest_config_json["account"].as_str().unwrap_or("").to_string(),
-                    user: dest_config_json["user"].as_str().unwrap_or("").to_string(),
-                    database: dest_config_json["database"].as_str().unwrap_or("").to_string(),
-                    schema: dest_config_json["schema"].as_str().unwrap_or("").to_string(),
-                    table: pipeline_name,
-                    role: dest_config_json["role"].as_str().unwrap_or("PUBLIC").to_string(),
-                    private_key: dest_config_json["private_key"].as_str().unwrap_or("").to_string(),
-                    private_key_passphrase: dest_config_json["private_key_passphrase"]
-                        .as_str()
-                        .map(|s| s.to_string())
-                        .filter(|s| !s.is_empty()),
-                    landing_database: dest_config_json["landing_database"]
-                        .as_str()
-                        .map(|s| s.to_string())
-                        .filter(|s| !s.is_empty()),
-                    landing_schema: dest_config_json["landing_schema"]
-                        .as_str()
-                        .map(|s| s.to_string())
-                        .filter(|s| !s.is_empty()),
-                };
-                
-                // Create Source Pool for Name Resolution (used by Destination)
-                let source_pool_url = format!(
-                    "postgres://{}:{}@{}:{}/{}",
-                    pg_config.username,
-                    pg_config
-                        .password
-                        .as_ref()
-                        .map(|p| p.expose_secret())
-                        .unwrap_or(""),
-                    pg_config.host,
-                    pg_config.port,
-                    pg_config.name
-                );
+        let mut destinations_instances = Vec::new();
 
-                let source_pool = PgPoolOptions::new()
-                    .max_connections(2)
-                    .connect(&source_pool_url)
-                    .await?;
-        
-                DestinationEnum::Snowflake(SnowflakeDestination::new(
-                    snowflake_config,
-                    source_pool,
-                    self.db_pool.clone(),
-                    pipeline_id,
-                    source_id,
-                )?)
-            },
-            _ => {
-                return Err(anyhow::anyhow!("Unsupported destination type: {}", dest_type));
-            }
+        for dest_row in destinations_rows {
+            let dest_type: String = dest_row
+                .try_get("type")
+                .unwrap_or_else(|_| "SNOWFLAKE".to_string());
+            let dest_config_json: serde_json::Value = dest_row.try_get("config")?;
+            let pd_id: i32 = dest_row.try_get("pd_id")?;
+            let dest_name: String = dest_row.try_get("name")?;
+
+            let destination_enum = match dest_type.as_str() {
+                "SNOWFLAKE" => {
+                    let snowflake_config = crate::config::SnowflakeConfig {
+                        account_id: dest_config_json["account"]
+                            .as_str()
+                            .unwrap_or("")
+                            .to_string(),
+                        user: dest_config_json["user"].as_str().unwrap_or("").to_string(),
+                        database: dest_config_json["database"]
+                            .as_str()
+                            .unwrap_or("")
+                            .to_string(),
+                        schema: dest_config_json["schema"]
+                            .as_str()
+                            .unwrap_or("")
+                            .to_string(),
+                        table: pipeline_name.clone(),
+                        role: dest_config_json["role"]
+                            .as_str()
+                            .unwrap_or("PUBLIC")
+                            .to_string(),
+                        private_key: dest_config_json["private_key"]
+                            .as_str()
+                            .unwrap_or("")
+                            .to_string(),
+                        private_key_passphrase: dest_config_json["private_key_passphrase"]
+                            .as_str()
+                            .map(|s| s.to_string())
+                            .filter(|s| !s.is_empty()),
+                        landing_database: dest_config_json["landing_database"]
+                            .as_str()
+                            .map(|s| s.to_string())
+                            .filter(|s| !s.is_empty()),
+                        landing_schema: dest_config_json["landing_schema"]
+                            .as_str()
+                            .map(|s| s.to_string())
+                            .filter(|s| !s.is_empty()),
+                    };
+
+                    let source_pool_url = format!(
+                        "postgres://{}:{}@{}:{}/{}",
+                        pg_config.username,
+                        pg_config
+                            .password
+                            .as_ref()
+                            .map(|p| p.expose_secret())
+                            .unwrap_or(""),
+                        pg_config.host,
+                        pg_config.port,
+                        pg_config.name
+                    );
+
+                    let source_pool = PgPoolOptions::new()
+                        .max_connections(2)
+                        .connect(&source_pool_url)
+                        .await?;
+
+                    DestinationEnum::Snowflake(SnowflakeDestination::new(
+                        snowflake_config,
+                        source_pool,
+                        self.db_pool.clone(),
+                        pipeline_id,
+                        source_id,
+                    )?)
+                }
+                "POSTGRES" | "POSTGRESQL" => {
+                    // Reuse Source Config? Or Destination Config has connection info?
+                    // Typically 'destinations' table config has the connection info for the target postgres.
+                    let target_pg_config = PgConnectionConfig {
+                        host: dest_config_json["host"].as_str().unwrap_or("").to_string(),
+                        port: dest_config_json["port"].as_u64().unwrap_or(5432) as u16,
+                        name: dest_config_json["database"]
+                            .as_str()
+                            .unwrap_or("postgres")
+                            .to_string(),
+                        username: dest_config_json["username"]
+                            .as_str()
+                            .unwrap_or("postgres")
+                            .to_string(),
+                        password: dest_config_json["password"]
+                            .as_str()
+                            .map(|s| s.to_string().into()),
+                        tls: TlsConfig {
+                            enabled: false,
+                            trusted_root_certs: "".into(),
+                        },
+                        keepalive: None,
+                    };
+
+                    let source_pool_url = format!(
+                        "postgres://{}:{}@{}:{}/{}",
+                        pg_config.username,
+                        pg_config
+                            .password
+                            .as_ref()
+                            .map(|p| p.expose_secret())
+                            .unwrap_or(""),
+                        pg_config.host,
+                        pg_config.port,
+                        pg_config.name
+                    );
+
+                    let source_pool = PgPoolOptions::new()
+                        .max_connections(2)
+                        .connect(&source_pool_url)
+                        .await?;
+
+                    DestinationEnum::Postgres(
+                        crate::postgres::destination::PostgresDuckdbDestination::new(
+                            dest_name,
+                            target_pg_config,
+                            self.db_pool.clone(),
+                            source_pool,
+                            pd_id,
+                        )?,
+                    )
+                }
+                _ => {
+                    return Err(anyhow::anyhow!(
+                        "Unsupported destination type: {}",
+                        dest_type
+                    ));
+                }
+            };
+            destinations_instances.push(destination_enum);
+        }
+
+        let destination = if destinations_instances.len() == 1 {
+            destinations_instances.into_iter().next().unwrap()
+        } else {
+            let boxed_dests: Vec<Box<DestinationEnum>> =
+                destinations_instances.into_iter().map(Box::new).collect();
+            DestinationEnum::Multi(Arc::new(boxed_dests))
         };
 
         let store = CustomStore::new();
@@ -277,9 +357,10 @@ impl PipelineManager {
                     );
                     if let Err(e) = pipeline.wait().await {
                         error!("Pipeline {} crashed: {}", pipeline_id, e);
-                        
+
                         // Update status to ERROR
-                        let now = chrono::Utc::now().with_timezone(&chrono::FixedOffset::east_opt(7 * 3600).unwrap());
+                        let now = chrono::Utc::now()
+                            .with_timezone(&chrono::FixedOffset::east_opt(7 * 3600).unwrap());
                         let _ = sqlx::query("UPDATE pipeline_metadata SET status = 'ERROR', last_error = $1, last_error_at = $2, updated_at = $2 WHERE pipeline_id = $3")
                             .bind(e.to_string())
                             .bind(now)
@@ -291,16 +372,18 @@ impl PipelineManager {
                             .bind(pipeline_id)
                             .execute(&db_pool)
                             .await
-                            .map_err(|db_err| error!("Failed to pause pipeline {}: {}", pipeline_id, db_err));
-                            
+                            .map_err(|db_err| {
+                                error!("Failed to pause pipeline {}: {}", pipeline_id, db_err)
+                            });
                     } else {
                         info!("Pipeline {} finished gracefully.", pipeline_id);
                     }
                 }
                 Err(e) => {
                     error!("Failed to start pipeline {}: {}", pipeline_id, e);
-                     // Update status to ERROR on start failure
-                    let now = chrono::Utc::now().with_timezone(&chrono::FixedOffset::east_opt(7 * 3600).unwrap());
+                    // Update status to ERROR on start failure
+                    let now = chrono::Utc::now()
+                        .with_timezone(&chrono::FixedOffset::east_opt(7 * 3600).unwrap());
                     let _ = sqlx::query("UPDATE pipeline_metadata SET status = 'ERROR', last_error = $1, last_error_at = $2, updated_at = $2 WHERE pipeline_id = $3")
                         .bind(e.to_string())
                         .bind(now)
@@ -313,7 +396,9 @@ impl PipelineManager {
                         .bind(pipeline_id)
                         .execute(&db_pool)
                         .await
-                        .map_err(|db_err| error!("Failed to pause pipeline {}: {}", pipeline_id, db_err));
+                        .map_err(|db_err| {
+                            error!("Failed to pause pipeline {}: {}", pipeline_id, db_err)
+                        });
                 }
             }
         });
@@ -327,7 +412,8 @@ impl PipelineManager {
         status: &str,
         last_error: Option<&str>,
     ) -> Result<()> {
-        let now = chrono::Utc::now().with_timezone(&chrono::FixedOffset::east_opt(7 * 3600).unwrap());
+        let now =
+            chrono::Utc::now().with_timezone(&chrono::FixedOffset::east_opt(7 * 3600).unwrap());
         // Check if exists
         let exists: bool =
             sqlx::query("SELECT EXISTS(SELECT 1 FROM pipeline_metadata WHERE pipeline_id = $1)")
@@ -357,7 +443,8 @@ impl PipelineManager {
     }
 
     async fn update_last_start(&self, pipeline_id: i32) -> Result<()> {
-        let now = chrono::Utc::now().with_timezone(&chrono::FixedOffset::east_opt(7 * 3600).unwrap());
+        let now =
+            chrono::Utc::now().with_timezone(&chrono::FixedOffset::east_opt(7 * 3600).unwrap());
         sqlx::query("UPDATE pipeline_metadata SET last_start_at = $1 WHERE pipeline_id = $2")
             .bind(now)
             .bind(pipeline_id)

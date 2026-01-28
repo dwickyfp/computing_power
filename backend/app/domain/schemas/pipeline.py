@@ -165,7 +165,8 @@ class PipelineDestinationTableSyncResponse(BaseSchema):
 
     id: int = Field(..., description="Unique table sync identifier")
     pipeline_destination_id: int = Field(..., description="Pipeline destination ID")
-    table_name: str = Field(..., description="Table name")
+    table_name: str = Field(..., description="Source table name")
+    table_name_target: str = Field(..., description="Target table name")
     custom_sql: str | None = Field(default=None, description="Custom SQL")
     filter_sql: str | None = Field(default=None, description="Filter SQL")
     created_at: datetime = Field(..., description="Creation timestamp")
@@ -180,7 +181,13 @@ class TableSyncCreateRequest(BaseSchema):
     Schema for creating/updating a table sync configuration.
     """
 
-    table_name: str = Field(..., min_length=1, max_length=255, description="Table name")
+    table_name: str = Field(..., min_length=1, max_length=255, description="Source table name")
+    table_name_target: str | None = Field(
+        default=None, 
+        min_length=1, 
+        max_length=255, 
+        description="Target table name (defaults to table_name if not provided)"
+    )
     custom_sql: str | None = Field(default=None, description="Custom SQL query")
     filter_sql: str | None = Field(
         default=None,

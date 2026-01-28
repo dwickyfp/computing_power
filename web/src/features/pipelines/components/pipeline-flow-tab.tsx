@@ -38,7 +38,7 @@ export function PipelineFlowTab({ pipeline }: PipelineFlowTabProps) {
       const destId = parseInt(node.id.replace('dest-', ''))
       // Find the pipeline_destination ID from the destination ID
       const pipelineDest = pipeline?.destinations?.find((d) => d.destination.id === destId)
-      
+
       if (pipelineDest) {
         setSelectedDestId(pipelineDest.id)
         setDrawerOpen(true)
@@ -59,7 +59,7 @@ export function PipelineFlowTab({ pipeline }: PipelineFlowTabProps) {
         id: 'source',
         type: 'pipelineNode', // Use custom type
         position: { x: 50, y: 150 },
-        data: { 
+        data: {
           label: pipeline.source.name,
           type: 'POSTGRESQL', // Assuming source is always Postgres for now
           isSource: true,
@@ -81,10 +81,12 @@ export function PipelineFlowTab({ pipeline }: PipelineFlowTabProps) {
         id: destId,
         type: 'pipelineNode', // Use custom type
         position: { x: 500, y: (destinationCount > 1 ? startY + index * 140 : 150) },
-        data: { 
+        data: {
           label: d.destination.name,
           type: d.destination.type,
           isSource: false,
+          pipelineId: pipeline.id,
+          destinationId: d.destination.id
           // Destination status isn't directly on destination object in this view, 
           // but we can imply active if present
         },
@@ -97,7 +99,7 @@ export function PipelineFlowTab({ pipeline }: PipelineFlowTabProps) {
         source: 'source',
         target: destId,
         animated: true,
-        style: { 
+        style: {
           stroke: '#6366f1',
           strokeWidth: 2,
         },

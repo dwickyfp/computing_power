@@ -81,6 +81,32 @@ async def add_pipeline_destination(
     return PipelineResponse.from_orm(pipeline)
 
 
+@router.delete(
+    "/{pipeline_id}/destinations/{destination_id}",
+    response_model=PipelineResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Remove destination from pipeline",
+    description="Remove a destination from an existing pipeline",
+)
+async def remove_pipeline_destination(
+    pipeline_id: int,
+    destination_id: int,
+    service: PipelineService = Depends(get_pipeline_service),
+) -> PipelineResponse:
+    """
+    Remove a destination from a pipeline.
+
+    Args:
+        pipeline_id: Pipeline identifier
+        destination_id: Destination identifier
+        service: Pipeline service instance
+
+    Returns:
+        Updated pipeline without the removed destination
+    """
+    pipeline = service.remove_pipeline_destination(pipeline_id, destination_id)
+    return PipelineResponse.from_orm(pipeline)
+
 @router.get(
     "",
     response_model=List[PipelineResponse],
