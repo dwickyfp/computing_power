@@ -63,7 +63,7 @@ impl<D: Destination + Clone + Send + Sync + 'static> DlqDestinationWrapper<D> {
         *self.error_message.write().await = Some(error_msg.to_string());
 
         // Update database
-        if let Err(e) = self.update_error_in_db(true, Some(error_msg)).await {
+        if let Err(e) = self.update_error_in_db(true, Some("Database Error")).await {
             error!("Failed to update error state in DB: {}", e);
         }
 
