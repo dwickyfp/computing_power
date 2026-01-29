@@ -290,6 +290,13 @@ impl PostgresDuckdbDestination {
         rows.into_iter().map(|(n,)| n).collect()
     }
 
+    pub async fn check_connection(&self) -> EtlResult<()> {
+        // Try to initialize DuckDB connection which attempts to connect to Postgres
+        self.get_duckdb_connection()
+            .map(|_| ())
+            .map_err(|e| etl::etl_error!(etl::error::ErrorKind::Unknown, "Connection check failed: {}", e))
+    }
+
     fn get_duckdb_connection(&self) -> Result<Connection> {
         let conn = Connection::open_in_memory()?;
         conn.execute_batch("INSTALL postgres; LOAD postgres;")?;

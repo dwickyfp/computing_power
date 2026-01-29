@@ -217,6 +217,14 @@ impl SnowflakeDestination {
         cache.insert(table_id, column_names.clone());
         column_names
     }
+    pub async fn check_connection(&self) -> EtlResult<()> {
+        // Check metadata pool connectivity as a proxy for health
+        sqlx::query("SELECT 1")
+            .execute(&self.metadata_pool)
+            .await
+            .map(|_| ())
+            .map_err(|e| etl::etl_error!(etl::error::ErrorKind::Unknown, "Metadata pool check failed: {}", e))
+    }
 }
 
 impl Destination for SnowflakeDestination {

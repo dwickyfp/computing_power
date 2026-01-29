@@ -1,4 +1,5 @@
-use crate::destination_enum::DestinationEnum;
+use crate::destination_enum::{DestinationEnum, DestinationWithDlq};
+use crate::dlq::store::DlqStore;
 use crate::snowflake::SnowflakeDestination;
 use crate::store::memory::CustomStore;
 use anyhow::Result;
@@ -10,6 +11,7 @@ use secrecy::ExposeSecret;
 use sqlx::postgres::PgPoolOptions;
 use sqlx::{Pool, Postgres, Row};
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::Mutex;
@@ -19,6 +21,7 @@ use tracing::{error, info};
 pub struct PipelineManager {
     db_pool: Pool<Postgres>,
     pipelines: Arc<Mutex<HashMap<i32, JoinHandle<()>>>>,
+    dlq_store: Arc<DlqStore>,
 }
 
 impl PipelineManager {
@@ -28,9 +31,14 @@ impl PipelineManager {
             .connect(database_url)
             .await?;
 
+        // Initialize DLQ store in current directory
+        let dlq_path = PathBuf::from(".");
+        let dlq_store = DlqStore::new(&dlq_path)?;
+
         Ok(Self {
             db_pool: pool,
             pipelines: Arc::new(Mutex::new(HashMap::new())),
+            dlq_store: Arc::new(dlq_store),
         })
     }
 
@@ -198,7 +206,7 @@ impl PipelineManager {
         .fetch_all(&self.db_pool)
         .await?;
 
-        let mut destinations_instances = Vec::new();
+        let mut destinations_with_dlq: Vec<Arc<DestinationWithDlq>> = Vec::new();
 
         for dest_row in destinations_rows {
             let dest_type: String = dest_row
@@ -332,15 +340,24 @@ impl PipelineManager {
                     ));
                 }
             };
-            destinations_instances.push(destination_enum);
+
+            // Wrap destination with DLQ support
+            let dest_with_dlq = DestinationWithDlq::new(
+                destination_enum,
+                pd_id,
+                self.db_pool.clone(),
+                self.dlq_store.clone(),
+            );
+            destinations_with_dlq.push(Arc::new(dest_with_dlq));
         }
 
-        let destination = if destinations_instances.len() == 1 {
-            destinations_instances.into_iter().next().unwrap()
+        // Use MultiWithDlq for DLQ-aware multi-destination
+        let destination = if destinations_with_dlq.len() == 1 {
+            DestinationEnum::SingleWithDlq(
+                destinations_with_dlq.into_iter().next().unwrap(),
+            )
         } else {
-            let boxed_dests: Vec<Box<DestinationEnum>> =
-                destinations_instances.into_iter().map(Box::new).collect();
-            DestinationEnum::Multi(Arc::new(boxed_dests))
+            DestinationEnum::MultiWithDlq(Arc::new(destinations_with_dlq))
         };
 
         let store = CustomStore::new();
