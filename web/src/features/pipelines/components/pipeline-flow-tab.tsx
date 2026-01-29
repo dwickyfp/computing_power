@@ -86,9 +86,9 @@ export function PipelineFlowTab({ pipeline }: PipelineFlowTabProps) {
           type: d.destination.type,
           isSource: false,
           pipelineId: pipeline.id,
-          destinationId: d.destination.id
-          // Destination status isn't directly on destination object in this view, 
-          // but we can imply active if present
+          destinationId: d.destination.id,
+          isError: d.is_error,
+          errorMessage: d.error_message ?? undefined
         },
         targetPosition: Position.Left,
       })

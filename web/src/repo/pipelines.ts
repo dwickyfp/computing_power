@@ -28,6 +28,9 @@ export interface Pipeline {
       name: string
       type: string
     }
+    is_error?: boolean
+    error_message?: string | null
+    last_error_at?: string | null
   }[]
 }
 

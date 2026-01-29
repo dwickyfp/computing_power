@@ -44,6 +44,9 @@ CREATE TABLE IF NOT EXISTS pipelines_destination (
     id SERIAL PRIMARY KEY,
     pipeline_id INTEGER NOT NULL REFERENCES pipelines(id) ON DELETE CASCADE,
     destination_id INTEGER NOT NULL REFERENCES destinations(id) ON DELETE CASCADE,
+    is_error BOOLEAN NOT NULL DEFAULT FALSE,
+    error_message TEXT NULL,
+    last_error_at TIMESTAMPTZ NULL,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );

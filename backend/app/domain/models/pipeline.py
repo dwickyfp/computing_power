@@ -180,6 +180,25 @@ class PipelineDestination(Base, TimestampMixin):
         comment="Reference to destination",
     )
 
+    # Error Tracking
+    is_error: Mapped[bool] = mapped_column(
+        default=False,
+        nullable=False,
+        comment="Whether destination is in error state",
+    )
+
+    error_message: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+        comment="Error message if in error state",
+    )
+
+    last_error_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        comment="Timestamp of last error",
+    )
+
     # Relationships
     pipeline: Mapped["Pipeline"] = relationship(
         "Pipeline", back_populates="destinations"

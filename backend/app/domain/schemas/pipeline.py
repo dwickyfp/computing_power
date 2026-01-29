@@ -253,6 +253,10 @@ class PipelineDestinationResponse(BaseSchema):
     table_syncs: List[PipelineDestinationTableSyncResponse] = Field(
         default=[], description="Table sync settings"
     )
+    # Error tracking
+    is_error: bool = Field(default=False, description="Whether destination is in error state")
+    error_message: str | None = Field(default=None, description="Error message if in error state")
+    last_error_at: datetime | None = Field(default=None, description="Timestamp of last error")
     created_at: datetime = Field(..., description="Creation timestamp")
     updated_at: datetime = Field(..., description="Last update timestamp")
 
