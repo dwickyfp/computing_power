@@ -195,6 +195,7 @@ CREATE TABLE IF NOT EXISTS data_flow_record_monitoring(
     pipeline_id INTEGER NOT NULL REFERENCES pipelines(id) ON DELETE CASCADE,
     pipeline_destination_id INTEGER NULL REFERENCES pipelines_destination(id) ON DELETE CASCADE,
     source_id  INTEGER NOT NULL REFERENCES sources(id) ON DELETE CASCADE,
+    pipeline_destination_table_sync_id INTEGER NOT NULL REFERENCES pipelines_destination_table_sync(id) ON DELETE CASCADE,
     table_name VARCHAR(255) NOT NULL,
     record_count BIGINT NOT NULL,
     created_at TIMESTAMPTZ DEFAULT NOW(),

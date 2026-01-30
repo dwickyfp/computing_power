@@ -98,7 +98,11 @@ export const pipelinesRepo = {
 }
 
 export interface PipelineStats {
+  pipeline_destination_id: number | null
+  pipeline_destination_table_sync_id?: number | null
   table_name: string
+  target_table_name?: string
+  destination_name?: string
   daily_stats: {
     date: string
     count: number

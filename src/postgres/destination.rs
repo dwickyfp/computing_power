@@ -947,7 +947,7 @@ impl Destination for PostgresDuckdbDestination {
                     .with_timezone(&chrono::FixedOffset::east_opt(7 * 3600).unwrap());
 
                 if let Err(e) = sqlx::query(
-                    "INSERT INTO data_flow_record_monitoring (pipeline_id, pipeline_destination_id, source_id, table_name, record_count, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7)",
+                    "INSERT INTO data_flow_record_monitoring (pipeline_id, pipeline_destination_id, source_id, table_name, record_count, created_at, updated_at, pipeline_destination_table_sync_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
                 )
                 .bind(self.pipeline_id)
                 .bind(self.pipeline_destination_id)
@@ -956,6 +956,7 @@ impl Destination for PostgresDuckdbDestination {
                 .bind(record_count)
                 .bind(now)
                 .bind(now)
+                .bind(data.sync_id)
                 .execute(&db_pool)
                 .await
                 {

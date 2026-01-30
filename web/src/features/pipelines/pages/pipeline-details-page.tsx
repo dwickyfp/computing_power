@@ -8,8 +8,8 @@ import { Search } from '@/components/search'
 import { ThemeSwitch } from '@/components/theme-switch'
 import { ConfigDrawer } from '@/components/config-drawer'
 import { Skeleton } from '@/components/ui/skeleton'
-import { PipelineDetailsTable } from '@/features/pipelines/components/pipeline-details-table'
 import { PipelineFlowTab } from '@/features/pipelines/components/pipeline-flow-tab'
+import { PipelineDataFlow } from '@/features/pipelines/components/pipeline-data-flow'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { RefreshCcw, GitBranch, Table2 } from 'lucide-react'
@@ -163,10 +163,10 @@ export default function PipelineDetailsPage() {
                                 <Skeleton className="h-10 w-full" />
                                 <Skeleton className="h-10 w-full" />
                             </div>
-                        ) : sourceDetails ? (
-                            <PipelineDetailsTable
-                                pipelineId={pipeline!.id}
-                                tables={sourceDetails.tables}
+                        ) : sourceDetails && pipeline ? (
+                            <PipelineDataFlow
+                                pipeline={pipeline}
+                                sourceDetails={sourceDetails}
                             />
                         ) : (
                             <div className="p-4 text-muted-foreground">No source details available.</div>

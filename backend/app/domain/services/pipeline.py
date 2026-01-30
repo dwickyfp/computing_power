@@ -866,24 +866,45 @@ class PipelineService:
 
     def get_pipeline_data_flow_stats(self, pipeline_id: int, days: int = 7) -> List[dict]:
         """
-        Get data flow statistics for a pipeline, grouped by table and day.
+        Get data flow statistics for a pipeline, grouped by destination, source table, and target table.
         
         Args:
             pipeline_id: Pipeline identifier
             days: Number of days to look back
             
         Returns:
-            List of stats per table
+            List of stats per table lineage
         """
-        # 1. Get Source ID for pipeline
-        pipeline = self.repository.get_by_id(pipeline_id)
-        source_id = pipeline.source_id
+        # 1. Get Pipeline and Sync Configuration
+        pipeline = self.repository.get_by_id_with_relations(pipeline_id)
+        
+        # Pre-fetch sync configs for mapping
+        # Map: (pipeline_destination_id, source_table_name) -> { target_table: str, dest_name: str }
+        sync_map = {}
+        if pipeline.destinations:
+            for dest in pipeline.destinations:
+                for sync in dest.table_syncs:
+                    # Map by sync_id if available (future), or fallback to (dest_id, table_name)
+                    # For now, let's map by sync.id directly
+                    sync_map[sync.id] = {
+                        "target_table": sync.table_name_target,
+                        "destination_name": dest.destination.name
+                    }
+                    # Also keep legacy map for backward compatibility or when sync_id is null
+                    key = (dest.id, sync.table_name)
+                    if key not in sync_map:
+                         sync_map[key] = {
+                            "target_table": sync.table_name_target,
+                            "destination_name": dest.destination.name
+                        }
         
         # 2. Daily Stats Query
         start_date = datetime.now(ZoneInfo('Asia/Jakarta')) - timedelta(days=days)
         
         daily_query = (
             self.db.query(
+                DataFlowRecordMonitoring.pipeline_destination_id,
+                DataFlowRecordMonitoring.pipeline_destination_table_sync_id,
                 DataFlowRecordMonitoring.table_name,
                 func.date_trunc('day', DataFlowRecordMonitoring.created_at).label('day'),
                 func.sum(DataFlowRecordMonitoring.record_count).label('total_count')
@@ -893,6 +914,8 @@ class PipelineService:
                 DataFlowRecordMonitoring.created_at >= start_date
             )
             .group_by(
+                DataFlowRecordMonitoring.pipeline_destination_id,
+                DataFlowRecordMonitoring.pipeline_destination_table_sync_id,
                 DataFlowRecordMonitoring.table_name,
                 func.date_trunc('day', DataFlowRecordMonitoring.created_at)
             )
@@ -904,11 +927,13 @@ class PipelineService:
         
         daily_results = daily_query.all()
         
-        # 3. Recent 5 Minutes Stats Query (for Monitoring chart)
+        # 3. Recent 5 Minutes Stats Query
         five_min_ago = datetime.now(ZoneInfo('Asia/Jakarta')) - timedelta(minutes=5)
         
         recent_query = (
             self.db.query(
+                DataFlowRecordMonitoring.pipeline_destination_id,
+                DataFlowRecordMonitoring.pipeline_destination_table_sync_id,
                 DataFlowRecordMonitoring.table_name,
                 DataFlowRecordMonitoring.created_at,
                 DataFlowRecordMonitoring.record_count
@@ -922,30 +947,67 @@ class PipelineService:
         
         recent_results = recent_query.all()
         
-        # 4. Aggregating results by table
-        stats_by_table = {}
+        # 4. Aggregating results
+        stats_map = {}
         
+        # Helper to get meta info using sync_id or fallback
+        def get_meta(dest_id, sync_id, table_name):
+            # 1. Try sync_id first
+            if sync_id and sync_id in sync_map:
+                return sync_map[sync_id]
+            
+            # 2. Try (dest_id, table)
+            if dest_id:
+                info = sync_map.get((dest_id, table_name))
+                if info:
+                     # Check if this info is a specific dict or just one of them?
+                     # The tuple key map might be ambiguous if multiple syncs same source-dest-table (rare but possible with custom sql?)
+                     # But for general case it works.
+                    return info
+
+            # Fallback
+            return {
+                "target_table": table_name, 
+                "destination_name": "Unknown Destination"
+            }
+
+        # Unique Key generator
+        def get_key(dest_id, sync_id, table):
+            if sync_id:
+                return f"sync_{sync_id}"
+            return f"{dest_id or 'none'}_{table}"
+
         # Process Daily Stats
         for row in daily_results:
-            table_name = row.table_name
-            if table_name not in stats_by_table:
-                stats_by_table[table_name] = {
-                    "table_name": table_name,
+            key = get_key(row.pipeline_destination_id, row.pipeline_destination_table_sync_id, row.table_name)
+            if key not in stats_map:
+                meta = get_meta(row.pipeline_destination_id, row.pipeline_destination_table_sync_id, row.table_name)
+                stats_map[key] = {
+                    "pipeline_destination_id": row.pipeline_destination_id,
+                    "pipeline_destination_table_sync_id": row.pipeline_destination_table_sync_id,
+                    "table_name": row.table_name,
+                    "target_table_name": meta["target_table"],
+                    "destination_name": meta["destination_name"],
                     "daily_stats": [],
                     "recent_stats": []
                 }
             
-            stats_by_table[table_name]["daily_stats"].append({
+            stats_map[key]["daily_stats"].append({
                 "date": row.day.isoformat(),
-                "count": row.total_count
+                "count": int(row.total_count) if row.total_count else 0
             })
 
         # Process Recent Stats
         for row in recent_results:
-            table_name = row.table_name
-            if table_name not in stats_by_table:
-                 stats_by_table[table_name] = {
-                    "table_name": table_name,
+            key = get_key(row.pipeline_destination_id, row.pipeline_destination_table_sync_id, row.table_name)
+            if key not in stats_map:
+                 meta = get_meta(row.pipeline_destination_id, row.pipeline_destination_table_sync_id, row.table_name)
+                 stats_map[key] = {
+                    "pipeline_destination_id": row.pipeline_destination_id,
+                    "pipeline_destination_table_sync_id": row.pipeline_destination_table_sync_id,
+                    "table_name": row.table_name,
+                    "target_table_name": meta["target_table"],
+                    "destination_name": meta["destination_name"],
                     "daily_stats": [],
                     "recent_stats": []
                 }
@@ -955,12 +1017,12 @@ class PipelineService:
             if timestamp.tzinfo is None:
                 timestamp = timestamp.replace(tzinfo=ZoneInfo('Asia/Jakarta'))
                 
-            stats_by_table[table_name]["recent_stats"].append({
+            stats_map[key]["recent_stats"].append({
                 "timestamp": timestamp.isoformat(),
                 "count": row.record_count
             })
             
-        return list(stats_by_table.values())
+        return list(stats_map.values())
 
     def get_destination_tables(self, pipeline_id: int, pipeline_destination_id: int) -> List[dict]:
         """
