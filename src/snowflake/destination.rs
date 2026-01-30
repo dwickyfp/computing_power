@@ -250,94 +250,104 @@ impl Destination for SnowflakeDestination {
 
         let column_names = self.resolve_column_names(table_id).await;
         
-        // Convert rows to JSON once (assuming same schema for all targets for now)
-        // If we support custom mappings later, this might need to move inside the loop
         let json_rows: Vec<Value> = rows
             .iter()
             .map(|r| row_to_json_object(r, &column_names, "C"))
             .collect();
 
-        // Lock client once? No, locking inside loop is safer if client methods hold lock long?
-        // Actually client needs to be locked to call insert_rows.
-        // Let's lock outside loop if possible, or lock short duration inside.
-        // The implementation below locks inside to avoid holding lock across network calls if insert_rows is async slow
-        // But wait, insert_rows IS async. Holding lock across await is bad if Mutex is std::sync::Mutex (not allowed), 
-        // but here it is tokio::sync::Mutex, so it's allowed.
-        // However, better to minimize scope.
-        
         for sync in syncs {
             let target_table_name = sync.target_table;
             let sync_id = sync.id;
 
-            let mut client = self.client.lock().await;
-            let mut tokens = self.current_token.lock().await;
+            let result: EtlResult<()> = (|| async {
+                let mut client = self.client.lock().await;
+                let mut tokens = self.current_token.lock().await;
 
-            // Use target_table_name as key for token cache
-            let token = tokens.entry(target_table_name.clone()).or_insert_with(String::new);
+                let token = tokens.entry(target_table_name.clone()).or_insert_with(String::new);
 
-            if token.is_empty() {
-                *token = client
-                    .open_channel(&target_table_name, "default")
+                if token.is_empty() {
+                    *token = client
+                        .open_channel(&target_table_name, "default")
+                        .await
+                        .map_err(|e| {
+                            error!("Open channel failed for {}: {}", target_table_name, e);
+                            etl_error!(ErrorKind::Unknown, "Open channel failed: {}", e)
+                        })?;
+                }
+
+                let rows_for_insert = json_rows.clone();
+
+                let next_token = client
+                    .insert_rows(&target_table_name, "default", rows_for_insert, Some(token.clone()))
                     .await
                     .map_err(|e| {
-                        error!("Open channel failed for {}: {}", target_table_name, e);
-                        etl_error!(ErrorKind::Unknown, "Open channel failed: {}", e)
+                        error!("Insert rows failed for {}: {}", target_table_name, e);
+                        etl_error!(ErrorKind::Unknown, "Write rows failed: {}", e)
                     })?;
-            }
 
-            // We must clone json_rows if we use it multiple times, or serialize per loop
-            // Since Value is Clone, we can clone the Vec. 
-            // Optimization: if only 1 sync, don't clone? For now, clone is safe.
-            let rows_for_insert = json_rows.clone();
+                *token = next_token;
+                Ok(())
+            })().await;
 
-            let next_token = client
-                .insert_rows(&target_table_name, "default", rows_for_insert, Some(token.clone()))
-                .await
-                .map_err(|e| {
-                    error!("Insert rows failed for {}: {}", target_table_name, e);
-                    etl_error!(ErrorKind::Unknown, "Write rows failed: {}", e)
-                })?;
+            match result {
+                Ok(_) => {
+                    // Monitor data flow
+                    let record_count = rows.len() as i64;
+                    let now = chrono::Utc::now().with_timezone(&chrono::FixedOffset::east_opt(7 * 3600).unwrap());
 
-            *token = next_token;
-            
-            // Drop locks before db update to allow other threads??
-            // Inserting rows is the heavy part.
-            drop(client);
-            drop(tokens);
+                    if let Err(e) = sqlx::query(
+                        "INSERT INTO data_flow_record_monitoring (pipeline_id, pipeline_destination_id, source_id, table_name, record_count, created_at, updated_at, pipeline_destination_table_sync_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+                    )
+                    .bind(self.pipeline_id)
+                    .bind(self.pipeline_destination_id)
+                    .bind(self.source_id)
+                    .bind(&real_source_table_name)
+                    .bind(record_count)
+                    .bind(now)
+                    .bind(now)
+                    .bind(sync_id)
+                    .execute(&self.metadata_pool)
+                    .await
+                    {
+                        error!("Failed to insert monitoring record for {}: {}", real_source_table_name, e);
+                    }
 
-            // Monitor data flow
-            let record_count = rows.len() as i64;
-            let now = chrono::Utc::now().with_timezone(&chrono::FixedOffset::east_opt(7 * 3600).unwrap());
-
-            if let Err(e) = sqlx::query(
-                "INSERT INTO data_flow_record_monitoring (pipeline_id, pipeline_destination_id, source_id, table_name, record_count, created_at, updated_at, pipeline_destination_table_sync_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
-            )
-            .bind(self.pipeline_id)
-            .bind(self.pipeline_destination_id)
-            .bind(self.source_id)
-            .bind(&real_source_table_name) // Log under SOURCE name
-            .bind(record_count)
-            .bind(now)
-            .bind(now)
-            .bind(sync_id)
-            .execute(&self.metadata_pool)
-            .await
-            {
-                error!("Failed to insert monitoring record for {}: {}", real_source_table_name, e);
+                    if let Some(sid) = sync_id {
+                         let _ = sqlx::query(
+                            "UPDATE pipelines_destination_table_sync 
+                             SET is_error = false, error_message = NULL, updated_at = NOW() 
+                             WHERE id = $1",
+                        )
+                        .bind(sid)
+                        .execute(&self.metadata_pool)
+                        .await;
+                    }
+                }
+                Err(e) => {
+                    error!("Error processing sync for table {}: {}", real_source_table_name, e);
+                    if let Some(sid) = sync_id {
+                        let _ = sqlx::query(
+                            "UPDATE pipelines_destination_table_sync 
+                             SET is_error = true, error_message = $2, updated_at = NOW() 
+                             WHERE id = $1",
+                        )
+                        .bind(sid)
+                        .bind(e.to_string())
+                        .execute(&self.metadata_pool)
+                        .await;
+                    }
+                }
             }
         }
 
         Ok(())
     }
 
-
-
     async fn write_events(&self, events: Vec<Event>) -> EtlResult<()> {
         if events.is_empty() {
             return Ok(());
         }
 
-        // Group events by table_id
         let mut events_by_table: HashMap<TableId, Vec<Event>> = HashMap::new();
         for event in events {
             let table_id = match &event {
@@ -366,7 +376,6 @@ impl Destination for SnowflakeDestination {
                     Event::Insert(i) => Some(row_to_json_object(&i.table_row, &column_names, "C")),
                     Event::Update(u) => Some(row_to_json_object(&u.table_row, &column_names, "U")),
                     Event::Delete(d) => {
-                        // For deletes, use old_table_row if available, otherwise skip
                         if let Some((_, old_row)) = &d.old_table_row {
                             Some(row_to_json_object(old_row, &column_names, "D"))
                         } else {
@@ -382,59 +391,84 @@ impl Destination for SnowflakeDestination {
             }
             
             if !json_rows.is_empty() {
-                 
                  for sync in syncs {
                     let target_table_name = sync.target_table;
                     let sync_id = sync.id;
 
-                    let mut client = self.client.lock().await;
-                    let mut tokens = self.current_token.lock().await;
+                    let result: EtlResult<()> = (|| async {
+                        let mut client = self.client.lock().await;
+                        let mut tokens = self.current_token.lock().await;
 
-                    // Use target_table_name as key
-                    let token = tokens.entry(target_table_name.clone()).or_insert_with(String::new);
+                        let token = tokens.entry(target_table_name.clone()).or_insert_with(String::new);
 
-                    if token.is_empty() {
-                        *token = client
-                            .open_channel(&target_table_name, "default")
+                        if token.is_empty() {
+                            *token = client
+                                .open_channel(&target_table_name, "default")
+                                .await
+                                .map_err(|e| {
+                                    error!("Open channel failed for {}: {}", target_table_name, e);
+                                    etl_error!(ErrorKind::Unknown, "Open channel failed: {}", e)
+                                })?;
+                        }
+                        
+                        let rows_for_insert = json_rows.clone();
+
+                        let next_token = client
+                            .insert_rows(&target_table_name, "default", rows_for_insert, Some(token.clone()))
                             .await
                             .map_err(|e| {
-                                error!("Open channel failed for {}: {}", target_table_name, e);
-                                etl_error!(ErrorKind::Unknown, "Open channel failed: {}", e)
+                                error!("Insert events failed for {}: {}", target_table_name, e);
+                                etl_error!(ErrorKind::Unknown, "Write events failed: {}", e)
                             })?;
-                    }
+                        *token = next_token;
+                        Ok(())
+                    })().await;
                     
-                    let rows_for_insert = json_rows.clone();
+                    match result {
+                        Ok(_) => {
+                            let now = chrono::Utc::now().with_timezone(&chrono::FixedOffset::east_opt(7 * 3600).unwrap());
+                            if let Err(e) = sqlx::query(
+                                "INSERT INTO data_flow_record_monitoring (pipeline_id, pipeline_destination_id, source_id, table_name, record_count, created_at, updated_at, pipeline_destination_table_sync_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+                            )
+                            .bind(self.pipeline_id)
+                            .bind(self.pipeline_destination_id)
+                            .bind(self.source_id)
+                            .bind(&real_source_table_name)
+                            .bind(record_count)
+                            .bind(now)
+                            .bind(now)
+                            .bind(sync_id)
+                            .execute(&self.metadata_pool)
+                            .await
+                            {
+                                error!("Failed to insert monitoring record for {}: {}", real_source_table_name, e);
+                            }
 
-                    let next_token = client
-                        .insert_rows(&target_table_name, "default", rows_for_insert, Some(token.clone()))
-                        .await
-                        .map_err(|e| {
-                            error!("Insert events failed for {}: {}", target_table_name, e);
-                            etl_error!(ErrorKind::Unknown, "Write events failed: {}", e)
-                        })?;
-                    *token = next_token;
-                    
-                    drop(client);
-                    drop(tokens);
-
-                    // Monitor data flow
-                    let now = chrono::Utc::now().with_timezone(&chrono::FixedOffset::east_opt(7 * 3600).unwrap());
-
-                    if let Err(e) = sqlx::query(
-                        "INSERT INTO data_flow_record_monitoring (pipeline_id, pipeline_destination_id, source_id, table_name, record_count, created_at, updated_at, pipeline_destination_table_sync_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
-                    )
-                    .bind(self.pipeline_id)
-                    .bind(self.pipeline_destination_id)
-                    .bind(self.source_id)
-                    .bind(&real_source_table_name)
-                    .bind(record_count)
-                    .bind(now)
-                    .bind(now)
-                    .bind(sync_id)
-                    .execute(&self.metadata_pool)
-                    .await
-                    {
-                        error!("Failed to insert monitoring record for {}: {}", real_source_table_name, e);
+                            if let Some(sid) = sync_id {
+                                let _ = sqlx::query(
+                                    "UPDATE pipelines_destination_table_sync 
+                                     SET is_error = false, error_message = NULL, updated_at = NOW() 
+                                     WHERE id = $1",
+                                )
+                                .bind(sid)
+                                .execute(&self.metadata_pool)
+                                .await;
+                            }
+                        }
+                        Err(e) => {
+                            error!("Error processing events for table {}: {}", real_source_table_name, e);
+                             if let Some(sid) = sync_id {
+                                let _ = sqlx::query(
+                                    "UPDATE pipelines_destination_table_sync 
+                                     SET is_error = true, error_message = $2, updated_at = NOW() 
+                                     WHERE id = $1",
+                                )
+                                .bind(sid)
+                                .bind(e.to_string())
+                                .execute(&self.metadata_pool)
+                                .await;
+                            }
+                        }
                     }
                  }
             }

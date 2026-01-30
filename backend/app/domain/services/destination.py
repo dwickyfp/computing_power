@@ -12,6 +12,7 @@ from app.core.logging import get_logger
 from app.domain.models.destination import Destination
 from app.domain.repositories.destination import DestinationRepository
 from app.domain.schemas.destination import DestinationCreate, DestinationUpdate
+from app.core.security import encrypt_value, decrypt_value
 
 logger = get_logger(__name__)
 
@@ -47,7 +48,13 @@ class DestinationService:
         if not destination_data.config.get("landing_schema") and destination_data.config.get("schema"):
             destination_data.config["landing_schema"] = destination_data.config.get("schema")
 
-        # TODO: In production, encrypt passphrase before storing
+        # Encrypt sensitive fields before storing
+        if "password" in destination_data.config and destination_data.config["password"]:
+             destination_data.config["password"] = encrypt_value(destination_data.config["password"])
+        
+        if "private_key_passphrase" in destination_data.config and destination_data.config["private_key_passphrase"]:
+             destination_data.config["private_key_passphrase"] = encrypt_value(destination_data.config["private_key_passphrase"])
+
         destination = self.repository.create(**destination_data.dict())
 
         logger.info(
@@ -121,7 +128,16 @@ class DestinationService:
         # Filter out None values for partial updates
         update_data = destination_data.dict(exclude_unset=True)
 
-        # TODO: In production, encrypt passphrase if provided
+        # Encrypt sensitive fields if provided in update
+        if "config" in update_data and update_data["config"]:
+            cfg = update_data["config"]
+            if "password" in cfg and cfg["password"]:
+                cfg["password"] = encrypt_value(cfg["password"])
+            if "private_key_passphrase" in cfg and cfg["private_key_passphrase"]:
+                cfg["private_key_passphrase"] = encrypt_value(cfg["private_key_passphrase"])
+            # Update the config in update_data
+            update_data["config"] = cfg
+
         destination = self.repository.update(destination_id, **update_data)
 
         logger.info(
@@ -168,11 +184,18 @@ class DestinationService:
             counter += 1
             new_name = f"{base_name}-{counter}"
         
+        # Decrypt sensitive fields for the new copy
+        new_config = original_destination.config.copy()
+        if "password" in new_config and new_config["password"]:
+             new_config["password"] = decrypt_value(new_config["password"])
+        if "private_key_passphrase" in new_config and new_config["private_key_passphrase"]:
+             new_config["private_key_passphrase"] = decrypt_value(new_config["private_key_passphrase"])
+
         # Create new destination data
         destination_data = DestinationCreate(
             name=new_name,
             type=original_destination.type,
-            config=original_destination.config,
+            config=new_config,
         )
 
         return self.create_destination(destination_data)

@@ -23,6 +23,7 @@ sha2 = "0.10"            # Untuk hashing fingerprint
 rsa = { version = "0.9", features = ["pem", "std"] } # Untuk baca Private Key
 pkcs8 = { version = "0.10", features = ["std", "pem", "encryption", "3des"] } # Support encrypted key
 spki = "0.7"             # Subject Public Key Info
+aes-gcm = "0.10"         # Symmetric Encryption
 
 # Utilities
 anyhow = "1.0"

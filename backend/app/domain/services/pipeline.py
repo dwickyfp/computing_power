@@ -16,6 +16,7 @@ from app.domain.repositories.table_metadata_repo import TableMetadataRepository
 from app.domain.schemas.pipeline import PipelineCreate, PipelineUpdate, PipelineDestinationResponse, PipelineDestinationTableSyncResponse
 from app.domain.services.source import SourceService
 from app.domain.models.data_flow_monitoring import DataFlowRecordMonitoring
+from app.core.security import decrypt_value
 from sqlalchemy import func, desc, and_
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
@@ -650,7 +651,8 @@ class PipelineService:
         private_key_str = config.get("private_key", "").strip()
         passphrase = None
         if config.get("private_key_passphrase"):
-            passphrase = config.get("private_key_passphrase").encode()
+            decrypted_passphrase = decrypt_value(config.get("private_key_passphrase"))
+            passphrase = decrypted_passphrase.encode()
 
         p_key = serialization.load_pem_private_key(
             private_key_str.encode(),
