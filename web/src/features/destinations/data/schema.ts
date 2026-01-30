@@ -13,7 +13,7 @@ export const destinationSchema = z.object({
 export type Destination = z.infer<typeof destinationSchema>
 
 export const destinationFormSchema = z.object({
-    name: z.string().min(1, 'Name is required').regex(/^\S*$/, 'Name must not contain whitespace'),
+    name: z.string().min(1, 'Name is required').regex(/^[a-zA-Z0-9_]+$/, 'Name must contain only alphanumeric characters and underscores'),
     type: z.string().min(1, 'Type is required'),
     config: z.object({
         account: z.string().optional(),
