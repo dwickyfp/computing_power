@@ -37,6 +37,7 @@ from app.domain.services.schema_monitor import SchemaMonitorService
 
 
 from app.infrastructure.redis import RedisClient
+from app.core.security import encrypt_value, decrypt_value
 
 logger = get_logger(__name__)
 
@@ -65,7 +66,10 @@ class SourceService:
         """
         logger.info("Creating new source", extra={"name": source_data.name})
 
-        # TODO: In production, encrypt password before storing
+        # Encrypt password before saving
+        if source_data.pg_password:
+            source_data.pg_password = encrypt_value(source_data.pg_password)
+
         source = self.repository.create(**source_data.dict())
 
         # Update table list
@@ -150,7 +154,10 @@ class SourceService:
         if "pg_password" in update_data and (update_data["pg_password"] is None or update_data["pg_password"] == ""):
             del update_data["pg_password"]
 
-        # TODO: In production, encrypt password if provided
+        # Encrypt password if provided
+        if "pg_password" in update_data:
+            update_data["pg_password"] = encrypt_value(update_data["pg_password"])
+
         source = self.repository.update(source_id, **update_data)
 
         # Update table list if connection details changed
@@ -240,7 +247,7 @@ class SourceService:
             pg_port=source.pg_port,
             pg_database=source.pg_database,
             pg_username=source.pg_username,
-            pg_password=source.pg_password or "" # Handle potential none
+            pg_password=decrypt_value(source.pg_password) if source.pg_password else ""
         )
 
         return self.test_connection_config(config)
@@ -396,7 +403,7 @@ class SourceService:
             port=source.pg_port,
             dbname=source.pg_database,
             user=source.pg_username,
-            password=source.pg_password,
+            password=decrypt_value(source.pg_password) if source.pg_password else None,
             connect_timeout=5
         )
         return conn
@@ -784,16 +791,8 @@ class SourceService:
             pg_port=original_source.pg_port,
             pg_database=original_source.pg_database,
             pg_username=original_source.pg_username,
-            pg_password=original_source.pg_password, # Copy encrypted password directly? 
-            # If SourceCreate expects raw password and we pass encrypted, it might be double encrypted?
-            # Looking at create_source -> repository.create -> SqlAlchemy model.
-            # If pg_password is stored as is, then it's fine. 
-            # But wait, original_source.pg_password might be None or the actual string.
-            # The model says "comment='PostgreSQL password (encrypted)'" but the service code says "TODO: In production, encrypt password before storing".
-            # This implies currently it enters as plain text or is handled by a getter/setter we don't see?
-            # Let's look at SourceCreate schema if possible, or assume direct copy is fine for now as per codebase state.
-            # Assuming direct copy is correct for current state.
-            publication_name=original_source.publication_name, # Can share publication name? Unlikely unique constraint? 
+            pg_password=decrypt_value(original_source.pg_password) if original_source.pg_password else None,
+            publication_name=original_source.publication_name, 
             # Publication is DB object. If we connect to same DB, we can reuse publication if we want to share it?
             # Or should we create a new one? 
             # User said "replicate all connection setting sources".

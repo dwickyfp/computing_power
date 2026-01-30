@@ -1,4 +1,5 @@
 use crate::destination_enum::{DestinationEnum, DestinationWithDlq};
+use crate::crypto::decrypt_value;
 use crate::dlq::store::DlqStore;
 use crate::snowflake::SnowflakeDestination;
 use crate::store::memory::CustomStore;
@@ -149,9 +150,10 @@ impl PipelineManager {
             port: source_row.try_get::<i32, _>("pg_port")? as u16,
             name: source_row.try_get("pg_database")?,
             username: source_row.try_get("pg_username")?,
-            password: source_row
-                .try_get::<Option<String>, _>("pg_password")?
-                .map(Into::into),
+            password: match source_row.try_get::<Option<String>, _>("pg_password")? {
+                Some(p) => Some(decrypt_value(&p)?.into()),
+                None => None,
+            },
             tls: TlsConfig {
                 enabled: false,
                 trusted_root_certs: "".into(),
@@ -241,10 +243,10 @@ impl PipelineManager {
                             .as_str()
                             .unwrap_or("")
                             .to_string(),
-                        private_key_passphrase: dest_config_json["private_key_passphrase"]
-                            .as_str()
-                            .map(|s| s.to_string())
-                            .filter(|s| !s.is_empty()),
+                        private_key_passphrase: match dest_config_json["private_key_passphrase"].as_str() {
+                            Some(p) if !p.is_empty() => Some(decrypt_value(p)?), 
+                            _ => None,
+                        },
                         landing_database: dest_config_json["landing_database"]
                             .as_str()
                             .map(|s| s.to_string())
@@ -296,9 +298,10 @@ impl PipelineManager {
                             .as_str()
                             .unwrap_or("postgres")
                             .to_string(),
-                        password: dest_config_json["password"]
-                            .as_str()
-                            .map(|s| s.to_string().into()),
+                        password: match dest_config_json["password"].as_str() {
+                            Some(p) => Some(decrypt_value(p)?.into()),
+                            None => None,
+                        },
                         tls: TlsConfig {
                             enabled: false,
                             trusted_root_certs: "".into(),

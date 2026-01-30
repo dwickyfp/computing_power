@@ -73,6 +73,11 @@ class Settings(BaseSettings):
     secret_key: str = Field(
         ..., min_length=32, description="Secret key for JWT and encryption"
     )
+    credential_encryption_key: str = Field(
+        ...,
+        min_length=32,
+        description="Master key for credential encryption (AES-256-GCM)",
+    )
     api_key: str = Field(default="", description="Optional API key for authentication")
     cors_origins: List[str] = Field(
         default=["http://localhost:3000"], description="Allowed CORS origins"

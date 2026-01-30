@@ -19,6 +19,7 @@ from deepdiff import DeepDiff
 
 from app.core.config import get_settings
 from app.core.database import get_session_context
+from app.core.security import decrypt_value
 from app.core.logging import get_logger
 from app.domain.models.history_schema_evolution import HistorySchemaEvolution
 from app.domain.models.source import Source
@@ -78,7 +79,7 @@ class SchemaMonitorService:
                 port=source.pg_port,
                 dbname=source.pg_database,
                 user=source.pg_username,
-                password=source.pg_password,
+                password=decrypt_value(source.pg_password) if source.pg_password else None,
                 connect_timeout=settings.wal_monitor_timeout_seconds,
             )
             
