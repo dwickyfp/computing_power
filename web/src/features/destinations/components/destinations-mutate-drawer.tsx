@@ -48,6 +48,7 @@ export function DestinationsMutateDrawer({
 
     const form = useForm<DestinationForm>({
         resolver: zodResolver(destinationFormSchema),
+        mode: 'onChange',
         defaultValues: currentRow
             ? {
                 name: currentRow.name,
