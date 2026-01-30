@@ -65,11 +65,6 @@ const CustomNode = ({ data }: { data: any }) => {
                     {data.label}
                 </div>
             </div>
-             {data.subLabel && (
-                <div className="text-[10px] text-muted-foreground pl-5 truncate" title={data.subLabel}>
-                    {data.subLabel}
-                </div>
-            )}
              <div className="flex justify-between items-center mt-1 pt-1 border-t border-slate-100">
                 <span className="text-[10px] text-muted-foreground">Records</span>
                 <span className="font-mono text-xs font-bold text-emerald-600">{data.totalCount?.toLocaleString()}</span>
