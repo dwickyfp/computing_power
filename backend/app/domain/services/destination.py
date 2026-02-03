@@ -157,6 +157,62 @@ class DestinationService:
 
         return destination
 
+    def duplicate_destination(self, destination_id: int) -> Destination:
+        """
+        Duplicate an existing destination.
+
+        Args:
+            destination_id: Destination identifier to duplicate
+
+        Returns:
+            New destination (duplicate)
+        """
+        logger.info("Duplicating destination", extra={"destination_id": destination_id})
+
+        # Get the existing destination
+        existing_destination = self.get_destination(destination_id)
+
+        # Generate a unique name for the duplicate
+        base_name = existing_destination.name
+        copy_number = 1
+        new_name = f"{base_name}_copy"
+        
+        # Check if the name already exists and increment if needed
+        while self.get_destination_by_name(new_name) is not None:
+            copy_number += 1
+            new_name = f"{base_name}_copy{copy_number}"
+
+        # Create a copy of the configuration (including encrypted secrets)
+        config_copy = existing_destination.config.copy()
+
+        # Create a new DestinationCreate object
+        destination_data = DestinationCreate(
+            name=new_name,
+            type=existing_destination.type,
+            config=config_copy
+        )
+
+        # Note: We don't call self.create_destination because it would re-encrypt
+        # already encrypted secrets. Instead, we directly use the repository.
+        logger.info("Creating duplicate destination", extra={"name": new_name})
+
+        # Default landing configuration to standard configuration if not provided
+        if not destination_data.config.get("landing_database") and destination_data.config.get("database"):
+            destination_data.config["landing_database"] = destination_data.config.get("database")
+
+        if not destination_data.config.get("landing_schema") and destination_data.config.get("schema"):
+            destination_data.config["landing_schema"] = destination_data.config.get("schema")
+
+        # Create the new destination (secrets are already encrypted from original)
+        new_destination = self.repository.create(**destination_data.dict())
+
+        logger.info(
+            "Destination duplicated successfully",
+            extra={"original_id": destination_id, "new_id": new_destination.id, "new_name": new_name},
+        )
+
+        return new_destination
+
 # [ ... skip to test_connection ... ]
 
     def test_connection(self, config: DestinationCreate) -> bool:
