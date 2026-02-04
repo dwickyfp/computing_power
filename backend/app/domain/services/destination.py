@@ -42,18 +42,36 @@ class DestinationService:
         logger.info("Creating new destination", extra={"name": destination_data.name})
 
         # Default landing configuration to standard configuration if not provided
-        if not destination_data.config.get("landing_database") and destination_data.config.get("database"):
-            destination_data.config["landing_database"] = destination_data.config.get("database")
+        if not destination_data.config.get(
+            "landing_database"
+        ) and destination_data.config.get("database"):
+            destination_data.config["landing_database"] = destination_data.config.get(
+                "database"
+            )
 
-        if not destination_data.config.get("landing_schema") and destination_data.config.get("schema"):
-            destination_data.config["landing_schema"] = destination_data.config.get("schema")
+        if not destination_data.config.get(
+            "landing_schema"
+        ) and destination_data.config.get("schema"):
+            destination_data.config["landing_schema"] = destination_data.config.get(
+                "schema"
+            )
 
         # Encrypt sensitive fields before storing
-        if "password" in destination_data.config and destination_data.config["password"]:
-             destination_data.config["password"] = encrypt_value(destination_data.config["password"])
-        
-        if "private_key_passphrase" in destination_data.config and destination_data.config["private_key_passphrase"]:
-             destination_data.config["private_key_passphrase"] = encrypt_value(destination_data.config["private_key_passphrase"])
+        if (
+            "password" in destination_data.config
+            and destination_data.config["password"]
+        ):
+            destination_data.config["password"] = encrypt_value(
+                destination_data.config["password"]
+            )
+
+        if (
+            "private_key_passphrase" in destination_data.config
+            and destination_data.config["private_key_passphrase"]
+        ):
+            destination_data.config["private_key_passphrase"] = encrypt_value(
+                destination_data.config["private_key_passphrase"]
+            )
 
         destination = self.repository.create(**destination_data.dict())
 
@@ -134,18 +152,23 @@ class DestinationService:
         # Encrypt sensitive fields if provided in update and merge with existing
         if "config" in update_data and update_data["config"]:
             new_config = update_data["config"]
-            
+
             # Encrypt new secrets if present
             if "password" in new_config and new_config["password"]:
                 new_config["password"] = encrypt_value(new_config["password"])
-            if "private_key_passphrase" in new_config and new_config["private_key_passphrase"]:
-                new_config["private_key_passphrase"] = encrypt_value(new_config["private_key_passphrase"])
-            
+            if (
+                "private_key_passphrase" in new_config
+                and new_config["private_key_passphrase"]
+            ):
+                new_config["private_key_passphrase"] = encrypt_value(
+                    new_config["private_key_passphrase"]
+                )
+
             # Merge: Use old config as base, update with new config
             # This preserves secrets that were filtered out/masked in the frontend
             final_config = existing_destination.config.copy()
             final_config.update(new_config)
-            
+
             # Update the config in update_data
             update_data["config"] = final_config
 
@@ -156,6 +179,21 @@ class DestinationService:
         )
 
         return destination
+
+    def delete_destination(self, destination_id: int) -> None:
+        """
+        Delete destination.
+
+        Args:
+            destination_id: Destination identifier
+        """
+        logger.info("Deleting destination", extra={"destination_id": destination_id})
+
+        self.repository.delete(destination_id)
+
+        logger.info(
+            "Destination deleted successfully", extra={"destination_id": destination_id}
+        )
 
     def duplicate_destination(self, destination_id: int) -> Destination:
         """
@@ -176,7 +214,7 @@ class DestinationService:
         base_name = existing_destination.name
         copy_number = 1
         new_name = f"{base_name}_copy"
-        
+
         # Check if the name already exists and increment if needed
         while self.get_destination_by_name(new_name) is not None:
             copy_number += 1
@@ -187,9 +225,7 @@ class DestinationService:
 
         # Create a new DestinationCreate object
         destination_data = DestinationCreate(
-            name=new_name,
-            type=existing_destination.type,
-            config=config_copy
+            name=new_name, type=existing_destination.type, config=config_copy
         )
 
         # Note: We don't call self.create_destination because it would re-encrypt
@@ -197,23 +233,35 @@ class DestinationService:
         logger.info("Creating duplicate destination", extra={"name": new_name})
 
         # Default landing configuration to standard configuration if not provided
-        if not destination_data.config.get("landing_database") and destination_data.config.get("database"):
-            destination_data.config["landing_database"] = destination_data.config.get("database")
+        if not destination_data.config.get(
+            "landing_database"
+        ) and destination_data.config.get("database"):
+            destination_data.config["landing_database"] = destination_data.config.get(
+                "database"
+            )
 
-        if not destination_data.config.get("landing_schema") and destination_data.config.get("schema"):
-            destination_data.config["landing_schema"] = destination_data.config.get("schema")
+        if not destination_data.config.get(
+            "landing_schema"
+        ) and destination_data.config.get("schema"):
+            destination_data.config["landing_schema"] = destination_data.config.get(
+                "schema"
+            )
 
         # Create the new destination (secrets are already encrypted from original)
         new_destination = self.repository.create(**destination_data.dict())
 
         logger.info(
             "Destination duplicated successfully",
-            extra={"original_id": destination_id, "new_id": new_destination.id, "new_name": new_name},
+            extra={
+                "original_id": destination_id,
+                "new_id": new_destination.id,
+                "new_name": new_name,
+            },
         )
 
         return new_destination
 
-# [ ... skip to test_connection ... ]
+    # [ ... skip to test_connection ... ]
 
     def test_connection(self, config: DestinationCreate) -> bool:
         """
@@ -230,6 +278,7 @@ class DestinationService:
         """
         if config.type == "POSTGRES":
             import psycopg2
+
             try:
                 conn = psycopg2.connect(
                     host=config.config.get("host"),
@@ -237,7 +286,7 @@ class DestinationService:
                     dbname=config.config.get("database"),
                     user=config.config.get("user"),
                     password=config.config.get("password"),
-                    connect_timeout=5
+                    connect_timeout=5,
                 )
                 conn.close()
                 return True
@@ -268,7 +317,9 @@ class DestinationService:
                     # Check connection with password
                     pass
                 else:
-                    raise ValueError("Private key or Password is required for connection test")
+                    raise ValueError(
+                        "Private key or Password is required for connection test"
+                    )
 
             conn_params = {
                 "user": config.config.get("user"),
@@ -278,7 +329,7 @@ class DestinationService:
                 "database": config.config.get("database"),
                 "schema": config.config.get("schema"),
                 "client_session_keep_alive": False,
-                "application": "Rosetta_ETL"
+                "application": "Rosetta_ETL",
             }
 
             # Handle Private Key Auth
@@ -287,7 +338,7 @@ class DestinationService:
                 private_key_str = config.config.get("private_key", "").strip()
                 if "\\n" in private_key_str:
                     private_key_str = private_key_str.replace("\\n", "\n")
-                
+
                 # Handle passphrase
                 passphrase = None
                 if config.config.get("private_key_passphrase"):
@@ -303,7 +354,7 @@ class DestinationService:
                 except ValueError as ve:
                     logger.error(f"Failed to load private key: {ve}")
                     if "Bad decrypt" in str(ve):
-                         raise ValueError("Invalid Private Key Passphrase.")
+                        raise ValueError("Invalid Private Key Passphrase.")
                     raise ValueError("Invalid Private Key format.")
 
                 pkb = p_key.private_bytes(
@@ -312,10 +363,10 @@ class DestinationService:
                     encryption_algorithm=serialization.NoEncryption(),
                 )
                 conn_params["private_key"] = pkb
-            
+
             # Handle Password Auth
             elif config.config.get("password"):
-                 conn_params["password"] = config.config.get("password")
+                conn_params["password"] = config.config.get("password")
 
             # Connect to Snowflake
             ctx = snowflake.connector.connect(**conn_params)
@@ -324,7 +375,7 @@ class DestinationService:
             cs = ctx.cursor()
             cs.execute("SELECT 1")
             result = cs.fetchone()
-            
+
             cs.close()
             ctx.close()
 
@@ -333,14 +384,16 @@ class DestinationService:
             return False
 
         except snowflake.connector.errors.ProgrammingError as pe:
-             logger.error(
+            logger.error(
                 "Snowflake programming error",
                 extra={"error": str(pe)},
-             )
-             # Catch specific JWT errors to give better hints
-             if "JWT token is invalid" in str(pe):
-                 raise Exception("Authentication Failed: JWT token is invalid. Please check if the Public Key is correctly assigned to the user in Snowflake, and the Username matches.")
-             raise pe
+            )
+            # Catch specific JWT errors to give better hints
+            if "JWT token is invalid" in str(pe):
+                raise Exception(
+                    "Authentication Failed: JWT token is invalid. Please check if the Public Key is correctly assigned to the user in Snowflake, and the Username matches."
+                )
+            raise pe
 
         except Exception as e:
             logger.error(
