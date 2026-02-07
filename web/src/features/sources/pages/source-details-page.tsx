@@ -208,67 +208,17 @@ export default function SourceDetailsPage() {
                     <>
                         {/* Overview Section */}
                         <div className="grid gap-4">
-                            <SourceDetailsMetrics data={data?.wal_monitor || null} dataDestinations={data?.destinations || []} />
+                            <SourceDetailsMetrics
+                                data={data?.wal_monitor || null}
+                                source={data!.source}
+                                onPublicationAction={handlePublicationAction}
+                                onReplicationAction={handleReplicationAction}
+                                isPublicationLoading={isPublicationLoading}
+                                isReplicationLoading={isReplicationLoading}
+                            />
                         </div>
 
                         <div className="grid gap-6">
-                            {/* Publishing & Replication Status Cards */}
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div className="rounded-lg border bg-card text-card-foreground shadow-sm p-6 flex flex-col justify-between">
-                                    <div>
-                                        <div className="flex items-center justify-between mb-2">
-                                            <h3 className="font-semibold leading-none tracking-tight">Publication</h3>
-                                            <Badge
-                                                variant={data?.source.is_publication_enabled ? "default" : "secondary"}
-                                                className={cn(data?.source.is_publication_enabled && "bg-green-600 hover:bg-green-700")}
-                                            >
-                                                {data?.source.is_publication_enabled ? "Active" : "Inactive"}
-                                            </Badge>
-                                        </div>
-                                        <p className="text-sm text-muted-foreground mb-4">
-                                            Name: <span className="font-mono text-foreground">{data?.source.publication_name}</span>
-                                        </p>
-                                    </div>
-                                    <Button
-                                        variant={data?.source.is_publication_enabled ? "destructive" : "default"}
-                                        size="sm"
-                                        className="w-fit"
-                                        onClick={handlePublicationAction}
-                                        disabled={isPublicationLoading || isLoading}
-                                    >
-                                        {isPublicationLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                                        {data?.source.is_publication_enabled ? "Drop Publication" : "Create Publication"}
-                                    </Button>
-                                </div>
-
-                                <div className="rounded-lg border bg-card text-card-foreground shadow-sm p-6 flex flex-col justify-between">
-                                    <div>
-                                        <div className="flex items-center justify-between mb-2">
-                                            <h3 className="font-semibold leading-none tracking-tight">Replication Slot</h3>
-                                            <Badge
-                                                variant={data?.source.is_replication_enabled ? "default" : "secondary"}
-                                                className={cn(data?.source.is_replication_enabled && "bg-green-600 hover:bg-green-700")}
-                                            >
-                                                {data?.source.is_replication_enabled ? "Active" : "Inactive"}
-                                            </Badge>
-                                        </div>
-                                        <p className="text-sm text-muted-foreground mb-4">
-                                            ID: <span className="font-mono text-foreground">supabase_etl_apply_{data?.source.replication_id}</span>
-                                        </p>
-                                    </div>
-                                    <Button
-                                        variant={data?.source.is_replication_enabled ? "destructive" : "default"}
-                                        size="sm"
-                                        className="w-fit"
-                                        onClick={handleReplicationAction}
-                                        disabled={isReplicationLoading || isLoading}
-                                    >
-                                        {isReplicationLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                                        {data?.source.is_replication_enabled ? "Drop Replication" : "Create Replication"}
-                                    </Button>
-                                </div>
-                            </div>
-
                             {/* Tables Section */}
                             <Tabs defaultValue="monitored" className="w-full">
                                 <div className="flex items-center justify-between mb-4">
