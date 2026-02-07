@@ -1,10 +1,3 @@
-import {
-  GlassCard,
-  GlassCardContent,
-  GlassCardHeader,
-  GlassCardTitle,
-  GlassCardDescription
-} from './components/glass-card'
 import { ConfigDrawer } from '@/components/config-drawer'
 import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
@@ -17,6 +10,7 @@ import { JobStatusCard } from './components/job-status-card'
 import { SourceHealthCard } from './components/source-health-card'
 import { TopTablesChart } from './components/top-tables-chart'
 import { ActivityFeed } from './components/activity-feed'
+import { ReplicationLagChart } from './components/replication-lag-chart'
 import { useQuery } from '@tanstack/react-query'
 import { dashboardRepo } from '@/repo/dashboard'
 import {
@@ -37,6 +31,8 @@ import {
   YAxis,
 } from 'recharts'
 import { cn } from '@/lib/utils'
+import { DashboardGrid } from './components/dashboard-grid'
+import { DashboardPanel } from './components/dashboard-panel'
 
 export function Dashboard() {
   const { data: summary } = useQuery({
@@ -56,8 +52,8 @@ export function Dashboard() {
   const flowTrend =
     summary?.data_flow && summary.data_flow.yesterday > 0
       ? ((summary.data_flow.today - summary.data_flow.yesterday) /
-          summary.data_flow.yesterday) *
-        100
+        summary.data_flow.yesterday) *
+      100
       : 0
 
   return (
@@ -70,193 +66,182 @@ export function Dashboard() {
         </div>
       </Header>
 
-      <Main className="bg-gradient-to-br from-background to-muted/20 min-h-screen">
-        <div className='mb-6 flex items-center justify-between space-y-2'>
-          <h1 className='text-3xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-primary to-primary/60'>
+      <Main className="bg-background min-h-screen p-4 space-y-4">
+        <div className='flex items-center justify-between'>
+          <h1 className='text-3xl font-bold tracking-tight'>
             Mission Control
           </h1>
+          <div className="text-sm text-muted-foreground">
+            {new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+          </div>
         </div>
 
-        {/* Top Stats Row */}
-        <div className='grid gap-4 md:grid-cols-2 lg:grid-cols-4 mb-6'>
-          <SourceHealthCard />
-          
-          <GlassCard>
-            <GlassCardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
-              <GlassCardTitle className='text-sm font-medium'>
-                Pipeline Health
-              </GlassCardTitle>
-              <Server className='h-4 w-4 text-muted-foreground' />
-            </GlassCardHeader>
-            <GlassCardContent>
-              <div className='text-2xl font-bold'>
+        <DashboardGrid>
+          {/* Row 1: High Level Stats - 4 cols each (6 cols in 24-grid) */}
+          <div className="col-span-24 md:col-span-12 lg:col-span-6 h-32">
+            <SourceHealthCard />
+          </div>
+
+          <DashboardPanel
+            title="Pipeline Health"
+            headerAction={<Server className='h-4 w-4 text-muted-foreground' />}
+            className="col-span-24 md:col-span-12 lg:col-span-6 h-32"
+          >
+            <div className='flex items-end gap-2'>
+              <div className='text-3xl font-bold font-mono leading-none'>
                 {summary?.pipelines?.total || 0}
               </div>
-              <div className='mt-1 flex text-xs text-muted-foreground'>
-                <span className='mr-2 text-emerald-500 font-medium'>
-                  {summary?.pipelines?.START || 0} Active
-                </span>
-                <span className='mr-2 text-amber-500 font-medium'>
-                  {summary?.pipelines?.PAUSE || 0} Paused
-                </span>
+              <div className='text-sm text-muted-foreground mb-1'>Total Pipelines</div>
+            </div>
+            <div className='mt-4 flex text-xs text-muted-foreground'>
+              <div className='flex items-center mr-4'>
+                <div className='w-2 h-2 rounded-full bg-emerald-500 mr-2' />
+                <span className='font-medium text-foreground'>{summary?.pipelines?.START || 0}</span>
+                <span className='ml-1'>Active</span>
               </div>
-            </GlassCardContent>
-          </GlassCard>
+              <div className='flex items-center'>
+                <div className='w-2 h-2 rounded-full bg-amber-500 mr-2' />
+                <span className='font-medium text-foreground'>{summary?.pipelines?.PAUSE || 0}</span>
+                <span className='ml-1'>Paused</span>
+              </div>
+            </div>
+          </DashboardPanel>
 
-          <GlassCard>
-            <GlassCardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
-              <GlassCardTitle className='text-sm font-medium'>
-                Data Velocity
-              </GlassCardTitle>
-              <Activity className='h-4 w-4 text-muted-foreground' />
-            </GlassCardHeader>
-            <GlassCardContent>
-              <div className='text-2xl font-bold'>
+          <DashboardPanel
+            title="Data Velocity"
+            headerAction={<Activity className='h-4 w-4 text-muted-foreground' />}
+            className="col-span-24 md:col-span-12 lg:col-span-6 h-32"
+          >
+            <div className='flex items-end gap-2'>
+              <div className='text-3xl font-bold font-mono leading-none'>
                 {summary?.data_flow?.today.toLocaleString() || 0}
               </div>
-              <p className='text-xs text-muted-foreground'>
-                Records processed today
-              </p>
-              <div className='mt-1 flex items-center text-xs'>
-                {flowTrend > 0 ? (
-                  <TrendingUp className='mr-1 h-3 w-3 text-emerald-500' />
-                ) : (
-                  <TrendingDown className='mr-1 h-3 w-3 text-rose-500' />
+              <div className='text-xs text-muted-foreground mb-1'>Rows today</div>
+            </div>
+            <div className='mt-4 flex items-center text-xs'>
+              {flowTrend > 0 ? (
+                <TrendingUp className='mr-1 h-3 w-3 text-emerald-500' />
+              ) : (
+                <TrendingDown className='mr-1 h-3 w-3 text-rose-500' />
+              )}
+              <span
+                className={cn(
+                  flowTrend > 0 ? 'text-emerald-500' : 'text-rose-500',
+                  'font-medium ml-1'
                 )}
-                <span
-                  className={cn(
-                    flowTrend > 0 ? 'text-emerald-500' : 'text-rose-500',
-                    'font-medium ml-1'
-                  )}
+              >
+                {Math.abs(flowTrend).toFixed(1)}%
+              </span>
+              <span className='ml-1 text-muted-foreground'>vs yesterday</span>
+            </div>
+          </DashboardPanel>
+
+          <DashboardPanel
+            title="Est. Cost"
+            description="Run rate this month"
+            headerAction={<CreditCard className='h-4 w-4 text-muted-foreground' />}
+            className="col-span-24 md:col-span-12 lg:col-span-6 h-32"
+          >
+            <div className='text-3xl font-bold font-mono'>
+              ${summary?.credits?.month_total.toFixed(2) || '0.00'}
+            </div>
+          </DashboardPanel>
+
+          {/* Row 2: Main Top Charts */}
+          <DashboardPanel
+            title="Data Flow Volume"
+            description="Transaction volume history (14 Days)"
+            className='col-span-24 lg:col-span-16 h-[400px]'
+          >
+            <div className='h-full w-full min-h-[300px]'>
+              <ResponsiveContainer width='100%' height="100%">
+                <AreaChart
+                  data={flowChart?.history || []}
+                  margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
                 >
-                  {Math.abs(flowTrend).toFixed(1)}%
-                </span>
-                <span className='ml-1 text-muted-foreground'>vs yesterday</span>
-              </div>
-            </GlassCardContent>
-          </GlassCard>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.05)" />
+                  <defs>
+                    <linearGradient id="colorGradient" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#8884d8" stopOpacity={0.8} />
+                      <stop offset="95%" stopColor="#8884d8" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <XAxis
+                    dataKey='date'
+                    stroke='#888888'
+                    fontSize={12}
+                    tickLine={false}
+                    axisLine={false}
+                    tickFormatter={(value) => {
+                      const date = new Date(value)
+                      return `${date.getMonth() + 1}/${date.getDate()}`
+                    }}
+                  />
+                  <YAxis
+                    stroke='#888888'
+                    fontSize={12}
+                    tickLine={false}
+                    axisLine={false}
+                    tickFormatter={(value) => `${value}`}
+                  />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: 'rgba(23, 23, 23, 0.95)',
+                      border: '1px solid rgba(255,255,255,0.1)',
+                      borderRadius: '4px',
+                      color: '#fff',
+                      boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
+                      fontSize: '12px'
+                    }}
+                  />
+                  <Legend iconType='circle' />
+                  {flowChart?.pipelines?.map((pipeline, index) => {
+                    const colors = ["#8884d8", "#82ca9d", "#ffc658", "#ff7300", "#0088fe", "#00C49F"];
+                    const color = colors[index % colors.length];
+                    return (
+                      <Area
+                        key={pipeline}
+                        type='monotone'
+                        dataKey={pipeline}
+                        stackId="1"
+                        stroke={color}
+                        fill={color}
+                        fillOpacity={0.6}
+                      />
+                    )
+                  })}
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          </DashboardPanel>
 
-          <GlassCard>
-            <GlassCardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
-              <GlassCardTitle className='text-sm font-medium'>
-                Est. Cost (Month)
-              </GlassCardTitle>
-              <CreditCard className='h-4 w-4 text-muted-foreground' />
-            </GlassCardHeader>
-            <GlassCardContent>
-              <div className='text-2xl font-bold'>
-                ${summary?.credits?.month_total.toFixed(2) || '0.00'}
-              </div>
-              <p className='text-xs text-muted-foreground'>Credits used</p>
-            </GlassCardContent>
-          </GlassCard>
-        </div>
+          <div className="col-span-24 lg:col-span-8">
+            <TopTablesChart />
+          </div>
 
-        {/* Row 2: Charts Area */}
-        <div className='grid gap-6 md:grid-cols-2 lg:grid-cols-7 mb-6'>
-          {/* Main Flow Chart - Spans 4 cols */}
-          <GlassCard className='col-span-4 h-[400px]'>
-            <GlassCardHeader>
-              <GlassCardTitle>Data Flow Volume</GlassCardTitle>
-              <GlassCardDescription>
-                Transaction volume over the last 14 days
-              </GlassCardDescription>
-            </GlassCardHeader>
-            <GlassCardContent className='pl-2'>
-              <div className='h-[300px] w-full'>
-                <ResponsiveContainer width='100%' height={300}>
-                  <AreaChart
-                    data={flowChart?.history || []}
-                    margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
-                  >
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.1)" />
-                    <defs>
-                      <linearGradient id="colorGradient" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#8884d8" stopOpacity={0.8}/>
-                        <stop offset="95%" stopColor="#8884d8" stopOpacity={0}/>
-                      </linearGradient>
-                    </defs>
-                    <XAxis
-                      dataKey='date'
-                      stroke='#888888'
-                      fontSize={12}
-                      tickLine={false}
-                      axisLine={false}
-                      tickFormatter={(value) => {
-                        const date = new Date(value)
-                        return `${date.getMonth() + 1}/${date.getDate()}`
-                      }}
-                    />
-                    <YAxis
-                      stroke='#888888'
-                      fontSize={12}
-                      tickLine={false}
-                      axisLine={false}
-                      tickFormatter={(value) => `${value}`}
-                    />
-                    <Tooltip
-                        contentStyle={{
-                          backgroundColor: 'rgba(23, 23, 23, 0.9)',
-                          border: '1px solid rgba(255,255,255,0.1)',
-                          borderRadius: '12px',
-                          color: '#fff',
-                          backdropFilter: 'blur(10px)'
-                        }}
-                    />
-                    <Legend />
-                    {flowChart?.pipelines?.map((pipeline, index) => {
-                         const colors = ["#8884d8", "#82ca9d", "#ffc658", "#ff7300", "#0088fe", "#00C49F"];
-                         const color = colors[index % colors.length];
-                         return (
-                             <Area
-                                key={pipeline}
-                                type='monotone'
-                                dataKey={pipeline}
-                                stackId="1"
-                                stroke={color}
-                                fill={color}
-                             />
-                         )
-                    })}
-                  </AreaChart>
-                </ResponsiveContainer>
-              </div>
-            </GlassCardContent>
-          </GlassCard>
+          {/* Row 3: Secondary Charts & Feed */}
+          <div className="col-span-24 lg:col-span-16">
+            <ReplicationLagChart />
+          </div>
+          <div className="col-span-24 lg:col-span-8">
+            <ActivityFeed />
+          </div>
 
-          {/* Top Tables - Spans 3 cols (moved here) */}
-          <TopTablesChart />
-        </div>
+          {/* Row 4: System Monitor Status (Bottom Row, equal width 4 cols) */}
+          <div className="col-span-24 md:col-span-12 lg:col-span-6">
+            <SystemLoadCard />
+          </div>
+          <div className="col-span-24 md:col-span-12 lg:col-span-6">
+            <SystemHealthWidget />
+          </div>
+          <div className="col-span-24 md:col-span-12 lg:col-span-6">
+            <JobStatusCard />
+          </div>
+          <div className="col-span-24 md:col-span-12 lg:col-span-6">
+            <WALMonitorList />
+          </div>
 
-        {/* Row 3: Detail Cards */}
-        <div className='grid gap-6 md:grid-cols-2 lg:grid-cols-7 mb-6'>
-           {/* Activity Feed - Spans 4 cols */}
-           <div className='col-span-4'>
-              <ActivityFeed />
-           </div>
-
-           {/* System Stats - Spans 3 cols */}
-           <div className='col-span-3 space-y-6'>
-              <SystemLoadCard />
-              <SystemHealthWidget />
-              <JobStatusCard />
-           </div>
-        </div>
-
-        {/* Existing WAL Monitor Section - Full Width */}
-        <div className='mt-4'>
-            <GlassCard>
-              <GlassCardHeader className='flex flex-row items-center justify-between'>
-                 <div>
-                    <GlassCardTitle>WAL Replication Monitor</GlassCardTitle>
-                    <GlassCardDescription>Real-time status of replication slots</GlassCardDescription>
-                 </div>
-              </GlassCardHeader>
-              <GlassCardContent>
-                 <WALMonitorList />
-              </GlassCardContent>
-            </GlassCard>
-        </div>
+        </DashboardGrid>
       </Main>
     </>
   )

@@ -1,6 +1,6 @@
-import { GlassCard, GlassCardContent, GlassCardHeader, GlassCardTitle } from './glass-card'
+import { DashboardPanel } from './dashboard-panel'
 import { cn, formatBytes } from '@/lib/utils'
-import { Activity, Cpu, Zap } from 'lucide-react'
+import { Cpu, Zap } from 'lucide-react'
 import { systemMetricsRepo } from '@/repo/system-metrics'
 import { useQuery } from '@tanstack/react-query'
 
@@ -72,8 +72,8 @@ function MetricItem({
   return (
     <div className='flex items-center justify-between p-1 py-0 rounded-lg hover:bg-white/5 transition-colors'>
       <div className='flex items-center gap-3'>
-        <div className={cn('p-2 rounded-full bg-opacity-10', color.replace('text-', 'bg-'), 
-             (color.includes('rose') || color.includes('red')) && "animate-pulse"
+        <div className={cn('p-2 rounded-full bg-opacity-10', color.replace('text-', 'bg-'),
+          (color.includes('rose') || color.includes('red')) && "animate-pulse"
         )}>
           <Icon className={cn('w-4 h-4', color)} />
         </div>
@@ -83,7 +83,7 @@ function MetricItem({
         </div>
       </div>
       <div className='flex items-center gap-3'>
-         <CircularProgress value={value} color={color} size={48} strokeWidth={4} />
+        <CircularProgress value={value} color={color} size={48} strokeWidth={4} />
       </div>
     </div>
   )
@@ -106,33 +106,32 @@ export function SystemLoadCard() {
   const cpuParams = metrics
     ? { val: metrics.cpu_usage || 0, color: getLoadColor(metrics.cpu_usage || 0) }
     : { val: 0, color: 'text-muted-foreground' }
-  
+
   const memParams = metrics
     ? { val: metrics.memory_usage_percent || 0, color: getLoadColor(metrics.memory_usage_percent || 0) }
     : { val: 0, color: 'text-muted-foreground' }
 
   return (
-    <GlassCard className='overflow-hidden'>
-      <GlassCardHeader className='flex flex-row items-center justify-between space-y-0 pb-2 border-b border-white/5 bg-white/5'>
-        <GlassCardTitle className='text-sm font-semibold flex items-center gap-2'>
-          <Activity className='w-4 h-4 text-primary' />
-          System Load
-        </GlassCardTitle>
+    <DashboardPanel
+      title="System Load"
+      headerAction={
         <div className='flex items-center space-x-1'>
-            <div className='w-2 h-2 rounded-full bg-emerald-500 animate-pulse' />
-            <span className='text-[10px] text-muted-foreground font-medium uppercase tracking-wider'>Live</span>
+          <div className='w-2 h-2 rounded-full bg-emerald-500 animate-pulse' />
+          <span className='text-[10px] text-muted-foreground font-medium uppercase tracking-wider'>Live</span>
         </div>
-      </GlassCardHeader>
-      <GlassCardContent className='p-2 pt-4 grid gap-4'>
+      }
+      className='overflow-hidden'
+    >
+      <div className='grid gap-2'>
         <MetricItem
           label="CPU Usage"
           value={cpuParams.val}
           color={cpuParams.color}
           icon={Cpu}
           details={
-             <span className="text-[10px] opacity-70">
-                Process Load
-             </span>
+            <span className="text-[10px] opacity-70">
+              Process Load
+            </span>
           }
         />
         <MetricItem
@@ -141,14 +140,14 @@ export function SystemLoadCard() {
           color={memParams.color}
           icon={Zap} // Using Zap as a generic power/active icon
           details={
-            <div className='flex gap-1'>
-               <span>{formatBytes(metrics?.used_memory || 0)}</span>
-               <span className='opacity-50'>/</span>
-               <span>{formatBytes(metrics?.total_memory || 0)}</span>
+            <div className='flex gap-1 font-mono text-[10px]'>
+              <span>{formatBytes(metrics?.used_memory || 0)}</span>
+              <span className='opacity-50'>/</span>
+              <span>{formatBytes(metrics?.total_memory || 0)}</span>
             </div>
           }
         />
-      </GlassCardContent>
-    </GlassCard>
+      </div>
+    </DashboardPanel>
   )
 }

@@ -4,6 +4,7 @@ import { formatBytes, cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Database, AlertTriangle, CheckCircle2 } from 'lucide-react'
+import { DashboardPanel } from './dashboard-panel'
 
 export function WALMonitorList() {
     const { data } = useQuery({
@@ -14,15 +15,6 @@ export function WALMonitorList() {
 
     const monitors = data?.monitors || []
 
-    if (monitors.length === 0) {
-        return (
-            <div className='flex h-[100px] items-center justify-center rounded-md border border-dashed text-sm text-muted-foreground'>
-                No active WAL monitors found.
-            </div>
-        )
-    }
-
-    // Helper to get badge variant based on threshold status
     const getWalSizeBadgeVariant = (status: 'OK' | 'WARNING' | 'ERROR' | null) => {
         switch (status) {
             case 'OK':
@@ -39,79 +31,87 @@ export function WALMonitorList() {
     const getBorderColor = (status: 'OK' | 'WARNING' | 'ERROR' | null) => {
         switch (status) {
             case 'OK':
-                return 'border-l-4 border-l-green-500'
+                return 'border-l-2 border-l-emerald-500'
             case 'WARNING':
-                return 'border-l-4 border-l-yellow-500'
+                return 'border-l-2 border-l-amber-500'
             case 'ERROR':
-                return 'border-l-4 border-l-red-500'
+                return 'border-l-2 border-l-rose-500'
             default:
                 return ''
         }
     }
 
-     const getStatusIcon = (status: string) => {
-        if (status === 'ACTIVE') return <CheckCircle2 className="h-4 w-4 text-green-500" />
-        return <AlertTriangle className="h-4 w-4 text-red-500" />
+    const getStatusIcon = (status: string) => {
+        if (status === 'ACTIVE') return <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
+        return <AlertTriangle className="h-3.5 w-3.5 text-rose-500" />
     }
 
     return (
-        <ScrollArea className='h-[300px] pr-4'>
-            <div className='space-y-4'>
-                {monitors.map((monitor) => (
-                    <div
-                        key={monitor.id}
-                        className={cn(
-                            'flex items-center justify-between rounded-lg border p-3 hover:bg-muted/50 transition-colors',
-                            getBorderColor(monitor.wal_threshold_status),
-                            (monitor.wal_threshold_status === 'ERROR' || monitor.status === 'ERROR') && "animate-pulse bg-red-500/5"
-                        )}
-                    >
-                        <div className='flex items-center gap-3'>
-                            <div className='flex h-9 w-9 items-center justify-center rounded-full bg-primary/10'>
-                                <Database className='h-4 w-4 text-primary' />
-                            </div>
-                            <div>
-                                <div className='flex items-center gap-2'>
-                                    <span className='font-medium text-sm'>
-                                        {monitor.source?.name || `Source #${monitor.source_id}`}
-                                    </span>
-                                    {getStatusIcon(monitor.status || 'UNKNOWN')}
-                                </div>
-                                <div className='flex items-center gap-2 text-xs text-muted-foreground'>
-                                    <span className="font-mono">{monitor.wal_lsn || 'No LSN'}</span>
-                                </div>
-                            </div>
+        <DashboardPanel
+            title="WAL Replication Monitor"
+            description="Real-time status of replication slots"
+            className="h-full min-h-[300px]"
+            noPadding
+        >
+            <ScrollArea className='h-full'>
+                <div className='flex flex-col'>
+                    {monitors.length === 0 && (
+                        <div className='flex h-[100px] items-center justify-center text-xs text-muted-foreground'>
+                            No active WAL monitors found.
                         </div>
+                    )}
+                    {monitors.map((monitor) => (
+                        <div
+                            key={monitor.id}
+                            className={cn(
+                                'flex items-center justify-between p-3 border-b border-border/40 hover:bg-muted/30 transition-colors',
+                                getBorderColor(monitor.wal_threshold_status),
+                                (monitor.wal_threshold_status === 'ERROR' || monitor.status === 'ERROR') && "bg-rose-500/5"
+                            )}
+                        >
+                            <div className='flex items-center gap-3'>
+                                <div className='flex h-8 w-8 items-center justify-center rounded-sm bg-primary/10'>
+                                    <Database className='h-4 w-4 text-primary' />
+                                </div>
+                                <div>
+                                    <div className='flex items-center gap-2'>
+                                        <span className='font-medium text-sm'>
+                                            {monitor.source?.name || `Source #${monitor.source_id}`}
+                                        </span>
+                                        {getStatusIcon(monitor.status || 'UNKNOWN')}
+                                    </div>
+                                    <div className='flex items-center gap-2 text-[10px] text-muted-foreground font-mono mt-0.5'>
+                                        <span>{monitor.wal_lsn || 'No LSN'}</span>
+                                    </div>
+                                </div>
+                            </div>
 
-                        <div className='flex items-center gap-3 text-right'>
-                             <div className='flex flex-col items-end'>
-                                <span className='text-xs font-medium text-muted-foreground mb-1'>Lag</span>
-                                <Badge variant="outline" className="font-mono text-xs">
-                                     {formatBytes(monitor.replication_lag_bytes || 0)}
-                                </Badge>
-                             </div>
-                             
-                             <div className='flex flex-col items-end'>
-                                <span className='text-xs font-medium text-muted-foreground mb-1'>Size</span>
-                                <Badge 
-                                    variant={getWalSizeBadgeVariant(monitor.wal_threshold_status)}
-                                    className={
-                                        monitor.wal_threshold_status === 'OK' 
-                                            ? 'bg-green-500/15 text-green-700 hover:bg-green-500/25 border-green-500/20' 
-                                            : monitor.wal_threshold_status === 'WARNING'
-                                            ? 'bg-yellow-500/15 text-yellow-700 hover:bg-yellow-500/25 border-yellow-500/20'
-                                            : monitor.wal_threshold_status === 'ERROR'
-                                            ? 'bg-red-500/15 text-red-700 hover:bg-red-500/25 border-red-500/20'
-                                            : ''
-                                    }
-                                >
-                                    {monitor.total_wal_size || '0 B'}
-                                </Badge>
-                             </div>
+                            <div className='flex items-center gap-4 text-right'>
+                                <div className='flex flex-col items-end'>
+                                    <span className='text-[10px] font-medium text-muted-foreground'>Lag</span>
+                                    <span className="font-mono text-xs">
+                                        {formatBytes(monitor.replication_lag_bytes || 0)}
+                                    </span>
+                                </div>
+
+                                <div className='flex flex-col items-end'>
+                                    <span className='text-[10px] font-medium text-muted-foreground'>Size</span>
+                                    <Badge
+                                        variant={getWalSizeBadgeVariant(monitor.wal_threshold_status)}
+                                        className={cn("font-mono text-[10px] h-5 px-1.5",
+                                            monitor.wal_threshold_status === 'OK' && "bg-emerald-500/15 text-emerald-500 hover:bg-emerald-500/25 border-emerald-500/20",
+                                            monitor.wal_threshold_status === 'WARNING' && "bg-amber-500/15 text-amber-500 hover:bg-amber-500/25 border-amber-500/20",
+                                            monitor.wal_threshold_status === 'ERROR' && "bg-rose-500/15 text-rose-500 hover:bg-rose-500/25 border-rose-500/20"
+                                        )}
+                                    >
+                                        {monitor.total_wal_size || '0 B'}
+                                    </Badge>
+                                </div>
+                            </div>
                         </div>
-                    </div>
-                ))}
-            </div>
-        </ScrollArea>
+                    ))}
+                </div>
+            </ScrollArea>
+        </DashboardPanel>
     )
 }
