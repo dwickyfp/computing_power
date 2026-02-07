@@ -40,7 +40,7 @@ export function SourceDetailsMetrics({
     isPublicationLoading,
     isReplicationLoading
 }: SourceDetailsMetricsProps) {
-    const isHealthy = data?.status === 'active' || data?.status === 'streaming'
+    const isHealthy = data?.status?.toLowerCase() === 'active' || data?.status?.toLowerCase() === 'streaming'
     const lagBytes = data?.replication_lag_bytes || 0
 
     // Grafana-style Panel Component
@@ -158,7 +158,7 @@ export function SourceDetailsMetrics({
                 title="Publication"
                 className="col-span-1 md:col-span-2 lg:col-span-2"
                 headerAction={
-                    <Badge variant={source.is_publication_enabled ? "default" : "secondary"} className={cn("h-4 px-1.5 text-[10px]", source.is_publication_enabled && "bg-emerald-600 hover:bg-emerald-700")}>
+                    <Badge variant={source.is_publication_enabled ? "default" : "secondary"} className={cn("h-4 px-1.5 text-[10px]", source.is_publication_enabled && "bg-emerald-600 hover:bg-emerald-700 text-white")}>
                         {source.is_publication_enabled ? "Active" : "Inactive"}
                     </Badge>
                 }
@@ -188,7 +188,7 @@ export function SourceDetailsMetrics({
                 title="Replication Slot"
                 className="col-span-1 md:col-span-2 lg:col-span-3"
                 headerAction={
-                    <Badge variant={source.is_replication_enabled ? "default" : "secondary"} className={cn("h-4 px-1.5 text-[10px]", source.is_replication_enabled && "bg-emerald-600 hover:bg-emerald-700")}>
+                    <Badge variant={source.is_replication_enabled ? "default" : "secondary"} className={cn("h-4 px-1.5 text-[10px]", source.is_replication_enabled && "bg-emerald-600 hover:bg-emerald-700 text-white")}>
                         {source.is_replication_enabled ? "Active" : "Inactive"}
                     </Badge>
                 }
