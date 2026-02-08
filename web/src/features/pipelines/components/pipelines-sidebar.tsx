@@ -13,7 +13,7 @@ import { useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
 import { pipelinesRepo, Pipeline } from '@/repo/pipelines'
 import { sourcesRepo, SourceDetailResponse } from '@/repo/sources'
 import { Link, useParams } from '@tanstack/react-router'
-import { Database, Folder, Table, Layers, Workflow, Loader2, Search, RefreshCw } from "lucide-react"
+import { Database, Folder, Table, Layers, Workflow, Loader2, Search, RefreshCw, X } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useState, useMemo, useEffect } from "react"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -30,7 +30,7 @@ function HighlightedText({ text, highlight }: { text: string, highlight: string 
         <span className="truncate">
             {parts.map((part, i) => (
                 part.toLowerCase() === highlight.toLowerCase() ? (
-                    <span key={i} className="bg-blue-100 text-blue-800 rounded-sm px-0.5 font-medium">
+                    <span key={i} className="bg-[#003e9b] text-white px-0.5 font-medium">
                         {part}
                     </span>
                 ) : (
@@ -64,7 +64,7 @@ function TableItem({ name, isActive, highlight, type, sourceTable }: {
                         isActive && "bg-accent text-accent-foreground font-medium"
                     )}>
                         <Table className="h-3 w-3 shrink-0" />
-                        <HighlightedText text={name} highlight={highlight} />
+                        <HighlightedText text={name.toUpperCase()} highlight={highlight} />
                     </div>
                 </HoverCardTrigger>
                 <HoverCardContent className="w-80" side="right" align="start">
@@ -399,11 +399,21 @@ export function PipelinesSidebar() {
                     <div className="relative flex-1">
                         <Search className="absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
                         <Input
-                            placeholder="Search pipelines, sources, tables..."
-                            className="h-8 pl-8 text-xs bg-sidebar-accent/50 border-sidebar-border"
+                            placeholder="Search"
+                            className="h-8 pl-8 pr-8 text-xs bg-sidebar-accent/50 border-sidebar-border focus-visible:!border-[#3581f2] focus-visible:!ring-[#3581f2] focus-visible:!ring-1"
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
                         />
+                        {searchQuery && (
+                            <button
+                                onClick={() => setSearchQuery("")}
+                                className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors z-10"
+                                title="Clear search"
+                                type="button"
+                            >
+                                <X className="h-3.5 w-3.5" />
+                            </button>
+                        )}
                     </div>
                     <Button
                         variant="ghost"
