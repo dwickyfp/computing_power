@@ -234,7 +234,7 @@ CREATE TABLE IF NOT EXISTS job_metrics_monitoring(
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
-ALTER TABLE job_metrics_monitoring ADD CONSTRAINT uq_job_metrics_monitoring_key_job_scheduler UNIQUE (key_job_scheduler);
+-- ALTER TABLE job_metrics_monitoring ADD CONSTRAINT uq_job_metrics_monitoring_key_job_scheduler UNIQUE (key_job_scheduler);
 
 
 

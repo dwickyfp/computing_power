@@ -125,7 +125,7 @@ export function PipelineFlowTab({ pipeline }: PipelineFlowTabProps) {
       </div>
 
       {/* React Flow Canvas */}
-      <div className="flex-1">
+      <div className="flex-1 [&_.react-flow__controls]:bg-background [&_.react-flow__controls]:border-border [&_.react-flow__controls]:shadow-md [&_.react-flow__controls-button]:bg-background [&_.react-flow__controls-button]:border-border [&_.react-flow__controls-button]:fill-foreground [&_.react-flow__controls-button:hover]:bg-muted">
         <ReactFlow<Node<PipelineNodeData>>
           nodes={nodes}
           edges={edges}
@@ -136,7 +136,7 @@ export function PipelineFlowTab({ pipeline }: PipelineFlowTabProps) {
           attributionPosition="bottom-right"
           proOptions={{ hideAttribution: true }}
         >
-          <Background color="#e2e8f0" gap={16} />
+          <Background className="!bg-background" color="var(--border)" gap={16} />
           <Controls showInteractive={false} />
         </ReactFlow>
       </div>
