@@ -13,7 +13,7 @@ import { PipelineDataFlow } from '@/features/pipelines/components/pipeline-data-
 import { Button } from '@/components/ui/button'
 // import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs' // Replaced with CustomTabs
 import { CustomTabs, CustomTabsContent, CustomTabsList, CustomTabsTrigger } from '@/components/ui/custom-tabs'
-import { RefreshCcw, GitBranch, Table2 } from 'lucide-react'
+import { RefreshCcw, GitBranch, Table2, Database, ArrowRight } from 'lucide-react'
 import { toast } from 'sonner'
 import { useState } from 'react'
 import { cn } from '@/lib/utils'
@@ -121,48 +121,57 @@ export default function PipelineDetailsPage() {
                 </div>
             </Header>
 
-            <Main className='flex flex-1 flex-col gap-4 sm:gap-6'>
-                <Breadcrumb>
-                    <BreadcrumbList>
-                        <BreadcrumbItem>
-                            <BreadcrumbLink asChild>
-                                <Link to="/pipelines">Pipelines</Link>
-                            </BreadcrumbLink>
-                        </BreadcrumbItem>
-                        <BreadcrumbSeparator />
-                        <BreadcrumbItem>
-                            <BreadcrumbPage>{pipeline?.name || 'Loading...'}</BreadcrumbPage>
-                        </BreadcrumbItem>
-                    </BreadcrumbList>
-                </Breadcrumb>
+            <Main className='flex flex-1 flex-col gap-4'>
+                {/* Redesigned Compact Header */}
+                <div className="flex flex-col gap-1">
+                    <Breadcrumb className="mb-1">
+                        <BreadcrumbList>
+                            <BreadcrumbItem>
+                                <BreadcrumbLink asChild>
+                                    <Link to="/pipelines">Pipelines</Link>
+                                </BreadcrumbLink>
+                            </BreadcrumbItem>
+                            <BreadcrumbSeparator />
+                            <BreadcrumbItem>
+                                <BreadcrumbPage>{pipeline?.name || 'Loading...'}</BreadcrumbPage>
+                            </BreadcrumbItem>
+                        </BreadcrumbList>
+                    </Breadcrumb>
 
-                {/* Header Section */}
-                <div className="flex items-center gap-4">
-                    <div className="space-y-1">
-                        <h2 className='text-2xl font-bold tracking-tight'>
-                            {isPipelineLoading ? <Skeleton className="h-8 w-48" /> : pipeline?.name}
-                        </h2>
-                        <div className="flex items-center gap-2 text-muted-foreground text-sm">
-                            {isPipelineLoading ? <Skeleton className="h-4 w-32" /> : (
-                                <>
-                                    <span>{pipeline?.source?.name}</span>
-                                    <span>→</span>
-                                    <span>{destinationsSummary}</span>
-                                </>
-                            )}
+                    <div className="flex items-start justify-between gap-4">
+                        <div className="space-y-1">
+                            <h2 className='text-3xl font-bold tracking-tight dark:text-[#d5dae4]'>
+                                {isPipelineLoading ? <Skeleton className="h-9 w-64" /> : pipeline?.name}
+                            </h2>
+                            <div className="flex items-center gap-2 text-muted-foreground text-sm">
+                                {isPipelineLoading ? <Skeleton className="h-4 w-48" /> : (
+                                    <div className="inline-flex items-center gap-2 rounded-sm bg-secondary/50 px-3 py-1.5 text-xs font-medium text-[#7b828f] ring-1 ring-inset ring-gray-500/10 dark:bg-[#0f161d] dark:text-[#7b828f]">
+                                        <div className="flex items-center gap-1.5 opacity-90 transition-opacity hover:opacity-100">
+                                            <Database className="h-3.5 w-3.5" />
+                                            <span>{pipeline?.source?.name}</span>
+                                        </div>
+                                        <ArrowRight className="h-3 w-3 opacity-40" />
+                                        <div className="flex items-center gap-1.5 opacity-90 transition-opacity hover:opacity-100">
+                                            <Database className="h-3.5 w-3.5" />
+                                            <span>{destinationsSummary}</span>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
                         </div>
-                    </div>
-                    <div className="ml-auto flex items-center gap-2">
-                        {pipeline && <PipelineStatusSwitch pipeline={pipeline} />}
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={handleRefresh}
-                            disabled={isRefreshing || isLoading}
-                        >
-                            <RefreshCcw className={cn("h-4 w-4 mr-2", isRefreshing && "animate-spin")} />
-                            Refresh
-                        </Button>
+                        <div className="flex items-center gap-3 pt-1">
+                            {pipeline && <PipelineStatusSwitch pipeline={pipeline} />}
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={handleRefresh}
+                                disabled={isRefreshing || isLoading}
+                                className="h-9"
+                            >
+                                <RefreshCcw className={cn("h-4 w-4 mr-2", isRefreshing && "animate-spin")} />
+                                Refresh
+                            </Button>
+                        </div>
                     </div>
                 </div>
 
@@ -210,7 +219,7 @@ export default function PipelineDetailsPage() {
                         )}
                     </CustomTabsContent>
                 </CustomTabs>
-            </Main>
+            </Main >
         </>
     )
 }
