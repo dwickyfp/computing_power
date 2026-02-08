@@ -99,14 +99,21 @@ export function TableFilterCard({
 
     // Load filters from sync_config or reset when table changes
     useEffect(() => {
-        if (open && table?.sync_configs?.[0]?.filter_sql) {
-            setFilters(parseFilterSql(table.sync_configs[0].filter_sql))
-        } else if (!open) {
-            // Keep filters while open even if table name changes (shouldn't happen in this view)
+        if (!open) {
+            return
+        }
+
+        // Use sync_config (singular) passed from parent, or fallback to first in array
+        const syncConfig = (table as any)?.sync_config || table?.sync_configs?.[0]
+        const filterSql = syncConfig?.filter_sql
+
+        if (filterSql) {
+            setFilters(parseFilterSql(filterSql))
         } else {
+            // Clear filters when there's no filter SQL or switching to a different table/destination
             setFilters([])
         }
-    }, [table?.table_name, table?.sync_configs, open])
+    }, [table?.table_name, (table as any)?.sync_config?.id, (table as any)?.sync_config?.filter_sql, table?.sync_configs?.[0]?.id, table?.sync_configs?.[0]?.filter_sql, open])
 
     const columns = table?.columns || []
 

@@ -131,6 +131,33 @@ async def delete_table_sync(
     service.delete_table_sync(pipeline_id, pipeline_destination_id, table_name)
 
 
+@router.delete(
+    "/{pipeline_id}/destinations/{pipeline_destination_id}/table-syncs/{sync_config_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Remove specific table sync by ID",
+    description="Remove a specific table synchronization configuration by its ID",
+)
+async def delete_table_sync_by_id(
+    pipeline_id: int = Path(..., description="Pipeline ID"),
+    pipeline_destination_id: int = Path(..., description="Pipeline Destination ID"),
+    sync_config_id: int = Path(..., description="Sync configuration ID to remove"),
+    service: PipelineService = Depends(get_pipeline_service),
+) -> None:
+    """
+    Remove specific table sync configuration by ID.
+
+    This endpoint allows precise deletion of individual sync configurations,
+    which is essential for managing multiple branches (1-to-N syncs) of the same source table.
+
+    Args:
+        pipeline_id: Pipeline identifier
+        pipeline_destination_id: Pipeline destination identifier
+        sync_config_id: Sync configuration ID to remove
+        service: Pipeline service instance
+    """
+    service.delete_table_sync_by_id(pipeline_id, pipeline_destination_id, sync_config_id)
+
+
 @router.post(
     "/{pipeline_id}/destinations/{pipeline_destination_id}/tables/{table_name}/init",
     response_model=dict,

@@ -1,5 +1,4 @@
 import { ColumnDef } from '@tanstack/react-table'
-import { Badge } from '@/components/ui/badge'
 import { Pipeline } from '@/repo/pipelines'
 import { useNavigate } from '@tanstack/react-router'
 import { Button } from '@/components/ui/button'
@@ -10,6 +9,7 @@ import { Switch } from '@/components/ui/switch'
 import { pipelinesRepo } from '@/repo/pipelines'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
+import { cn } from '@/lib/utils'
 
 
 export const pipelineColumns: ColumnDef<Pipeline>[] = [
@@ -53,18 +53,42 @@ export const pipelineColumns: ColumnDef<Pipeline>[] = [
     header: 'Status',
     cell: ({ row }) => {
       const status = row.getValue('status') as string
-      const isStart = status === 'START'
+      const isRunning = status === 'START'
       const isRefresh = status === 'REFRESH'
+      const isPaused = status === 'PAUSE'
+
+      // Determine display text and styling
+      let displayText = status
+      let dotColor = 'bg-gray-400 dark:bg-gray-500'
+      let bgColor = 'bg-gray-50 dark:bg-gray-900/50'
+      let textColor = 'text-gray-700 dark:text-gray-300'
+
+      if (isRunning) {
+        displayText = 'Running'
+        dotColor = 'bg-green-500 dark:bg-green-400'
+        bgColor = 'bg-green-50 dark:bg-green-950/50'
+        textColor = 'text-green-700 dark:text-green-400'
+      } else if (isRefresh) {
+        displayText = 'Refreshing'
+        dotColor = 'bg-blue-500 dark:bg-blue-400'
+        bgColor = 'bg-blue-50 dark:bg-blue-950/50'
+        textColor = 'text-blue-700 dark:text-blue-400'
+      } else if (isPaused) {
+        displayText = 'Paused'
+        dotColor = 'bg-gray-400 dark:bg-gray-500'
+        bgColor = 'bg-gray-50 dark:bg-gray-900/50'
+        textColor = 'text-gray-600 dark:text-gray-400'
+      }
+
       return (
-        <Badge
-          variant={isStart || isRefresh ? 'default' : 'secondary'}
-          className={
-            isStart ? 'bg-green-500 hover:bg-green-600 dark:text-white' :
-              isRefresh ? 'bg-blue-500 hover:bg-blue-600 dark:text-white' : ''
-          }
-        >
-          {isStart ? 'RUNNING' : status}
-        </Badge>
+        <div className={cn(
+          'inline-flex items-center gap-2 px-2.5 py-1 rounded-md text-sm font-medium',
+          bgColor,
+          textColor
+        )}>
+          <span className={cn('h-2 w-2 rounded-full', dotColor)} />
+          {displayText}
+        </div>
       )
     },
     filterFn: (row, id, value) => {

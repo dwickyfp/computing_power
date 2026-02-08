@@ -1391,6 +1391,49 @@ class PipelineService:
             self.db.delete(sync)
             self.db.commit()
 
+    def delete_table_sync_by_id(
+        self, pipeline_id: int, pipeline_destination_id: int, sync_config_id: int
+    ) -> None:
+        """
+        Remove a specific table sync configuration by ID.
+
+        Args:
+            pipeline_id: Pipeline identifier
+            pipeline_destination_id: Pipeline destination identifier
+            sync_config_id: Sync configuration ID to remove
+        """
+        from app.domain.models.pipeline import PipelineDestinationTableSync
+        from app.core.exceptions import EntityNotFoundError
+
+        # Validate pipeline destination exists
+        pipeline_dest = (
+            self.db.query(PipelineDestination)
+            .filter_by(id=pipeline_destination_id, pipeline_id=pipeline_id)
+            .first()
+        )
+        if not pipeline_dest:
+            raise EntityNotFoundError(
+                entity_type="PipelineDestination", entity_id=pipeline_destination_id
+            )
+
+        # Find and delete the specific sync by ID
+        sync = (
+            self.db.query(PipelineDestinationTableSync)
+            .filter_by(
+                id=sync_config_id,
+                pipeline_destination_id=pipeline_destination_id
+            )
+            .first()
+        )
+
+        if not sync:
+            raise EntityNotFoundError(
+                entity_type="PipelineDestinationTableSync", entity_id=sync_config_id
+            )
+
+        self.db.delete(sync)
+        self.db.commit()
+
     def init_snowflake_table(
         self, pipeline_id: int, pipeline_destination_id: int, table_name: str
     ) -> dict:

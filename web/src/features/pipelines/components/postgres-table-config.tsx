@@ -7,6 +7,16 @@ import { Plus, Loader2, AlertCircle, Database } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { TableBranchNode } from './table-branch-node'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 
 interface PostgresTableConfigProps {
   tables: TableWithSyncInfo[]
@@ -28,6 +38,11 @@ export function PostgresTableConfig({
   onEditTargetName
 }: PostgresTableConfigProps) {
   const [processingTable, setProcessingTable] = useState<string | null>(null)
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
+  const [pendingDelete, setPendingDelete] = useState<{
+    table: TableWithSyncInfo
+    syncConfig: TableSyncConfig
+  } | null>(null)
 
   const handleToggleSync = async (table: TableWithSyncInfo) => {
     const isSynced = table.sync_configs && table.sync_configs.length > 0
@@ -81,32 +96,28 @@ export function PostgresTableConfig({
   }
 
   const handleDeleteBranch = async (table: TableWithSyncInfo, syncConfig: TableSyncConfig) => {
-    if (!confirm(`Are you sure you want to remove the sync to ${syncConfig.table_name_target}?`)) return
+    // Open confirmation modal instead of native confirm
+    setPendingDelete({ table, syncConfig })
+    setDeleteConfirmOpen(true)
+  }
 
+  const confirmDelete = async () => {
+    if (!pendingDelete) return
+
+    const { table, syncConfig } = pendingDelete
     setProcessingTable(table.table_name)
-    try {
-      // We need a delete endpoint that accepts ID or identifying composite key.
-      // Current repo.deleteTableSync uses table_name. 
-      // We updated backend schema but delete endpoint might still be table_name based?
-      // Let's check backend delete implementation.
-      // Backend: delete_table_sync(..., table_name) -> deletes specific sync by table_name? 
-      // Wait, if we have multiple syncs for same source, deleting by source table_name is ambiguous.
-      // We need delete by ID.
-      // FIXME: Backend delete needs update or we use ID.
-      // Assuming for now valid API call; might need quick fix if backend delete is singular.
-      // Backend implementation looked like: filter_by(table_name=table_name).first(). delete(). 
-      // This will delete *one* of them (arbitrary).
-      // We need to fix backend delete to be by ID. 
-      // I will assume for this step I can call a delete with ID or I will fix it in next step.
+    setDeleteConfirmOpen(false)
 
-      // Temporary fallback: If only 1 sync, use table_name. 
-      await tableSyncRepo.deleteTableSync(pipelineId, pipelineDestinationId, syncConfig.table_name)
+    try {
+      // Use the sync config ID to ensure we delete the correct branch
+      await tableSyncRepo.deleteTableSyncById(pipelineId, pipelineDestinationId, syncConfig.id)
       toast.success('Branch removed')
       onRefresh()
     } catch (error) {
       toast.error('Failed to remove branch')
     } finally {
       setProcessingTable(null)
+      setPendingDelete(null)
     }
   }
 
@@ -220,6 +231,31 @@ export function PostgresTableConfig({
           </div>
         )}
       </div>
+
+      {/* Delete Confirmation Modal */}
+      <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Table Sync</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to remove the sync to {' '}
+              <span className="font-medium text-foreground">
+                {pendingDelete?.syncConfig.table_name_target}
+              </span>
+              {' '}? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmDelete}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

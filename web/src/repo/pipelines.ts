@@ -133,7 +133,7 @@ export interface TableSyncConfig {
   table_name_target: string
   custom_sql: string | null
   filter_sql: string | null
-  
+
   is_exists_table_landing: boolean
   is_exists_stream: boolean
   is_exists_task: boolean
@@ -201,6 +201,16 @@ export const tableSyncRepo = {
   ): Promise<void> => {
     await api.delete(
       `/pipelines/${pipelineId}/destinations/${pipelineDestinationId}/tables/${tableName}`
+    )
+  },
+
+  deleteTableSyncById: async (
+    pipelineId: number,
+    pipelineDestinationId: number,
+    syncConfigId: number
+  ): Promise<void> => {
+    await api.delete(
+      `/pipelines/${pipelineId}/destinations/${pipelineDestinationId}/table-syncs/${syncConfigId}`
     )
   },
 
