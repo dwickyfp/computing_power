@@ -62,7 +62,7 @@ export function TableBranchNode({
                         className={cn(
                             "h-6 px-1.5 text-[10px] gap-1",
                             syncConfig.filter_sql
-                                ? "text-blue-600 bg-blue-50 hover:bg-blue-100 hover:text-blue-700"
+                                ? "text-blue-600 bg-blue-50 hover:bg-blue-100 hover:text-blue-700 dark:text-blue-400 dark:bg-blue-950/50 dark:hover:bg-blue-950/70 dark:hover:text-blue-300"
                                 : "text-muted-foreground hover:text-foreground hover:bg-muted"
                         )}
                         title="Filter Data"
@@ -78,7 +78,7 @@ export function TableBranchNode({
                         className={cn(
                             "h-6 px-1.5 text-[10px] gap-1",
                             syncConfig.custom_sql
-                                ? "text-purple-600 bg-purple-50 hover:bg-purple-100 hover:text-purple-700"
+                                ? "text-purple-600 bg-purple-50 hover:bg-purple-100 hover:text-purple-700 dark:text-purple-400 dark:bg-purple-950/50 dark:hover:bg-purple-950/70 dark:hover:text-purple-300"
                                 : "text-muted-foreground hover:text-foreground hover:bg-muted"
                         )}
                         title="Custom SQL Transformation"

@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils'
 
 import 'ace-builds/src-noconflict/mode-mysql'
 import 'ace-builds/src-noconflict/theme-tomorrow'
+import 'ace-builds/src-noconflict/theme-tomorrow_night'
 import 'ace-builds/src-noconflict/ext-language_tools'
 
 interface TableCustomSqlCardProps {
@@ -28,6 +29,21 @@ export function TableCustomSqlCard({
 }: TableCustomSqlCardProps) {
     const [sql, setSql] = useState('')
     const [isSaving, setIsSaving] = useState(false)
+    const [isDarkMode, setIsDarkMode] = useState(document.documentElement.classList.contains('dark'))
+
+    // Watch for theme changes
+    useEffect(() => {
+        const observer = new MutationObserver(() => {
+            setIsDarkMode(document.documentElement.classList.contains('dark'))
+        })
+
+        observer.observe(document.documentElement, {
+            attributes: true,
+            attributeFilter: ['class']
+        })
+
+        return () => observer.disconnect()
+    }, [])
 
     useEffect(() => {
         if (table && table.sync_config?.custom_sql) {
@@ -111,7 +127,7 @@ export function TableCustomSqlCard({
                     <AceEditor
                         placeholder={`SELECT * FROM ${table.table_name}`}
                         mode="mysql"
-                        theme="tomorrow"
+                        theme={isDarkMode ? 'tomorrow_night' : 'tomorrow'}
                         name="custom-sql-editor"
                         onChange={setSql}
                         fontSize={14}
