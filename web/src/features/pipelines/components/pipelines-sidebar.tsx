@@ -12,7 +12,7 @@ import {
 import { useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
 import { pipelinesRepo, Pipeline } from '@/repo/pipelines'
 import { sourcesRepo, SourceDetailResponse } from '@/repo/sources'
-import { Link, useParams } from '@tanstack/react-router'
+import { Link, useParams, useNavigate } from '@tanstack/react-router'
 import { Database, Folder, Table, Layers, Workflow, Loader2, Search, RefreshCw, X } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useState, useMemo, useEffect } from "react"
@@ -233,6 +233,7 @@ function PipelineItem({ pipeline, sourceDetails, checkExpanded, searchQuery }: {
 export function PipelinesSidebar() {
     const { pipelineId } = useParams({ strict: false }) as { pipelineId?: string }
     const currentId = pipelineId ? parseInt(pipelineId) : null
+    const navigate = useNavigate()
     const [searchQuery, setSearchQuery] = useState("")
     const [expandedItems, setExpandedItems] = useState<string[]>([])
     const [isManualRefreshing, setIsManualRefreshing] = useState(false)
@@ -472,10 +473,25 @@ export function PipelinesSidebar() {
                         {filteredPipelines.map(pipeline => (
                             <AccordionItem key={pipeline.id} value={`pipeline-${pipeline.id}`} className="border-none mb-1">
                                 <div className="group relative">
-                                    <AccordionTrigger chevronPosition="left" className={cn(
-                                        "justify-start py-2 px-2 pr-8 gap-1.5 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground hover:no-underline rounded-md text-sm font-semibold flex-1",
-                                        currentId === pipeline.id && "bg-[#002c6e] text-[#5999f7] hover:bg-[#002c6e] hover:text-[#5999f7]"
-                                    )}>
+                                    <AccordionTrigger
+                                        chevronPosition="left"
+                                        className={cn(
+                                            "justify-start py-2 px-2 pr-8 gap-1.5 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground hover:no-underline rounded-md text-sm font-semibold flex-1",
+                                            currentId === pipeline.id && "bg-[#002c6e] text-[#5999f7] hover:bg-[#002c6e] hover:text-[#5999f7]"
+                                        )}
+                                        onClick={(e) => {
+                                            // If clicking on a non-active pipeline, navigate to it instead of expanding
+                                            if (currentId !== pipeline.id) {
+                                                e.preventDefault()
+                                                e.stopPropagation()
+                                                navigate({
+                                                    to: '/pipelines/$pipelineId',
+                                                    params: { pipelineId: pipeline.id.toString() }
+                                                })
+                                            }
+                                            // If it's already active, let the accordion expand/collapse normally
+                                        }}
+                                    >
                                         <div className="flex items-center gap-2 overflow-hidden flex-1">
                                             <Workflow className={cn("h-4 w-4 shrink-0", currentId === pipeline.id ? "text-[#5999f7]" : "text-primary")} />
                                             <HighlightedText text={pipeline.name} highlight={searchQuery} />
