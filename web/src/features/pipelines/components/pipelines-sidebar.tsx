@@ -393,47 +393,66 @@ export function PipelinesSidebar() {
 
     return (
         <div className="h-full flex flex-col bg-sidebar border-r border-sidebar-border">
-            {/* Header: Search & Refresh */}
-            <div className="p-3 border-b border-sidebar-border space-y-3">
-                <div className="flex items-center gap-2">
-                    <div className="relative flex-1">
-                        <Search className="absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-                        <Input
-                            placeholder="Search"
-                            className="h-8 pl-8 pr-8 text-xs bg-sidebar-accent/50 border-sidebar-border focus-visible:!border-[#3581f2] focus-visible:!ring-[#3581f2] focus-visible:!ring-1"
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
-                        />
-                        {searchQuery && (
-                            <button
-                                onClick={() => setSearchQuery("")}
-                                className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors z-10"
-                                title="Clear search"
-                                type="button"
-                            >
-                                <X className="h-3.5 w-3.5" />
-                            </button>
-                        )}
+            {/* Header: Title & Branding */}
+            <div className="px-4 pt-4 pb-0">
+                <h1 className="text-xl font-bold text-foreground mb-2">Pipelines Explorer</h1>
+                <div className="flex items-center gap-2 mb-4">
+                    <Workflow className="h-4 w-4 text-cyan-500" />
+                    <span className="text-sm font-semibold">
+                        <span className="text-cyan-500">ROSETTA</span>
+                        <span className="text-muted-foreground"> CATALOG</span>
+                    </span>
+                </div>
+            </div>
+            {/* Pipelines Tab with Search */}
+            <div className="border-border">
+                <div className="px-4 pb-2">
+                    <h2 className="text-sm font-semibold text-[#3581f2] inline-block relative pb-2">
+                        Pipelines
+                        <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#3581f2]" />
+                    </h2>
+                </div>
+                <div className="p-3 pt-2">
+                    <div className="flex items-center gap-2">
+                        <div className="relative flex-1">
+                            <Search className="absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                            <Input
+                                placeholder="Search"
+                                className="h-8 pl-8 pr-8 text-xs bg-sidebar-accent/50 border-sidebar-border focus-visible:!border-[#3581f2] focus-visible:!ring-[#3581f2] focus-visible:!ring-1"
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                            />
+                            {searchQuery && (
+                                <button
+                                    onClick={() => setSearchQuery("")}
+                                    className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors z-10"
+                                    title="Clear search"
+                                    type="button"
+                                >
+                                    <X className="h-3.5 w-3.5" />
+                                </button>
+                            )}
+                        </div>
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                            onClick={() => {
+                                setIsManualRefreshing(true)
+                                queryClient.invalidateQueries({ queryKey: ['pipelines'] })
+                                queryClient.invalidateQueries({ queryKey: ['source-details'] })
+                                setTimeout(() => setIsManualRefreshing(false), 800)
+                            }}
+                            title="Refresh pipelines"
+                            disabled={isFetching || isManualRefreshing}
+                        >
+                            {isFetching || isManualRefreshing ? (
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                                <RefreshCw className="h-3.5 w-3.5" />
+                            )}
+                        </Button>
                     </div>
-                    <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 text-muted-foreground hover:text-foreground"
-                        onClick={() => {
-                            setIsManualRefreshing(true)
-                            queryClient.invalidateQueries({ queryKey: ['pipelines'] })
-                            queryClient.invalidateQueries({ queryKey: ['source-details'] })
-                            setTimeout(() => setIsManualRefreshing(false), 800)
-                        }}
-                        title="Refresh pipelines"
-                        disabled={isFetching || isManualRefreshing}
-                    >
-                        {isFetching || isManualRefreshing ? (
-                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                        ) : (
-                            <RefreshCw className="h-3.5 w-3.5" />
-                        )}
-                    </Button>
                 </div>
             </div>
 
