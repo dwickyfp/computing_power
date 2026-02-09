@@ -12,31 +12,29 @@
 # =============================================================================
 
 # =============================================================================
-# STAGE 1: RUST BUILDER
+# STAGE 1: COMPUTE DEPENDENCIES (PYTHON)
 # =============================================================================
-# Using nightly to support dependencies requiring rustc 1.88+
-FROM rustlang/rust:nightly-bookworm AS rust-builder
+FROM python:3.11-slim-bookworm AS compute-deps
 
 WORKDIR /app
 
-# Copy Cargo files first for dependency caching
-COPY Cargo.toml Cargo.lock ./
+# Install system dependencies
+# git: for removing git+ dependencies if needed, or installing from git
+# gcc, libpq-dev: for psycopg2
+# default-jre-headless: for JPype1 (Debezium)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
+    libpq-dev \
+    git \
+    default-jre-headless \
+    && rm -rf /var/lib/apt/lists/*
 
-# Create a dummy main.rs to build dependencies
-RUN mkdir -p src && echo "fn main() {}" > src/main.rs
+# Copy requirements
+COPY compute/requirements.txt ./
 
-# Build dependencies only (this layer will be cached)
-RUN cargo build --release && rm -rf src
+# Install dependencies
+RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
 
-# Copy actual source code and migrations (needed for include_str!)
-COPY src ./src
-COPY migrations ./migrations
-
-# Touch main.rs to ensure it gets rebuilt
-RUN touch src/main.rs
-
-# Build the actual application
-RUN cargo build --release
 
 # =============================================================================
 # STAGE 2: FRONTEND BUILDER
@@ -87,31 +85,35 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
 RUN uv sync --frozen --no-install-project
 
 # =============================================================================
-# STAGE 4: COMPUTE-NODE (RUST RUNTIME)
+# STAGE 4: COMPUTE-NODE (PYTHON RUNTIME)
 # =============================================================================
-FROM debian:bookworm-slim AS compute-node
+FROM python:3.11-slim-bookworm AS compute-node
 
 LABEL maintainer="Rosetta Team"
-LABEL description="Rosetta Compute Node - Rust Pipeline Manager"
+LABEL description="Rosetta Compute Node - Python Pipeline Manager"
 
 # Install runtime dependencies
+# libpq5: for psycopg2
+# default-jre-headless: for JPype1 (Debezium)
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates \
-    libssl3 \
     libpq5 \
+    default-jre-headless \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-# Copy built binary from rust-builder
-COPY --from=rust-builder /app/target/release/rosetta /app/rosetta
+# Copy installed python dependencies
+COPY --from=compute-deps /install /usr/local
 
-# Copy assets (fonts)
-COPY assets ./assets
+# Copy compute source code
+COPY compute/ ./compute/
+
+# Copy migrations
+COPY migrations ./migrations
 
 # Set environment variables
 ENV MODE=worker
-ENV RUST_LOG=info
+ENV PYTHONPATH=/app
 ENV TZ=Asia/Jakarta
 
 # Create non-root user for security
@@ -119,7 +121,7 @@ RUN useradd -m -u 1000 rosetta && chown -R rosetta:rosetta /app
 USER rosetta
 
 # Run the application
-CMD ["./rosetta"]
+CMD ["python", "-m", "compute.main"]
 
 # =============================================================================
 # STAGE 5: WEB (BACKEND + FRONTEND)
