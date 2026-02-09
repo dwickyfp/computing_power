@@ -23,8 +23,6 @@ export const createSqlCompleter = (
             const line = session.getLine(pos.row);
             const textBeforeCursor = line.substring(0, pos.column);
 
-            // Pattern: match qualified or simple identifiers ending with dot
-            // Matches: "a.", "reg.", "pg_pg_target_2.", "pg_pg_target_2.tbl_sales_region."
             const dotMatch = textBeforeCursor.match(/([a-zA-Z0-9_\-]+(?:\.[a-zA-Z0-9_\-]+)*)\.\s*$/);
 
             if (dotMatch) {
@@ -95,6 +93,7 @@ export const createSqlCompleter = (
                                 destinationCache[tableName] = columns;
                             }
                         } catch (e) {
+                            console.error("Fetch error:", e);
                         } finally {
                             if (onLoading) onLoading(false);
                         }
@@ -136,7 +135,7 @@ export const createSqlCompleter = (
                                     destinationCache[tableName] = columns;
                                 }
                             } catch (e) {
-                                console.error("DEBUG: Fetch error:", e);
+                                console.error("Fetch error:", e);
                             } finally {
                                 if (onLoading) onLoading(false);
                             }
