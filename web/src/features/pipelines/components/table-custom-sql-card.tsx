@@ -113,6 +113,17 @@ export function TableCustomSqlCard({
             langTools.keyWordCompleter
         ];
 
+        // --- Auto-trigger on dot (.) ---
+        const onAfterExec = (e: any) => {
+            if (e.command.name === "insertstring" && e.args === ".") {
+                editorInstance.execCommand("startAutocomplete");
+            }
+        };
+
+        editorInstance.commands.on("afterExec", onAfterExec);
+        return () => {
+            editorInstance.commands.off("afterExec", onAfterExec);
+        };
     }, [table, destinationId, destinationName, editorInstance]);
 
 
