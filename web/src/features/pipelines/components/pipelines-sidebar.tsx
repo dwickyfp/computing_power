@@ -22,12 +22,12 @@ import { Button } from "@/components/ui/button"
 
 function HighlightedText({ text, highlight }: { text: string, highlight: string }) {
     if (!highlight.trim()) {
-        return <span className="truncate">{text}</span>
+        return <span>{text}</span>
     }
 
     const parts = text.split(new RegExp(`(${highlight})`, 'gi'))
     return (
-        <span className="truncate">
+        <span>
             {parts.map((part, i) => (
                 part.toLowerCase() === highlight.toLowerCase() ? (
                     <span key={i} className="bg-[#003e9b] text-white px-0.5 font-medium">
@@ -64,7 +64,9 @@ function TableItem({ name, isActive, highlight, type, sourceTable }: {
                         isActive && "bg-accent text-accent-foreground font-medium"
                     )}>
                         <Table className="h-3 w-3 shrink-0" />
-                        <HighlightedText text={name.toUpperCase()} highlight={highlight} />
+                        <div className="flex-1 min-w-0 truncate max-w-[170px]">
+                            <HighlightedText text={name.toUpperCase()} highlight={highlight} />
+                        </div>
                     </div>
                 </HoverCardTrigger>
                 <HoverCardContent className="w-80" side="right" align="start">
@@ -163,9 +165,11 @@ function PipelineItem({ pipeline, sourceDetails, checkExpanded, searchQuery }: {
                         <Accordion type="multiple" className="w-full ml-2 border-l border-border/50 pl-2" value={openItems} onValueChange={setOpenItems}>
                             <AccordionItem value={`src-${pipeline.source_id}`} className="border-none">
                                 <AccordionTrigger chevronPosition="left" className="justify-start py-1 px-2 gap-1.5 hover:bg-muted/50 hover:no-underline rounded-md text-sm dark:text-[#bec4d6]">
-                                    <div className="flex items-center gap-2">
-                                        <Database className="h-3.5 w-3.5" />
-                                        <HighlightedText text={sourceName} highlight={searchQuery} />
+                                    <div className="flex items-center gap-2 w-full overflow-hidden">
+                                        <Database className="h-3.5 w-3.5 shrink-0" />
+                                        <div className="flex-1 min-w-0 truncate max-w-[200px]">
+                                            <HighlightedText text={sourceName} highlight={searchQuery} />
+                                        </div>
                                     </div>
                                 </AccordionTrigger>
                                 <AccordionContent className="pb-0">
@@ -196,9 +200,11 @@ function PipelineItem({ pipeline, sourceDetails, checkExpanded, searchQuery }: {
                                 <Accordion key={d.id} type="multiple" className="w-full" value={openItems} onValueChange={setOpenItems}>
                                     <AccordionItem value={`dest-${d.id}`} className="border-none">
                                         <AccordionTrigger chevronPosition="left" className="justify-start py-1 px-2 gap-1.5 hover:bg-muted/50 hover:no-underline rounded-md text-sm dark:text-[#bec4d6]">
-                                            <div className="flex items-center gap-2">
-                                                <Layers className="h-3.5 w-3.5" />
-                                                <HighlightedText text={d.destination.name} highlight={searchQuery} />
+                                            <div className="flex items-center gap-2 w-full overflow-hidden">
+                                                <Layers className="h-3.5 w-3.5 shrink-0" />
+                                                <div className="flex-1 min-w-0 truncate max-w-[200px]">
+                                                    <HighlightedText text={d.destination.name} highlight={searchQuery} />
+                                                </div>
                                             </div>
                                         </AccordionTrigger>
                                         <AccordionContent className="pb-0">
@@ -493,7 +499,9 @@ export function PipelinesSidebar() {
                                     >
                                         <div className="flex items-center gap-2 overflow-hidden flex-1">
                                             <Workflow className={cn("h-4 w-4 shrink-0", currentId === pipeline.id ? "text-[#5999f7]" : "text-primary")} />
-                                            <HighlightedText text={pipeline.name} highlight={searchQuery} />
+                                            <div className="flex-1 min-w-0 truncate max-w-[200px]">
+                                                <HighlightedText text={pipeline.name} highlight={searchQuery} />
+                                            </div>
                                         </div>
                                     </AccordionTrigger>
                                     <Link
