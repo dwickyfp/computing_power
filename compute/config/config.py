@@ -77,6 +77,14 @@ class LoggingConfig:
 
 
 @dataclass
+class ServerConfig:
+    """API Server configuration."""
+    host: str = "0.0.0.0"
+    port: int = 8001
+
+
+
+@dataclass
 class Config:
     """
     Central configuration for Rosetta Compute Engine.
@@ -87,6 +95,7 @@ class Config:
     debezium: DebeziumConfig = field(default_factory=DebeziumConfig)
     pipeline: PipelineConfig = field(default_factory=PipelineConfig)
     logging: LoggingConfig = field(default_factory=LoggingConfig)
+    server: ServerConfig = field(default_factory=ServerConfig)
     
     @classmethod
     def from_env(cls) -> "Config":
@@ -111,6 +120,10 @@ class Config:
             logging=LoggingConfig(
                 level=os.getenv("LOG_LEVEL", "INFO"),
                 format=os.getenv("LOG_FORMAT", "%(asctime)s - %(name)s - %(levelname)s - %(message)s"),
+            ),
+            server=ServerConfig(
+                host=os.getenv("SERVER_HOST", "0.0.0.0"),
+                port=int(os.getenv("SERVER_PORT", "8001")),
             ),
         )
 

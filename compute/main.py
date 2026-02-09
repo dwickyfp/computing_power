@@ -13,11 +13,15 @@ Configuration via environment variables:
 import logging
 import os
 import sys
+import threading
+
 
 from compute.config import get_config
 from compute.core.database import init_connection_pool, close_connection_pool, get_db_connection, return_db_connection
 from compute.core.manager import PipelineManager
 from compute.core.engine import run_pipeline
+from compute.server import run_server
+
 
 
 def run_migration(logger: logging.Logger) -> None:
@@ -80,6 +84,16 @@ def main() -> int:
     setup_logging()
     logger = logging.getLogger(__name__)
     init_connection_pool()
+    config = get_config()
+
+    # Start API Server in a separate thread
+    server_thread = threading.Thread(
+        target=run_server,
+        args=(config.server.host, config.server.port),
+        daemon=True
+    )
+    server_thread.start()
+
 
     try:
         logger.info("Starting Rosetta Compute Engine")
