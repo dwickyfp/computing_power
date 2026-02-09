@@ -20,6 +20,8 @@ from app.core.logging import get_logger
 from app.domain.models.source import Source
 from app.domain.repositories.source import SourceRepository
 from app.domain.repositories.wal_monitor_repo import WALMonitorRepository
+from app.domain.repositories.notification_log_repo import NotificationLogRepository
+from app.domain.schemas.notification_log import NotificationLogCreate
 
 logger = get_logger(__name__)
 
@@ -206,6 +208,66 @@ class WALMonitorService:
                 )
                 db.commit()
 
+                # Check thresholds and notify
+                try:
+                    # Get configuration for thresholds
+                    from app.domain.services.configuration import ConfigurationService
+                    config_service = ConfigurationService(db)
+                    
+                    try:
+                        warning_threshold_mb = int(config_service.get_value("WAL_MONITORING_THRESHOLD_WARNING", "3000"))
+                        error_threshold_mb = int(config_service.get_value("WAL_MONITORING_THRESHOLD_ERROR", "6000"))
+                    except (ValueError, TypeError):
+                        warning_threshold_mb = 3000
+                        error_threshold_mb = 6000
+
+                    # Parse total_wal_size (e.g., "640 MB")
+                    size_str = wal_status["total_wal_size"] or "0 MB"
+                    size_mb = 0
+                    try:
+                        if "GB" in size_str:
+                            size_mb = float(size_str.replace("GB", "").strip()) * 1024
+                        elif "MB" in size_str:
+                            size_mb = float(size_str.replace("MB", "").strip())
+                        elif "kB" in size_str:
+                            size_mb = float(size_str.replace("kB", "").strip()) / 1024
+                        elif "B" in size_str:
+                            size_mb = float(size_str.replace("B", "").strip()) / (1024 * 1024)
+                    except ValueError:
+                        size_mb = 0
+
+                    notification_type = None
+                    if size_mb >= error_threshold_mb:
+                        notification_type = "ERROR"
+                    elif size_mb >= warning_threshold_mb:
+                        notification_type = "WARNING"
+
+                    if notification_type:
+                        notification_key = f"wal_monitor_key_{source.name}"
+                        notification_repo = NotificationLogRepository(db)
+                        notification_repo.upsert_notification_by_key(
+                            NotificationLogCreate(
+                                key_notification=notification_key,
+                                title=f"WAL Monitor {notification_type}",
+                                message=(
+                                    f"Source {source.name} (ID: {source.id}) WAL size is {size_str}. "
+                                    f"Threshold is {error_threshold_mb if notification_type == 'ERROR' else warning_threshold_mb} MB. "
+                                    f"Lag: {wal_status['replication_lag'] or 0} bytes."
+                                ),
+                                type=notification_type,
+                                is_read=False,
+                                iteration_check=1, # Default usage, repo handles logic
+                                is_sent=False
+                            )
+                        )
+                        logger.info(
+                            "Notification log processed", 
+                            extra={"source_id": source.id, "type": notification_type, "size_mb": size_mb}
+                        )
+
+                except Exception as notify_error:
+                    logger.error(f"Failed to check thresholds/notify: {notify_error}")
+
                 logger.info(
                     "WAL monitor status updated",
                     extra={
@@ -242,6 +304,24 @@ class WALMonitorService:
                             last_wal_received=datetime.now(timezone(timedelta(hours=7))),
                         )
                         db.commit()
+
+                        # Notify on ERROR
+                        try:
+                            notification_key = f"wal_monitor_key_{source.name}"
+                            notification_repo = NotificationLogRepository(db)
+                            notification_repo.upsert_notification_by_key(
+                                NotificationLogCreate(
+                                    key_notification=notification_key,
+                                    title="WAL Monitor ERROR",
+                                    message=f"Source {source.name} (ID: {source.id}) monitor failed after retries: {str(e)}",
+                                    type="ERROR",
+                                    is_read=False,
+                                    iteration_check=1,
+                                    is_sent=False
+                                )
+                            )
+                        except Exception as log_error:
+                            logger.error(f"Failed to create error notification: {log_error}")
                     except Exception as update_error:
                         logger.error(
                             "Failed to update error status",

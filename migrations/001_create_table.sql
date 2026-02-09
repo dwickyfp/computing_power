@@ -244,12 +244,14 @@ ALTER TABLE pipeline_metadata ADD CONSTRAINT uq_pipeline_metadata_pipeline_id UN
 -- Table Notification
 CREATE TABLE IF NOT EXISTS notification_log(
     id SERIAL PRIMARY KEY,
+    key_notification VARCHAR(255) NOT NULL,
     title VARCHAR(255) NOT NULL,
     message TEXT NOT NULL,
     type VARCHAR(255) NOT NULL,
     is_read BOOLEAN DEFAULT FALSE,
     is_deleted BOOLEAN DEFAULT FALSE,
     iteration_check INT DEFAULT 0, -- For check iteration job, if 3 then will sent into webhook if is_read is false
+    is_sent BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
