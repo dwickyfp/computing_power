@@ -46,7 +46,7 @@ export function PipelinesLayout({ children }: PipelinesLayoutProps) {
                     maxSize={360}
                     collapsible
                     onResize={(size: any) => {
-                        setIsCollapsed(size === 0)
+                        setIsCollapsed(size <= 50)
                     }}
                 >
                     <PipelinesSidebar />

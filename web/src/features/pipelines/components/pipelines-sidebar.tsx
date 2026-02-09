@@ -476,7 +476,7 @@ export function PipelinesSidebar() {
                                         chevronPosition="left"
                                         className={cn(
                                             "justify-start py-2 px-2 pr-8 gap-1.5 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground hover:no-underline rounded-md text-sm font-semibold flex-1",
-                                            currentId === pipeline.id && "bg-[#002c6e] text-[#5999f7] hover:bg-[#002c6e] hover:text-[#5999f7]"
+                                            currentId === pipeline.id && "bg-[#d6e6ff] text-[#088ae8] dark:bg-[#002c6e] dark:text-[#5999f7] hover:bg-[#d6e6ff] hover:text-[#088ae8]"
                                         )}
                                         onClick={(e) => {
                                             // If clicking on a non-active pipeline, navigate to it instead of expanding
