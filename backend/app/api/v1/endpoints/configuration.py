@@ -44,7 +44,8 @@ async def get_wal_thresholds(
         return WALThresholds(
             warning=thresholds.warning // (1024 * 1024),
             error=thresholds.error // (1024 * 1024),
-            webhook_url=thresholds.webhook_url
+            webhook_url=thresholds.webhook_url,
+            notification_iteration=thresholds.notification_iteration
         )
     except Exception as e:
         logger.error("Failed to get WAL thresholds", extra={"error": str(e)})
