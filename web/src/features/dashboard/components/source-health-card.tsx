@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { dashboardRepo } from '@/repo/dashboard'
-import { GlassCard, GlassCardContent, GlassCardHeader, GlassCardTitle } from './glass-card'
+import { DashboardPanel } from './dashboard-panel'
 import { Database, CheckCircle, AlertOctagon, PauseCircle } from 'lucide-react'
 
 export function SourceHealthCard() {
@@ -11,40 +11,37 @@ export function SourceHealthCard() {
   })
 
   return (
-    <GlassCard className="h-full">
-      <GlassCardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-        <GlassCardTitle className="text-sm font-medium">
-          Source Health
-        </GlassCardTitle>
-        <Database className="h-4 w-4 text-muted-foreground" />
-      </GlassCardHeader>
-      <GlassCardContent>
-        <div className="flex items-center justify-between mt-4">
-          <div className="flex flex-col items-center">
-             <div className="p-2 mb-2 rounded-full bg-emerald-500/10 text-emerald-500">
-                <CheckCircle className="w-5 h-5" />
-             </div>
-             <span className="text-2xl font-bold">{health?.ACTIVE || 0}</span>
-             <span className="text-xs text-muted-foreground">Active</span>
+    <DashboardPanel
+      title="Source Health"
+      headerAction={<Database className="h-4 w-4 text-muted-foreground" />}
+      className="h-full"
+      noPadding
+    >
+      <div className="flex items-center justify-between h-full px-4 py-1">
+        <div className="flex flex-col items-center justify-center flex-1">
+          <div className="p-1.5 mb-1 rounded-full bg-emerald-500/10 text-emerald-500">
+            <CheckCircle className="w-4 h-4" />
           </div>
-          <div className="w-px h-12 bg-border/50" />
-          <div className="flex flex-col items-center">
-             <div className="p-2 mb-2 rounded-full bg-amber-500/10 text-amber-500">
-                <PauseCircle className="w-5 h-5" />
-             </div>
-             <span className="text-2xl font-bold">{health?.IDLE || 0}</span>
-             <span className="text-xs text-muted-foreground">Idle</span>
-          </div>
-          <div className="w-px h-12 bg-border/50" />
-          <div className="flex flex-col items-center">
-             <div className="p-2 mb-2 rounded-full bg-rose-500/10 text-rose-500">
-                <AlertOctagon className="w-5 h-5" />
-             </div>
-             <span className="text-2xl font-bold">{health?.ERROR || 0}</span>
-             <span className="text-xs text-muted-foreground">Error</span>
-          </div>
+          <span className="text-xl font-bold font-mono leading-none mb-0.5">{health?.ACTIVE || 0}</span>
+          <span className="text-[10px] text-muted-foreground uppercase font-medium">Active</span>
         </div>
-      </GlassCardContent>
-    </GlassCard>
+        <div className="w-px h-8 bg-border/50" />
+        <div className="flex flex-col items-center justify-center flex-1">
+          <div className="p-1.5 mb-1 rounded-full bg-amber-500/10 text-amber-500">
+            <PauseCircle className="w-4 h-4" />
+          </div>
+          <span className="text-xl font-bold font-mono leading-none mb-0.5">{health?.IDLE || 0}</span>
+          <span className="text-[10px] text-muted-foreground uppercase font-medium">Idle</span>
+        </div>
+        <div className="w-px h-8 bg-border/50" />
+        <div className="flex flex-col items-center justify-center flex-1">
+          <div className="p-1.5 mb-1 rounded-full bg-rose-500/10 text-rose-500">
+            <AlertOctagon className="w-4 h-4" />
+          </div>
+          <span className="text-xl font-bold font-mono leading-none mb-0.5">{health?.ERROR || 0}</span>
+          <span className="text-[10px] text-muted-foreground uppercase font-medium">Error</span>
+        </div>
+      </div>
+    </DashboardPanel>
   )
 }

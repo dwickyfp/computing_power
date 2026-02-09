@@ -15,6 +15,8 @@ from app.api.v1.endpoints import (
     configuration,
     dashboard,
     table_sync,
+    job_metrics,
+    notification_logs,
 )
 
 # Create v1 router
@@ -53,4 +55,12 @@ api_router.include_router(
 
 api_router.include_router(
     dashboard.router, prefix="/dashboard", tags=["dashboard"]
+)
+
+api_router.include_router(
+    job_metrics.router, prefix="/job-metrics", tags=["job-metrics"]
+)
+
+api_router.include_router(
+    notification_logs.router, tags=["notification-logs"]
 )

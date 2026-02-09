@@ -5,9 +5,20 @@ import {
     Search,
     CheckCircle2,
     Database,
-    TableProperties
+    TableProperties,
+    Hash,
+    Type,
+    Clock,
+    Calendar,
+    ToggleLeft,
+    Braces,
+    List,
+    Globe,
+    HelpCircle,
+    Lock
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
+import { cn } from '@/lib/utils'
 import { type SchemaColumn, type TableSchemaDiff } from '@/repo/sources'
 import {
     Sheet,
@@ -39,27 +50,40 @@ interface SourceDetailsSchemaDrawerProps {
 }
 
 function TypeBadge({ type, changed }: { type: string, changed?: boolean }) {
-    // Simple color mapping based on type
+    if (!type) return <span className="flex items-center gap-2 text-sm text-muted-foreground"><HelpCircle className="h-3.5 w-3.5" /> Unknown</span>
+
     const lowerType = type.toLowerCase()
 
-    if (changed) {
-        return <Badge variant="outline" className="border-orange-300 text-orange-700 bg-orange-50">{type}</Badge>
+    let Icon = HelpCircle
+
+    if (lowerType.includes('int') || lowerType.includes('serial') || lowerType.includes('numeric') || lowerType.includes('float') || lowerType.includes('double') || lowerType.includes('decimal') || lowerType.includes('real')) {
+        Icon = Hash
+    } else if (lowerType.includes('char') || lowerType.includes('text') || lowerType.includes('string')) {
+        Icon = Type
+    } else if (lowerType.includes('time') || lowerType.includes('timestamp')) {
+        Icon = Clock
+    } else if (lowerType.includes('date')) {
+        Icon = Calendar
+    } else if (lowerType.includes('bool')) {
+        Icon = ToggleLeft
+    } else if (lowerType.includes('json') || lowerType.includes('variant')) {
+        Icon = Braces
+    } else if (lowerType.includes('array')) {
+        Icon = List
+    } else if (lowerType.includes('geo')) {
+        Icon = Globe
     }
 
-    if (lowerType.includes('int') || lowerType.includes('serial') || lowerType.includes('numeric') || lowerType.includes('float') || lowerType.includes('double')) {
-        return <Badge variant="secondary" className="bg-blue-100 text-blue-800 hover:bg-blue-100/80 border-blue-200">{type}</Badge>
-    }
-    if (lowerType.includes('char') || lowerType.includes('text')) {
-        return <Badge variant="secondary" className="bg-green-100 text-green-800 hover:bg-green-100/80 border-green-200">{type}</Badge>
-    }
-    if (lowerType.includes('date') || lowerType.includes('time')) {
-        return <Badge variant="secondary" className="bg-purple-100 text-purple-800 hover:bg-purple-100/80 border-purple-200">{type}</Badge>
-    }
-    if (lowerType.includes('bool')) {
-        return <Badge variant="secondary" className="bg-orange-100 text-orange-800 hover:bg-orange-100/80 border-orange-200">{type}</Badge>
-    }
-
-    return <Badge variant="outline" className="text-muted-foreground">{type}</Badge>
+    return (
+        <span className={cn(
+            "flex items-center gap-2 text-sm",
+            changed ? "text-orange-600 font-medium" : "text-muted-foreground/80"
+        )}>
+            <Icon className="h-3.5 w-3.5" />
+            {type}
+            {changed && <span className="text-[10px] bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded-full ml-1">Changed</span>}
+        </span>
+    )
 }
 
 export function SourceDetailsSchemaDrawer({
@@ -77,7 +101,7 @@ export function SourceDetailsSchemaDrawer({
         if (!searchQuery) return schema
         return schema.filter(col =>
             col.column_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            col.real_data_type.toLowerCase().includes(searchQuery.toLowerCase())
+            (col.real_data_type || col.data_type || '').toLowerCase().includes(searchQuery.toLowerCase())
         )
     }, [schema, searchQuery])
 
@@ -182,17 +206,16 @@ export function SourceDetailsSchemaDrawer({
                                                             </TableCell>
                                                             <TableCell>
                                                                 <div className="flex items-center gap-2">
-                                                                    <TypeBadge type={col.real_data_type} changed={!!diff?.type_changes?.[col.column_name]} />
+                                                                    <TypeBadge type={col.real_data_type || col.data_type || 'Unknown'} changed={!!diff?.type_changes?.[col.column_name]} />
                                                                 </div>
                                                             </TableCell>
                                                             <TableCell className="text-center">
                                                                 {col.is_nullable === 'YES' ? (
-                                                                    <div className="inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-semibold text-muted-foreground transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 border-transparent bg-secondary text-secondary-foreground hover:bg-secondary/80">
-                                                                        Nullable
-                                                                    </div>
+                                                                    <span className="text-sm text-muted-foreground/50">Nullable</span>
                                                                 ) : (
-                                                                    <div className="inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-semibold text-muted-foreground transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 border-transparent bg-primary text-primary-foreground hover:bg-primary/80 opacity-70">
-                                                                        Required
+                                                                    <div className="flex items-center justify-center gap-1.5 text-sm text-foreground/80 font-medium">
+                                                                        <Lock className="h-3.5 w-3.5 text-muted-foreground/70" />
+                                                                        <span>Required</span>
                                                                     </div>
                                                                 )}
                                                             </TableCell>

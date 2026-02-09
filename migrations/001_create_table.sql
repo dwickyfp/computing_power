@@ -217,6 +217,7 @@ CREATE TABLE IF NOT EXISTS rosetta_setting_configuration(
 INSERT INTO rosetta_setting_configuration(config_key, config_value) VALUES('WAL_MONITORING_THRESHOLD_WARNING', '3000') ON CONFLICT(config_key) DO NOTHING;
 INSERT INTO rosetta_setting_configuration(config_key, config_value) VALUES('WAL_MONITORING_THRESHOLD_ERROR', '6000') ON CONFLICT(config_key) DO NOTHING;
 INSERT INTO rosetta_setting_configuration(config_key, config_value) VALUES('ALERT_NOTIFICATION_WEBHOOK_URL', '') ON CONFLICT(config_key) DO NOTHING;
+INSERT INTO rosetta_setting_configuration(config_key, config_value) VALUES('NOTIFICATION_ITERATION_DEFAULT', '3') ON CONFLICT(config_key) DO NOTHING;
 
 -- NEW INDEX
 CREATE INDEX IF NOT EXISTS idx_table_metadata_list_source_table ON table_metadata_list(source_id, table_name);
@@ -226,6 +227,39 @@ CREATE INDEX IF NOT EXISTS idx_credit_snowflake_monitoring_usage_date ON credit_
 -- Add unique constraint to table_metadata_list (Added retroactively for new deployments)
 ALTER TABLE table_metadata_list DROP CONSTRAINT IF EXISTS uq_table_metadata_source_table;
 ALTER TABLE table_metadata_list ADD CONSTRAINT uq_table_metadata_source_table UNIQUE (source_id, table_name);
+
+CREATE TABLE IF NOT EXISTS job_metrics_monitoring(
+    id SERIAL PRIMARY KEY,
+    key_job_scheduler VARCHAR(255) NOT NULL ,
+    last_run_at TIMESTAMPTZ NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+ALTER TABLE job_metrics_monitoring DROP CONSTRAINT IF EXISTS uq_job_metrics_monitoring_key_job_scheduler;
+ALTER TABLE job_metrics_monitoring ADD CONSTRAINT uq_job_metrics_monitoring_key_job_scheduler UNIQUE (key_job_scheduler);
+
+-- Constraint for ON CONFLICT support
+ALTER TABLE pipeline_metadata DROP CONSTRAINT IF EXISTS uq_pipeline_metadata_pipeline_id;
+ALTER TABLE pipeline_metadata ADD CONSTRAINT uq_pipeline_metadata_pipeline_id UNIQUE (pipeline_id);
+
+-- Table Notification
+CREATE TABLE IF NOT EXISTS notification_log(
+    id SERIAL PRIMARY KEY,
+    key_notification VARCHAR(255) NOT NULL,
+    title VARCHAR(255) NOT NULL,
+    message TEXT NOT NULL,
+    type VARCHAR(255) NOT NULL,
+    is_read BOOLEAN DEFAULT FALSE,
+    is_deleted BOOLEAN DEFAULT FALSE,
+    iteration_check INT DEFAULT 0, -- For check iteration job, if 3 then will sent into webhook if is_read is false
+    is_sent BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Create Index for notification_log
+CREATE INDEX IF NOT EXISTS idx_notification_log_iteration_check ON notification_log(iteration_check);
+
 
 
 

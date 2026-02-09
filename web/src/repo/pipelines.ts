@@ -133,7 +133,7 @@ export interface TableSyncConfig {
   table_name_target: string
   custom_sql: string | null
   filter_sql: string | null
-  
+
   is_exists_table_landing: boolean
   is_exists_stream: boolean
   is_exists_task: boolean
@@ -163,6 +163,13 @@ export interface TableSyncRequest {
   filter_sql?: string | null
   enabled?: boolean
 }
+
+export interface TableValidationResponse {
+  valid: boolean
+  exists: boolean
+  message: string | null
+}
+
 
 export const tableSyncRepo = {
   getDestinationTables: async (
@@ -197,6 +204,16 @@ export const tableSyncRepo = {
     )
   },
 
+  deleteTableSyncById: async (
+    pipelineId: number,
+    pipelineDestinationId: number,
+    syncConfigId: number
+  ): Promise<void> => {
+    await api.delete(
+      `/pipelines/${pipelineId}/destinations/${pipelineDestinationId}/table-syncs/${syncConfigId}`
+    )
+  },
+
   initSnowflakeTable: async (
     pipelineId: number,
     pipelineDestinationId: number,
@@ -206,6 +223,18 @@ export const tableSyncRepo = {
       await api.post(
         `/pipelines/${pipelineId}/destinations/${pipelineDestinationId}/tables/${tableName}/init`
       )
+    return response.data
+  },
+
+  validateTargetTable: async (
+    pipelineId: number,
+    pipelineDestinationId: number,
+    tableName: string
+  ): Promise<TableValidationResponse> => {
+    const response: AxiosResponse<TableValidationResponse> = await api.post(
+      `/pipelines/${pipelineId}/destinations/${pipelineDestinationId}/tables/validate`,
+      { table_name: tableName }
+    )
     return response.data
   },
 }

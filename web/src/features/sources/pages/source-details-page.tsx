@@ -13,11 +13,11 @@ import { SourceDetailsCreatePublicationDialog } from '../components/source-detai
 import { SourceDetailsListTable } from '../components/source-details-list-table'
 import { SourceDetailsPresets } from '../components/source-details-presets'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+// import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { CustomTabs, CustomTabsContent, CustomTabsList, CustomTabsTrigger } from '@/components/ui/custom-tabs'
 import { cn } from '@/lib/utils'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { RefreshCcw, Loader2 } from 'lucide-react'
+import { RefreshCcw, Activity, Database, Sliders } from 'lucide-react'
 import { toast } from 'sonner'
 import {
     AlertDialog,
@@ -208,94 +208,51 @@ export default function SourceDetailsPage() {
                     <>
                         {/* Overview Section */}
                         <div className="grid gap-4">
-                            <SourceDetailsMetrics data={data?.wal_monitor || null} dataDestinations={data?.destinations || []} />
+                            <SourceDetailsMetrics
+                                data={data?.wal_monitor || null}
+                                source={data!.source}
+                                onPublicationAction={handlePublicationAction}
+                                onReplicationAction={handleReplicationAction}
+                                isPublicationLoading={isPublicationLoading}
+                                isReplicationLoading={isReplicationLoading}
+                            />
                         </div>
 
                         <div className="grid gap-6">
-                            {/* Publishing & Replication Status Cards */}
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div className="rounded-lg border bg-card text-card-foreground shadow-sm p-6 flex flex-col justify-between">
-                                    <div>
-                                        <div className="flex items-center justify-between mb-2">
-                                            <h3 className="font-semibold leading-none tracking-tight">Publication</h3>
-                                            <Badge
-                                                variant={data?.source.is_publication_enabled ? "default" : "secondary"}
-                                                className={cn(data?.source.is_publication_enabled && "bg-green-600 hover:bg-green-700")}
-                                            >
-                                                {data?.source.is_publication_enabled ? "Active" : "Inactive"}
-                                            </Badge>
-                                        </div>
-                                        <p className="text-sm text-muted-foreground mb-4">
-                                            Name: <span className="font-mono text-foreground">{data?.source.publication_name}</span>
-                                        </p>
-                                    </div>
-                                    <Button
-                                        variant={data?.source.is_publication_enabled ? "destructive" : "default"}
-                                        size="sm"
-                                        className="w-fit"
-                                        onClick={handlePublicationAction}
-                                        disabled={isPublicationLoading || isLoading}
-                                    >
-                                        {isPublicationLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                                        {data?.source.is_publication_enabled ? "Drop Publication" : "Create Publication"}
-                                    </Button>
-                                </div>
-
-                                <div className="rounded-lg border bg-card text-card-foreground shadow-sm p-6 flex flex-col justify-between">
-                                    <div>
-                                        <div className="flex items-center justify-between mb-2">
-                                            <h3 className="font-semibold leading-none tracking-tight">Replication Slot</h3>
-                                            <Badge
-                                                variant={data?.source.is_replication_enabled ? "default" : "secondary"}
-                                                className={cn(data?.source.is_replication_enabled && "bg-green-600 hover:bg-green-700")}
-                                            >
-                                                {data?.source.is_replication_enabled ? "Active" : "Inactive"}
-                                            </Badge>
-                                        </div>
-                                        <p className="text-sm text-muted-foreground mb-4">
-                                            ID: <span className="font-mono text-foreground">supabase_etl_apply_{data?.source.replication_id}</span>
-                                        </p>
-                                    </div>
-                                    <Button
-                                        variant={data?.source.is_replication_enabled ? "destructive" : "default"}
-                                        size="sm"
-                                        className="w-fit"
-                                        onClick={handleReplicationAction}
-                                        disabled={isReplicationLoading || isLoading}
-                                    >
-                                        {isReplicationLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                                        {data?.source.is_replication_enabled ? "Drop Replication" : "Create Replication"}
-                                    </Button>
-                                </div>
-                            </div>
-
                             {/* Tables Section */}
-                            <Tabs defaultValue="monitored" className="w-full">
-                                <div className="flex items-center justify-between mb-4">
-                                    <TabsList>
-                                        <TabsTrigger value="monitored">Monitored Tables</TabsTrigger>
-                                        <TabsTrigger value="available">Available Tables</TabsTrigger>
-                                        <TabsTrigger value="presets">Presets</TabsTrigger>
-                                    </TabsList>
-                                </div>
+                            <CustomTabs defaultValue="monitored" className="w-full">
+                                <CustomTabsList className="w-full justify-start border-b mb-4">
+                                    <CustomTabsTrigger value="monitored">
+                                        <Activity className="h-4 w-4 mr-2" />
+                                        Monitored Tables
+                                    </CustomTabsTrigger>
+                                    <CustomTabsTrigger value="available">
+                                        <Database className="h-4 w-4 mr-2" />
+                                        Available Tables
+                                    </CustomTabsTrigger>
+                                    <CustomTabsTrigger value="presets">
+                                        <Sliders className="h-4 w-4 mr-2" />
+                                        Presets
+                                    </CustomTabsTrigger>
+                                </CustomTabsList>
 
-                                <TabsContent value="monitored" className="space-y-4 mt-0">
+                                <CustomTabsContent value="monitored" className="space-y-4 mt-0">
                                     <SourceReplicationTable
                                         sourceId={id}
                                         tables={data?.tables || []}
                                     />
-                                </TabsContent>
-                                <TabsContent value="available" className="mt-0">
+                                </CustomTabsContent>
+                                <CustomTabsContent value="available" className="mt-0">
                                     <SourceDetailsListTable
                                         sourceId={id}
                                         isPublicationEnabled={data?.source.is_publication_enabled || false}
                                         publishedTableNames={data?.tables.map(t => t.table_name) || []}
                                     />
-                                </TabsContent>
-                                <TabsContent value="presets" className="mt-0">
+                                </CustomTabsContent>
+                                <CustomTabsContent value="presets" className="mt-0">
                                     <SourceDetailsPresets />
-                                </TabsContent>
-                            </Tabs>
+                                </CustomTabsContent>
+                            </CustomTabs>
                         </div>
 
                         <SourceDetailsCreatePublicationDialog

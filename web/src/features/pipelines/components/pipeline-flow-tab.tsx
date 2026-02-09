@@ -4,6 +4,7 @@ import { ReactFlow, Background, Controls, Node, Edge, Position } from '@xyflow/r
 import '@xyflow/react/dist/style.css'
 import { Plus } from 'lucide-react'
 import { useState, useMemo, useCallback } from 'react'
+import { useTheme } from '@/context/theme-provider'
 import { AddDestinationModal } from './add-destination-modal'
 import { PipelineNode, PipelineNodeData } from './pipeline-node'
 import { SourceTableDrawer } from './source-table-drawer'
@@ -18,6 +19,7 @@ const nodeTypes = {
 }
 
 export function PipelineFlowTab({ pipeline }: PipelineFlowTabProps) {
+  const { theme } = useTheme()
   const [openAddDest, setOpenAddDest] = useState(false)
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [selectedDestId, setSelectedDestId] = useState<number | null>(null)
@@ -125,18 +127,19 @@ export function PipelineFlowTab({ pipeline }: PipelineFlowTabProps) {
       </div>
 
       {/* React Flow Canvas */}
-      <div className="flex-1">
+      <div className="flex-1 [&_.react-flow__controls]:bg-background [&_.react-flow__controls]:border-border [&_.react-flow__controls]:shadow-md [&_.react-flow__controls-button]:bg-background [&_.react-flow__controls-button]:border-border [&_.react-flow__controls-button]:fill-foreground [&_.react-flow__controls-button:hover]:bg-muted">
         <ReactFlow<Node<PipelineNodeData>>
           nodes={nodes}
           edges={edges}
           nodeTypes={nodeTypes} // Register custom types
           onNodeClick={onNodeClick}
+          colorMode={theme}
           fitView
           fitViewOptions={{ padding: 0.3 }}
           attributionPosition="bottom-right"
           proOptions={{ hideAttribution: true }}
         >
-          <Background color="#e2e8f0" gap={16} />
+          <Background className="!bg-background" color="var(--border)" gap={16} />
           <Controls showInteractive={false} />
         </ReactFlow>
       </div>

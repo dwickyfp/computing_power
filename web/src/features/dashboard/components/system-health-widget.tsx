@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query"
-import { GlassCard, GlassCardContent, GlassCardHeader, GlassCardTitle } from "./glass-card"
+import { DashboardPanel } from "./dashboard-panel"
 import { Activity, Database, Server } from "lucide-react"
 import { api } from "@/repo/client"
 
@@ -27,47 +27,42 @@ export function SystemHealthWidget() {
   })
 
   const StatusIndicator = ({ healthy }: { healthy?: boolean }) => (
-    <div className={`h-3 w-3 rounded-full ${healthy ? "bg-emerald-500 box-shadow-emerald" : "bg-rose-500 box-shadow-rose"} ring-2 ring-white/10`} />
+    <div className={`h-2.5 w-2.5 rounded-sm ${healthy ? "bg-emerald-500" : "bg-rose-500"}`} />
   )
 
   return (
-    <GlassCard>
-      <GlassCardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-        <GlassCardTitle className="text-sm font-medium">System Status</GlassCardTitle>
-        <Activity className="h-4 w-4 text-muted-foreground" />
-      </GlassCardHeader>
-      <GlassCardContent>
-        {isLoading ? (
-          <div className="text-sm text-muted-foreground pt-4">Loading status...</div>
-        ) : isError || !data ? (
-          <div className="text-sm text-rose-500 pt-4">Failed to fetch status</div>
-        ) : (
-          <div className="space-y-4 pt-4">
-            <div className="flex items-center justify-between p-2 rounded-lg hover:bg-white/5 transition-colors">
-              <div className="flex items-center space-x-2">
-                <Database className="h-4 w-4 text-muted-foreground" />
-                <span className="text-sm font-medium">Postgres Core</span>
-              </div>
-              <StatusIndicator healthy={data.checks.database} />
+    <DashboardPanel
+      title="System Status"
+      headerAction={<Activity className="h-4 w-4 text-muted-foreground" />}
+    >
+      {isLoading ? (
+        <div className="text-xs text-muted-foreground">Loading status...</div>
+      ) : isError || !data ? (
+        <div className="text-xs text-rose-500">Failed to fetch status</div>
+      ) : (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between p-2 rounded bg-muted/20 hover:bg-muted/40 transition-colors">
+            <div className="flex items-center space-x-2">
+              <Database className="h-3.5 w-3.5 text-muted-foreground" />
+              <span className="text-xs font-medium">Postgres Core</span>
             </div>
-            
-            <div className="flex items-center justify-between p-2 rounded-lg hover:bg-white/5 transition-colors">
-              <div className="flex items-center space-x-2">
-                <Server className="h-4 w-4 text-muted-foreground" />
-                <span className="text-sm font-medium">Redis Cache</span>
-              </div>
-              <StatusIndicator healthy={data.checks.redis} />
-            </div>
-
-            <div className="flex items-center justify-between pt-2 px-2 border-t border-white/5">
-               <div className="flex items-center space-x-2">
-                 <span className="text-xs text-muted-foreground font-mono">v{data.version}</span>
-               </div>
-               <span className="text-xs text-muted-foreground">{new Date(data.timestamp).toLocaleTimeString()}</span>
-            </div>
+            <StatusIndicator healthy={data.checks.database} />
           </div>
-        )}
-      </GlassCardContent>
-    </GlassCard>
+
+          <div className="flex items-center justify-between p-2 rounded bg-muted/20 hover:bg-muted/40 transition-colors">
+            <div className="flex items-center space-x-2">
+              <Server className="h-3.5 w-3.5 text-muted-foreground" />
+              <span className="text-xs font-medium">Redis Cache</span>
+            </div>
+            <StatusIndicator healthy={data.checks.redis} />
+          </div>
+
+          <div className="flex items-center justify-between pt-2 px-1 border-t border-border/50">
+            <span className="text-[10px] text-muted-foreground font-mono">v{data.version}</span>
+            <span className="text-[10px] text-muted-foreground">{new Date(data.timestamp).toLocaleTimeString()}</span>
+          </div>
+        </div>
+      )}
+    </DashboardPanel>
   )
 }
