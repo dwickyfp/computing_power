@@ -144,7 +144,7 @@ class PipelineEngine:
 
         Loads configuration and creates source/destination instances.
         Each destination is initialized independently - if one fails during init,
-        others can still be used.
+        others can still be used. If all fail, pipeline still runs and uses DLQ.
         """
         self._pipeline = self._load_pipeline()
         self._source = self._create_source(self._pipeline)
@@ -162,23 +162,40 @@ class PipelineEngine:
 
             try:
                 dest = self._create_destination(pd.destination.type, pd.destination)
-                dest.initialize()
+
+                # Try to initialize, but keep destination object even if it fails
+                try:
+                    dest.initialize()
+                    successful_destinations += 1
+
+                    # Clear any previous initialization errors
+                    from core.repository import PipelineDestinationRepository
+
+                    if pd.is_error:
+                        PipelineDestinationRepository.update_error(pd.id, False)
+                        self._logger.info(
+                            f"Cleared error state for destination {pd.destination.name}"
+                        )
+
+                except Exception as init_error:
+                    # Log initialization error but keep destination object for DLQ/recovery
+                    error_msg = f"Failed to initialize destination {pd.destination.name}: {str(init_error)}"
+                    self._logger.warning(error_msg, exc_info=True)
+                    failed_destinations += 1
+
+                    # Update error state in database
+                    from core.repository import PipelineDestinationRepository
+
+                    PipelineDestinationRepository.update_error(pd.id, True, error_msg)
+
+                # Add destination to registry regardless of initialization status
+                # This allows DLQ recovery worker to track and retry connection
                 self._destinations[pd.destination_id] = dest
-                successful_destinations += 1
-
-                # Clear any previous initialization errors
-                from core.repository import PipelineDestinationRepository
-
-                if pd.is_error:
-                    PipelineDestinationRepository.update_error(pd.id, False)
-                    self._logger.info(
-                        f"Cleared error state for destination {pd.destination.name}"
-                    )
 
             except Exception as e:
-                # Log error but continue with other destinations
+                # Failed to even create destination object
                 error_msg = (
-                    f"Failed to initialize destination {pd.destination.name}: {str(e)}"
+                    f"Failed to create destination {pd.destination.name}: {str(e)}"
                 )
                 self._logger.error(error_msg, exc_info=True)
                 failed_destinations += 1
@@ -188,18 +205,20 @@ class PipelineEngine:
 
                 PipelineDestinationRepository.update_error(pd.id, True, error_msg)
 
+        # Log status but don't fail if no destinations initialized
+        # Pipeline will use DLQ for all writes until destinations recover
         if successful_destinations == 0:
-            raise PipelineException(
-                f"Pipeline {self._pipeline.name} has no working destinations. "
-                f"All {failed_destinations} destination(s) failed to initialize.",
-                {"pipeline_id": self._pipeline_id},
+            self._logger.warning(
+                f"Pipeline {self._pipeline.name} starting with NO working destinations. "
+                f"All {failed_destinations} destination(s) failed to initialize. "
+                f"CDC events will be stored in DLQ until destinations recover."
             )
-
-        self._logger.info(
-            f"Pipeline {self._pipeline.name} initialized: "
-            f"{successful_destinations} destination(s) ready, "
-            f"{failed_destinations} destination(s) failed"
-        )
+        else:
+            self._logger.info(
+                f"Pipeline {self._pipeline.name} initialized: "
+                f"{successful_destinations} destination(s) ready, "
+                f"{failed_destinations} destination(s) failed"
+            )
 
         # Initialize DLQ manager
         config = get_config()

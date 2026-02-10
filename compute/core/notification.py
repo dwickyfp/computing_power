@@ -23,6 +23,7 @@ class NotificationLogCreate:
     is_read: bool = False
     is_deleted: bool = False
     is_sent: bool = False
+    is_force_sent: bool = False
 
 
 class NotificationLogRepository:
@@ -73,7 +74,7 @@ class NotificationLogRepository:
 
                 now = datetime.now(timezone(timedelta(hours=7)))
 
-                if result and result[1] < iteration_limit:
+                if result and (result[1] < iteration_limit or notification_data.is_force_sent):
                     notification_id = result[0]
                     current_iteration = result[1]
                     
@@ -87,6 +88,8 @@ class NotificationLogRepository:
                             is_read = FALSE,
                             is_deleted = FALSE,
                             iteration_check = %s,
+                            is_force_sent = %s,
+                            is_sent = FALSE,
                             updated_at = %s
                         WHERE id = %s
                         """,
@@ -95,6 +98,7 @@ class NotificationLogRepository:
                             notification_data.title,
                             notification_data.type,
                             current_iteration + 1,
+                            notification_data.is_force_sent,
                             now,
                             notification_id
                         )
@@ -108,9 +112,9 @@ class NotificationLogRepository:
                         """
                         INSERT INTO notification_log (
                             key_notification, title, message, type, 
-                            is_read, is_deleted, iteration_check, is_sent, 
+                            is_read, is_deleted, iteration_check, is_sent, is_force_sent,
                             created_at, updated_at
-                        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                         RETURNING id
                         """,
                         (
@@ -122,6 +126,7 @@ class NotificationLogRepository:
                             False, # is_deleted
                             1,     # Reset iteration to 1
                             False, # is_sent
+                            notification_data.is_force_sent,
                             now,
                             now
                         )

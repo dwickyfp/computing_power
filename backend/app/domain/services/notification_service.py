@@ -88,7 +88,7 @@ class NotificationService:
         pending_notifications = (
             self.db.query(NotificationLog)
             .filter(
-                NotificationLog.iteration_check >= iteration_limit,
+                (NotificationLog.iteration_check >= iteration_limit) | (NotificationLog.is_force_sent == True),
                 NotificationLog.is_sent == False,
                 NotificationLog.is_deleted == False,
                 NotificationLog.is_read == False

@@ -999,16 +999,45 @@ class PostgreSQLDestination(BaseDestination):
             self._logger.debug(f"Wrote {written} records to {target_table}")
             return written
 
+        except psycopg2.OperationalError as e:
+            # Connection error - force send notification
+            try:
+                notification_repo = NotificationLogRepository()
+                notification_repo.upsert_notification_by_key(
+                    NotificationLogCreate(
+                        key_notification=f"destination_connection_error_{self.destination_id}",
+                        title=f"PostgreSQL Connection Error",
+                        message=f"Failed to connect to PostgreSQL destination {self._config.name}: {str(e)}",
+                        type="ERROR",
+                        is_force_sent=True
+                    )
+                )
+            except Exception as notify_error:
+                self._logger.error(f"Failed to log notification: {notify_error}")
+            
+            raise e
+
         except Exception as e:
             # Notify on error
             try:
                 notification_repo = NotificationLogRepository()
+                
+                # Check for connection issues in error message if generic exception caught
+                error_msg = str(e).lower()
+                is_force_sent = (
+                    "connection" in error_msg or 
+                    "refused" in error_msg or 
+                    "timeout" in error_msg or
+                    "operationalerror" in error_msg
+                )
+                
                 notification_repo.upsert_notification_by_key(
                     NotificationLogCreate(
                         key_notification=f"destination_error_{self.destination_id}_{source_table}",
                         title=f"PostgreSQL Sync Error: {target_table}",
                         message=f"Failed to sync table {source_table} to {target_table}: {str(e)}",
                         type="ERROR",
+                        is_force_sent=is_force_sent
                     )
                 )
             except Exception as notify_error:

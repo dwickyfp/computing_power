@@ -24,6 +24,7 @@ from core.repository import (
 )
 from core.exceptions import DestinationException
 from core.dlq_manager import DLQManager
+from core.notification import NotificationLogRepository, NotificationLogCreate
 
 logger = logging.getLogger(__name__)
 
@@ -375,6 +376,11 @@ class CDCEventHandler(BasePythonChangeHandler):
             if self._dlq_manager:
                 self._enqueue_to_dlq(records, routing, error_msg)
 
+            # Insert notification with is_force_sent=True
+            self._create_destination_failure_notification(
+                routing, table_name, error_msg, "DESTINATION_ERROR"
+            )
+
             # Update error state for both table sync and pipeline destination
             TableSyncRepository.update_error(routing.table_sync.id, True, error_msg)
             PipelineDestinationRepository.update_error(
@@ -399,6 +405,11 @@ class CDCEventHandler(BasePythonChangeHandler):
             # Enqueue failed records to DLQ if available
             if self._dlq_manager:
                 self._enqueue_to_dlq(records, routing, error_msg)
+
+            # Insert notification with is_force_sent=True (connection issue)
+            self._create_destination_failure_notification(
+                routing, table_name, error_msg, "CONNECTION_ERROR"
+            )
 
             # Update error state for both table sync and pipeline destination
             TableSyncRepository.update_error(routing.table_sync.id, True, error_msg)
@@ -472,3 +483,69 @@ class CDCEventHandler(BasePythonChangeHandler):
                     f"Failed to enqueue record to DLQ: {e}",
                     exc_info=True,
                 )
+
+    def _create_destination_failure_notification(
+        self,
+        routing: RoutingInfo,
+        table_name: str,
+        error_message: str,
+        error_type: str,
+    ) -> None:
+        """
+        Create notification log entry for destination failure.
+
+        Args:
+            routing: Routing information
+            table_name: Table name that failed
+            error_message: Error message
+            error_type: Type of error (CONNECTION_ERROR, DESTINATION_ERROR)
+        """
+        try:
+            notif_repo = NotificationLogRepository()
+
+            # Create unique key for this destination+table combination
+            key_notification = f"pipeline_{self._pipeline.id}_dest_{routing.destination.destination_id}_table_{table_name}_{error_type}"
+
+            # Determine notification type and title based on error
+            if (
+                "connection" in error_message.lower()
+                or error_type == "CONNECTION_ERROR"
+            ):
+                notif_type = "ERROR"
+                title = f"Destination Connection Failed: {routing.destination.name}"
+                message = (
+                    f"Failed to connect to destination '{routing.destination.name}' "
+                    f"for table '{table_name}' in pipeline '{self._pipeline.name}'. \n\n"
+                    f"Error: {error_message}\n\n"
+                    f"CDC events are being stored in Dead Letter Queue (DLQ) and will be "
+                    f"automatically replayed when the destination recovers."
+                )
+            else:
+                notif_type = "WARNING"
+                title = f"Destination Error: {routing.destination.name}"
+                message = (
+                    f"Error writing to destination '{routing.destination.name}' "
+                    f"for table '{table_name}' in pipeline '{self._pipeline.name}'. \n\n"
+                    f"Error: {error_message}\n\n"
+                    f"CDC events are being stored in DLQ for recovery."
+                )
+
+            notification = NotificationLogCreate(
+                key_notification=key_notification,
+                title=title,
+                message=message,
+                type=notif_type,
+                is_force_sent=True,  # Force notification for connection issues
+            )
+
+            notif_id = notif_repo.upsert_notification_by_key(notification)
+            if notif_id:
+                self._logger.info(
+                    f"Created notification (ID={notif_id}) for destination failure: {routing.destination.name}"
+                )
+
+        except Exception as e:
+            self._logger.error(
+                f"Failed to create notification for destination failure: {e}",
+                exc_info=True,
+            )

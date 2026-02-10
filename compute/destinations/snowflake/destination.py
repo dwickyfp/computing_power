@@ -475,23 +475,28 @@ class SnowflakeDestination(BaseDestination):
             )
             return len(valid_rows)
 
+
+
         except Exception as e:
             self._logger.error(f"Failed to write to {landing_table}: {e}")
-
+            
             # Notify on error
             try:
                 notification_repo = NotificationLogRepository()
+                is_force_sent = "connection" in str(e).lower() or "authentication" in str(e).lower()
+                
                 notification_repo.upsert_notification_by_key(
                     NotificationLogCreate(
                         key_notification=f"destination_error_{self.destination_id}_{landing_table}",
                         title=f"Snowflake Sync Error: {landing_table}",
                         message=f"Failed to sync to {landing_table}: {str(e)}",
                         type="ERROR",
+                        is_force_sent=is_force_sent
                     )
                 )
             except Exception as notify_error:
                 self._logger.error(f"Failed to log notification: {notify_error}")
-
+            
             # Clear tokens to force channel re-open on retry
             self._channel_tokens.pop(landing_table, None)
             raise
