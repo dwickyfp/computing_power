@@ -102,99 +102,160 @@ export function WALMonitorForm() {
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className='space-y-8'>
-        <FormField
-          control={form.control}
-          name='warning'
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Warning Threshold (MB)</FormLabel>
-              <FormControl>
-                <Input
-                  type='number'
-                  placeholder='3000'
-                  {...field}
-                  onChange={(e) => field.onChange(e.target.valueAsNumber)}
-                  className='max-w-xs'
-                />
-              </FormControl>
-              <FormDescription>
-                WAL size threshold for warning alerts. Values are in MB.
-              </FormDescription>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-        <FormField
-          control={form.control}
-          name='error'
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Error Threshold (MB)</FormLabel>
-              <FormControl>
-                <Input
-                  type='number'
-                  placeholder='6000'
-                  {...field}
-                  onChange={(e) => field.onChange(e.target.valueAsNumber)}
-                  className='max-w-xs'
-                />
-              </FormControl>
-              <FormDescription>
-                WAL size threshold for error alerts. Must be greater than warning threshold. Values are in MB.
-              </FormDescription>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-        <FormField
-          control={form.control}
-          name='webhook_url'
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Webhook URL</FormLabel>
-              <FormControl>
-                <Input
-                  type='url'
-                  placeholder='https://your-webhook-endpoint.com/alerts'
-                  {...field}
-                />
-              </FormControl>
-              <FormDescription>
-                Webhook URL for alert notifications. Leave empty to disable notifications.
-                Alerts will be sent when WAL size reaches warning or error thresholds.
-              </FormDescription>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-        <FormField
-          control={form.control}
-          name='notification_iteration'
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Notification Iteration</FormLabel>
-              <FormControl>
-                <Input
-                  type='number'
-                  placeholder='3'
-                  {...field}
-                  onChange={(e) => field.onChange(e.target.valueAsNumber)}
-                  className='max-w-xs'
-                />
-              </FormControl>
-              <FormDescription>
-                Number of check iterations before sending a notification (defaults to 3).
-              </FormDescription>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-        <Button type='submit' disabled={updateMutation.isPending}>
-          {updateMutation.isPending && (
-            <Loader2 className='mr-2 h-4 w-4 animate-spin' />
-          )}
-          Update settings
-        </Button>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          <div className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <FormField
+                control={form.control}
+                name='warning'
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Warning Threshold (MB)</FormLabel>
+                    <FormControl>
+                      <Input
+                        type='number'
+                        placeholder='3000'
+                        {...field}
+                        onChange={(e) => field.onChange(e.target.valueAsNumber)}
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      WAL size threshold for warning alerts.
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name='error'
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Error Threshold (MB)</FormLabel>
+                    <FormControl>
+                      <Input
+                        type='number'
+                        placeholder='6000'
+                        {...field}
+                        onChange={(e) => field.onChange(e.target.valueAsNumber)}
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      WAL size threshold for error alerts.
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+            
+            <FormField
+              control={form.control}
+              name='webhook_url'
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Webhook URL</FormLabel>
+                  <div className="flex gap-2">
+                    <FormControl>
+                      <Input
+                        type='url'
+                        placeholder='https://your-webhook-endpoint.com/alerts'
+                        {...field}
+                      />
+                    </FormControl>
+                    <Button 
+                      type="button" 
+                      variant="secondary"
+                      onClick={async () => {
+                        if (!form.getValues('webhook_url')) {
+                          toast.error("Please enter a webhook URL first")
+                          return
+                        }
+                        try {
+                          await form.handleSubmit(onSubmit)()
+                          
+                          const response = await fetch('/api/v1/configuration/wal-thresholds/test', {
+                            method: 'POST',
+                          })
+                          
+                          if (response.ok) {
+                            toast.success("Test notification sent successfully")
+                          } else {
+                            const error = await response.json()
+                            toast.error(error.detail || "Failed to send test notification")
+                          }
+                        } catch (e) {
+                          toast.error("Failed to trigger test notification")
+                        }
+                      }}
+                    >
+                      Test
+                    </Button>
+                  </div>
+                  <FormDescription>
+                    Webhook URL for alert notifications. Leave empty to disable.
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            
+            <FormField
+              control={form.control}
+              name='notification_iteration'
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Notification Iteration</FormLabel>
+                  <FormControl>
+                    <Input
+                      type='number'
+                      placeholder='3'
+                      {...field}
+                      onChange={(e) => field.onChange(e.target.valueAsNumber)}
+                      className='max-w-[200px]'
+                    />
+                  </FormControl>
+                  <FormDescription>
+                    Number of check iterations before sending a notification.
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            
+            <div className="pt-4">
+              <Button type='submit' disabled={updateMutation.isPending}>
+                {updateMutation.isPending && (
+                  <Loader2 className='mr-2 h-4 w-4 animate-spin' />
+                )}
+                Save Changes
+              </Button>
+            </div>
+          </div>
+          
+          <div>
+             <div className="p-6 bg-card rounded-xl border shadow-sm sticky top-6">
+              <div className="flex items-center gap-2 mb-4 text-muted-foreground">
+                 <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
+                 <h3 className="font-medium text-xs uppercase tracking-wider">Example Payload</h3>
+              </div>
+              <p className="text-sm text-muted-foreground mb-4 leading-relaxed">
+                Notifications are sent as JSON POST requests. Ensure your endpoint can parse the following structure:
+              </p>
+              <div className="rounded-lg border bg-zinc-950 p-4 overflow-hidden">
+                <pre className="text-[10px] sm:text-xs text-zinc-50 font-mono overflow-auto custom-scrollbar">
+{JSON.stringify({
+  "key_notification": "WAL_SIZE_WARNING",
+  "title": "WAL Size Warning",
+  "message": "WAL size exceeded 3000MB.",
+  "type": "WARNING",
+  "timestamp": "2024-01-01T12:00:00+07:00"
+}, null, 2)}
+                </pre>
+              </div>
+            </div>
+          </div>
+        </div>
       </form>
     </Form>
   )
