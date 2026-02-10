@@ -212,7 +212,6 @@ export default function PipelineDetailsPage() {
                         ) : sourceDetails && pipeline ? (
                             <PipelineDataFlow
                                 pipeline={pipeline}
-                                sourceDetails={sourceDetails}
                             />
                         ) : (
                             <div className="p-4 text-muted-foreground">No source details available.</div>

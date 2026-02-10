@@ -1,7 +1,7 @@
-import { useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Pipeline, pipelinesRepo } from '@/repo/pipelines'
-import { SourceTableInfo } from '@/repo/sources'
+
 import {
   ReactFlow,
   Background,
@@ -16,19 +16,12 @@ import '@xyflow/react/dist/style.css'
 import { Database, Layers } from 'lucide-react'
 import { useTheme } from '@/context/theme-provider'
 import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetDescription,
-} from '@/components/ui/sheet'
-import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
-import { PipelineDetailsTable } from './pipeline-details-table'
+
 
 // Custom Node Component for consistent styling with cleaner design
 const CustomNode = ({ data }: { data: any }) => {
@@ -132,7 +125,7 @@ const CustomNode = ({ data }: { data: any }) => {
         className='!h-2.5 !w-2.5 !border-2 !border-white !bg-emerald-500/50 transition-all group-hover:scale-110 group-hover:!bg-emerald-500 dark:!border-gray-900'
       />
 
-      <div className='relative w-[260px] cursor-pointer rounded-lg border-2 border-emerald-500/40 bg-white shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-emerald-500/60 hover:shadow-lg dark:bg-gray-950'>
+      <div className='relative w-[260px] rounded-lg border-2 border-emerald-500/40 bg-white shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-emerald-500/60 hover:shadow-lg dark:bg-gray-950'>
         {/* Subtle glow effect */}
         <div className='absolute inset-0 rounded-lg bg-emerald-500/5' />
 
@@ -187,16 +180,11 @@ const nodeTypes = {
 
 interface PipelineDataFlowProps {
   pipeline: Pipeline
-  sourceDetails?: { tables: SourceTableInfo[] }
 }
 
-export function PipelineDataFlow({
-  pipeline,
-  sourceDetails,
-}: PipelineDataFlowProps) {
+export function PipelineDataFlow({ pipeline }: PipelineDataFlowProps) {
   const { theme } = useTheme()
-  const [selectedDestId, setSelectedDestId] = useState<number | null>(null)
-  const [isSheetOpen, setIsSheetOpen] = useState(false)
+
 
   // Fetch stats to calculate edge labels
   const { data: stats } = useQuery({
@@ -402,18 +390,7 @@ export function PipelineDataFlow({
     return { nodes, edges }
   }, [pipeline, stats])
 
-  const onNodeClick = (_: any, node: Node) => {
-    if (node.id.startsWith('dst-tbl-')) {
-      const destId = node.data.destId as number
-      setSelectedDestId(destId)
-      setIsSheetOpen(true)
-    }
-  }
 
-  const selectedDestName = useMemo(() => {
-    return pipeline.destinations?.find((d) => d.id === selectedDestId)
-      ?.destination.name
-  }, [selectedDestId, pipeline])
 
   return (
     <div className='relative h-[700px] rounded-lg border bg-background [&_.react-flow__controls]:border-border [&_.react-flow__controls]:bg-background [&_.react-flow__controls]:shadow-md [&_.react-flow__controls-button]:border-border [&_.react-flow__controls-button]:bg-background [&_.react-flow__controls-button]:fill-foreground [&_.react-flow__controls-button:hover]:bg-muted'>
@@ -422,34 +399,11 @@ export function PipelineDataFlow({
         edges={edges}
         nodeTypes={nodeTypes}
         colorMode={theme}
-        onNodeClick={onNodeClick}
         fitView
       >
         <Background className='!bg-background' color='var(--border)' />
         <Controls />
       </ReactFlow>
-
-      <Sheet open={isSheetOpen} onOpenChange={setIsSheetOpen}>
-        <SheetContent
-          side='right'
-          className='min-w-[800px] overflow-y-auto sm:w-[800px]'
-        >
-          <SheetHeader className='mb-6'>
-            <SheetTitle>Lineage Details: {selectedDestName}</SheetTitle>
-            <SheetDescription>
-              Records flowing to {selectedDestName}.
-            </SheetDescription>
-          </SheetHeader>
-
-          {selectedDestId && sourceDetails && (
-            <PipelineDetailsTable
-              pipelineId={pipeline.id}
-              tables={sourceDetails.tables}
-              destinationId={selectedDestId}
-            />
-          )}
-        </SheetContent>
-      </Sheet>
     </div>
   )
 }
