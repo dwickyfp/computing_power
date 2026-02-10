@@ -146,7 +146,7 @@ export function Dashboard() {
             className="col-span-24 md:col-span-12 lg:col-span-6 h-32"
           >
             <div className='text-3xl font-bold font-mono'>
-              ${summary?.credits?.month_total.toFixed(2) || '0.00'}
+              ${summary?.credits?.month_total.toFixed(8) || '0.00000000'}
             </div>
           </DashboardPanel>
 
