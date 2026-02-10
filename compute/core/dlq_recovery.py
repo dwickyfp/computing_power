@@ -284,6 +284,15 @@ class DLQRecoveryWorker:
                     f"Initializing destination {destination.name} before replay"
                 )
                 destination.initialize()
+            else:
+                # Even if marked as initialized, force a health check and reconnect if needed
+                # This handles the case where connection was closed after going down
+                self._logger.debug(
+                    f"Checking connection health for destination {destination.name}"
+                )
+                destination.initialize(
+                    force_reconnect=False
+                )  # Will auto-detect stale connection
 
             # Attempt to write batch
             written = destination.write_batch(cdc_records, table_sync)

@@ -99,12 +99,54 @@ class PostgreSQLDestination(BaseDestination):
         """Get PostgreSQL connection string for DuckDB."""
         return f"postgresql://{self.user}:{self.password}@{self.host}:{self.port}/{self.database}"
 
-    def initialize(self) -> None:
+    def _check_connection_health(self) -> bool:
+        """
+        Check if existing PostgreSQL connection is healthy.
+
+        Returns:
+            True if connection is healthy and usable
+        """
+        if not self._pg_conn:
+            return False
+
+        try:
+            # Check if connection is closed
+            if self._pg_conn.closed:
+                self._logger.debug("PostgreSQL connection is closed")
+                return False
+
+            # Execute simple query to verify connection is alive
+            with self._pg_conn.cursor() as cursor:
+                cursor.execute("SELECT 1")
+                cursor.fetchone()
+            return True
+
+        except (psycopg2.OperationalError, psycopg2.InterfaceError) as e:
+            self._logger.debug(f"PostgreSQL connection health check failed: {e}")
+            return False
+        except Exception as e:
+            self._logger.warning(f"Unexpected error in connection health check: {e}")
+            return False
+
+    def initialize(self, force_reconnect: bool = False) -> None:
         """
         Initialize DuckDB connection with PostgreSQL extension.
+
+        Args:
+            force_reconnect: Force reconnection even if already initialized
         """
-        if self._is_initialized:
-            return
+        # If already initialized and connections are healthy, skip
+        if self._is_initialized and not force_reconnect:
+            # Check connection health
+            if self._check_connection_health():
+                return
+            else:
+                # Connection is stale/closed, need to reconnect
+                self._logger.info(
+                    f"Detected stale connection for {self._config.name}, reconnecting..."
+                )
+                self._cleanup_connections()
+                self._is_initialized = False
 
         try:
             # Create in-memory DuckDB connection
@@ -1002,15 +1044,22 @@ class PostgreSQLDestination(BaseDestination):
             self._logger.debug(f"Wrote {written} records to {target_table}")
             return written
 
-        except psycopg2.OperationalError as e:
-            # Connection error - force send notification
+        except (psycopg2.OperationalError, psycopg2.InterfaceError) as e:
+            # Connection error (OperationalError) or closed connection (InterfaceError)
+            error_msg = str(e)
+            self._logger.error(f"PostgreSQL sync failed: {error_msg}")
+
+            # Mark connection as unhealthy
+            self._is_initialized = False
+
+            # Force send notification
             try:
                 notification_repo = NotificationLogRepository()
                 notification_repo.upsert_notification_by_key(
                     NotificationLogCreate(
                         key_notification=f"destination_connection_error_{self.destination_id}",
                         title=f"PostgreSQL Connection Error",
-                        message=f"Failed to connect to PostgreSQL destination {self._config.name}: {str(e)}",
+                        message=f"Failed to connect to PostgreSQL destination {self._config.name}: {error_msg}",
                         type="ERROR",
                         is_force_sent=True,
                     )
@@ -1018,7 +1067,11 @@ class PostgreSQLDestination(BaseDestination):
             except Exception as notify_error:
                 self._logger.error(f"Failed to log notification: {notify_error}")
 
-            raise e
+            # Wrap in DestinationException for proper DLQ handling
+            raise DestinationException(
+                f"PostgreSQL sync failed: {error_msg}",
+                {"destination_id": self._config.id},
+            )
 
         except Exception as e:
             # Notify on error
@@ -1157,6 +1210,22 @@ class PostgreSQLDestination(BaseDestination):
             columns.append(col_def)
 
         return columns
+
+    def _cleanup_connections(self) -> None:
+        """Internal method to cleanup connections without logging."""
+        if self._duckdb_conn:
+            try:
+                self._duckdb_conn.close()
+            except Exception:
+                pass
+            self._duckdb_conn = None
+
+        if self._pg_conn:
+            try:
+                self._pg_conn.close()
+            except Exception:
+                pass
+            self._pg_conn = None
 
     def close(self) -> None:
         """Close DuckDB and PostgreSQL connections."""
