@@ -28,15 +28,10 @@ const walMonitorFormSchema = z
       .number()
       .min(1, 'Error threshold must be at least 1 MB')
       .max(1000000, 'Error threshold is too large'),
-    webhook_url: z.string().url('Please enter a valid URL').or(z.literal('')),
-    notification_iteration: z
-      .number()
-      .min(1, 'Iteration must be at least 1')
-      .max(100, 'Iteration cannot exceed 100'),
   })
   .refine((data) => data.error > data.warning, {
     message: 'Error threshold must be greater than warning threshold',
-    path: ['error'],
+    path: ['error'], // path of error
   })
 
 type WALMonitorFormValues = z.infer<typeof walMonitorFormSchema>
@@ -52,8 +47,6 @@ export function WALMonitorForm() {
   const defaultValues: WALMonitorFormValues = {
     warning: 3000,
     error: 6000,
-    webhook_url: '',
-    notification_iteration: 3,
   }
 
   const form = useForm<WALMonitorFormValues>({
@@ -67,8 +60,6 @@ export function WALMonitorForm() {
       form.reset({
         warning: config.warning,
         error: config.error,
-        webhook_url: config.webhook_url,
-        notification_iteration: config.notification_iteration,
       })
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -84,8 +75,6 @@ export function WALMonitorForm() {
       form.reset({
         warning: data.warning,
         error: data.error,
-        webhook_url: data.webhook_url,
-        notification_iteration: data.notification_iteration,
       })
       toast.success('WAL Monitor settings updated successfully')
     },
@@ -95,7 +84,14 @@ export function WALMonitorForm() {
   })
 
   function onSubmit(data: WALMonitorFormValues) {
-    updateMutation.mutate(data)
+    if (!config) return
+
+    // Merge with existing config to preserve notification settings
+    const payload = {
+      ...config,
+      ...data,
+    }
+    updateMutation.mutate(payload)
   }
 
   if (isLoading) {
@@ -111,7 +107,7 @@ export function WALMonitorForm() {
       <form onSubmit={form.handleSubmit(onSubmit)} className='space-y-8'>
         <div className='grid grid-cols-1 gap-8 lg:grid-cols-2'>
           <div className='space-y-6'>
-            <div className='grid grid-cols-1 gap-6 md:grid-cols-2'>
+            <div className='grid grid-cols-1 gap-6'>
               <FormField
                 control={form.control}
                 name='warning'
@@ -156,71 +152,6 @@ export function WALMonitorForm() {
               />
             </div>
 
-            <FormField
-              control={form.control}
-              name='webhook_url'
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Webhook URL</FormLabel>
-                  <div className='flex gap-2'>
-                    <FormControl>
-                      <Input
-                        type='url'
-                        placeholder='https://your-webhook-endpoint.com/webhook'
-                        {...field}
-                      />
-                    </FormControl>
-                    <Button
-                      type='button'
-                      variant='secondary'
-                      onClick={async () => {
-                        const currentWebhookUrl = form.getValues('webhook_url')
-                        if (!currentWebhookUrl) {
-                          toast.error('Please enter a webhook URL first')
-                          return
-                        }
-                        try {
-                          await configurationRepo.testNotification(currentWebhookUrl)
-                          toast.success('Test notification sent successfully')
-                        } catch (e: any) {
-                          toast.error(e.response?.data?.detail || 'Failed to trigger test notification')
-                        }
-                      }}
-                    >
-                      Test
-                    </Button>
-                  </div>
-                  <FormDescription>
-                    Webhook URL for alert notifications. Leave empty to disable.
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name='notification_iteration'
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Notification Iteration</FormLabel>
-                  <FormControl>
-                    <Input
-                      type='number'
-                      placeholder='3'
-                      {...field}
-                      onChange={(e) => field.onChange(e.target.valueAsNumber)}
-                      className='max-w-50'
-                    />
-                  </FormControl>
-                  <FormDescription>
-                    Number of check iterations before sending a notification.
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
             <div className='pt-4'>
               <Button type='submit' disabled={updateMutation.isPending}>
                 {updateMutation.isPending && (
@@ -228,36 +159,6 @@ export function WALMonitorForm() {
                 )}
                 Save Changes
               </Button>
-            </div>
-          </div>
-
-          <div>
-            <div className='sticky top-6 rounded-xl border bg-card p-6 shadow-sm'>
-              <div className='mb-4 flex items-center gap-2 text-muted-foreground'>
-                <div className='h-2 w-2 animate-pulse rounded-full bg-green-500' />
-                <h3 className='text-xs font-medium tracking-wider uppercase'>
-                  Example Payload
-                </h3>
-              </div>
-              <p className='mb-4 text-sm leading-relaxed text-muted-foreground'>
-                Notifications are sent as JSON POST requests. Ensure your
-                endpoint can parse the following structure:
-              </p>
-              <div className='overflow-hidden rounded-lg border bg-zinc-950 p-4'>
-                <pre className='custom-scrollbar overflow-auto font-mono text-[10px] text-zinc-50 sm:text-xs'>
-                  {JSON.stringify(
-                    {
-                      key_notification: 'WAL_SIZE_WARNING',
-                      title: 'WAL Size Warning',
-                      message: 'WAL size exceeded 3000MB.',
-                      type: 'WARNING',
-                      timestamp: '2024-01-01T12:00:00+07:00',
-                    },
-                    null,
-                    2
-                  )}
-                </pre>
-              </div>
             </div>
           </div>
         </div>
