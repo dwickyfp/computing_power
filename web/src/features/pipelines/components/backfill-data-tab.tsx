@@ -25,6 +25,7 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Progress } from '@/components/ui/progress'
 import {
   Select,
   SelectContent,
@@ -408,6 +409,7 @@ export function BackfillDataTab({
                 <TableHead>Table Name</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Records</TableHead>
+                <TableHead>Progress</TableHead>
                 <TableHead>Filters</TableHead>
                 <TableHead>Created</TableHead>
                 <TableHead className='text-right'>Actions</TableHead>
@@ -436,6 +438,23 @@ export function BackfillDataTab({
                       {job.total_record > 0
                         ? `${formatNumber(job.count_record)}/${formatNumber(job.total_record)}`
                         : formatNumber(job.count_record)}
+                    </TableCell>
+                    <TableCell>
+                      <div className='flex items-center gap-2'>
+                        <Progress
+                          value={
+                            job.total_record > 0
+                              ? (job.count_record / job.total_record) * 100
+                              : 0
+                          }
+                          className='h-2 w-24'
+                        />
+                        <span className='text-xs whitespace-nowrap text-muted-foreground'>
+                          {job.total_record > 0
+                            ? `${Math.round((job.count_record / job.total_record) * 100)}%`
+                            : '0%'}
+                        </span>
+                      </div>
                     </TableCell>
                     <TableCell>
                       {job.filter_sql ? (
