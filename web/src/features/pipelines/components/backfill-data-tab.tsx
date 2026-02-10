@@ -426,7 +426,9 @@ export function BackfillDataTab({
                         variant='outline'
                         className={STATUS_CONFIG[job.status].color}
                       >
-                        <StatusIcon className='mr-1 h-3 w-3' />
+                        <StatusIcon
+                          className={`mr-1 h-3 w-3 ${job.status === 'EXECUTING' ? 'animate-spin' : ''}`}
+                        />
                         {STATUS_CONFIG[job.status].label}
                       </Badge>
                     </TableCell>

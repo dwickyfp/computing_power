@@ -167,7 +167,15 @@ class BackfillManager:
             # Execute backfill
             total_records = self._process_backfill_with_duckdb(job)
 
-            # Update to COMPLETED
+            # Check if job was cancelled during processing
+            if self._is_job_cancelled(job_id):
+                logger.info(
+                    f"Backfill job {job_id} was cancelled. Processed {total_records} records before cancellation."
+                )
+                # Status is already CANCELLED, just return
+                return
+
+            # Update to COMPLETED only if not cancelled
             self._update_job_status(
                 job_id,
                 BackfillStatus.COMPLETED.value,
@@ -321,7 +329,11 @@ class BackfillManager:
             job: Job configuration
             records: Batch of records to process
         """
-        from core.repository import PipelineRepository, DestinationRepository
+        from core.repository import (
+            PipelineRepository,
+            DestinationRepository,
+            DataFlowRepository,
+        )
         from core.models import DestinationType
         from destinations.base import CDCRecord
         from destinations.snowflake import SnowflakeDestination
@@ -410,6 +422,26 @@ class BackfillManager:
                         f"✓ Wrote {written} records to destination {destination_config.name} "
                         f"for table {table_name} -> {table_sync.table_name_target}"
                     )
+
+                    # Track data flow monitoring (same as CDC)
+                    if written > 0:
+                        try:
+                            DataFlowRepository.increment_count(
+                                pipeline_id=pipeline_id,
+                                pipeline_destination_id=pd.id,
+                                source_id=job["source_id"],
+                                table_sync_id=table_sync.id,
+                                table_name=f"{table_name.upper()}",
+                                count=written,
+                            )
+                            logger.debug(
+                                f"Tracked {written} records in data_flow_record_monitoring "
+                                f"for pipeline {pipeline_id}, destination {pd.id}"
+                            )
+                        except Exception as monitoring_error:
+                            logger.warning(
+                                f"Failed to update data flow monitoring: {monitoring_error}"
+                            )
 
                 except Exception as dest_error:
                     logger.error(
