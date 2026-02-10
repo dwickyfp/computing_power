@@ -130,7 +130,7 @@ function CreateBackfillDialog({ pipelineId, sourceId }: BackfillDataTabProps) {
     },
     onError: (error: any) => {
       toast.error(
-        `Failed to create backfill job: ${error.response?.data?.detail || error.message}`
+        `Failed to create backfill job: ${error.response?.data?.message || error.response?.data?.detail || error.message}`
       )
     },
   })
@@ -426,7 +426,7 @@ export function BackfillDataTab({
     },
     onError: (error: any) => {
       toast.error(
-        `Failed to cancel job: ${error.response?.data?.detail || error.message}`
+        `Failed to cancel job: ${error.response?.data?.message || error.response?.data?.detail || error.message}`
       )
     },
   })
@@ -440,7 +440,7 @@ export function BackfillDataTab({
     },
     onError: (error: any) => {
       toast.error(
-        `Failed to delete job: ${error.response?.data?.detail || error.message}`
+        `Failed to delete job: ${error.response?.data?.message || error.response?.data?.detail || error.message}`
       )
     },
   })

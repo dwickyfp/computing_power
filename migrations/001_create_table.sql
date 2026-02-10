@@ -297,16 +297,12 @@ ALTER TABLE queue_backfill_data ADD COLUMN IF NOT EXISTS is_error BOOLEAN NOT NU
 -- Drop Index if exists
 DROP INDEX IF EXISTS idx_queue_backfill_data_pipeline_id;
 DROP INDEX IF EXISTS idx_queue_backfill_data_source_id;
-DROP INDEX IF EXISTS idx_queue_backfill_data_table_name;
-DROP INDEX IF EXISTS idx_queue_backfill_data_status;
 DROP INDEX IF EXISTS idx_queue_backfill_data_created_at;
 DROP INDEX IF EXISTS idx_queue_backfill_data_updated_at;
 
 -- Create Index for queue_backfill_data
 CREATE INDEX IF NOT EXISTS idx_queue_backfill_data_pipeline_id ON queue_backfill_data(pipeline_id);
 CREATE INDEX IF NOT EXISTS idx_queue_backfill_data_source_id ON queue_backfill_data(source_id);
-CREATE INDEX IF NOT EXISTS idx_queue_backfill_data_table_name ON queue_backfill_data(table_name);
-CREATE INDEX IF NOT EXISTS idx_queue_backfill_data_status ON queue_backfill_data(status);
 CREATE INDEX IF NOT EXISTS idx_queue_backfill_data_created_at ON queue_backfill_data(created_at);
 CREATE INDEX IF NOT EXISTS idx_queue_backfill_data_updated_at ON queue_backfill_data(updated_at);
 

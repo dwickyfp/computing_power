@@ -70,13 +70,6 @@ class BackfillService:
         existing_jobs = self.repository.get_by_pipeline_id(pipeline_id)
         active_statuses = [BackfillStatus.PENDING.value, BackfillStatus.EXECUTING.value]
 
-        for job in existing_jobs:
-            if job.table_name == job_data.table_name and job.status in active_statuses:
-                raise ValidationError(
-                    field="table_name",
-                    message=f"An active backfill job already exists for table '{job_data.table_name}'",
-                )
-
         # Validate table exists in source
         table_metadata = self.table_metadata_repo.get_by_source_and_name(
             source_id=pipeline.source_id,
@@ -85,8 +78,8 @@ class BackfillService:
 
         if not table_metadata:
             raise ValidationError(
-                field="table_name",
                 message=f"Table '{job_data.table_name}' does not exist in source",
+                details={"field": "table_name"},
             )
 
         # Convert filters to SQL format
@@ -182,16 +175,16 @@ class BackfillService:
             BackfillStatus.EXECUTING.value,
         ]:
             raise ValidationError(
-                field="status",
                 message=f"Cannot cancel job with status {job.status}",
+                details={"field": "status"},
             )
 
         # Cancel the job
         success = self.repository.cancel_job(job_id)
         if not success:
             raise ValidationError(
-                field="status",
                 message="Failed to cancel backfill job",
+                details={"field": "status"},
             )
 
         self.db.commit()
@@ -228,8 +221,8 @@ class BackfillService:
         # Don't allow deleting executing jobs
         if job.status == BackfillStatus.EXECUTING.value:
             raise ValidationError(
-                field="status",
                 message="Cannot delete job that is currently executing. Cancel it first.",
+                details={"field": "status"},
             )
 
         self.repository.delete(job_id)
