@@ -460,22 +460,59 @@ class SnowflakeDestination(BaseDestination):
             )
             return 0
 
-        # Insert rows
-        try:
-            next_token = await self._client.insert_rows(
-                landing_table,
-                "default",
-                valid_rows,
-                self._channel_tokens.get(landing_table),
+        # Insert rows in chunks to stay under Snowflake's 4MB request body limit
+        # Use 3.5MB threshold to leave margin for HTTP headers/overhead
+        import json as _json
+
+        MAX_CHUNK_BYTES = 3_500_000  # 3.5 MB safety margin
+        chunks: list[list[dict]] = []
+        current_chunk: list[dict] = []
+        current_size = 0
+
+        for row in valid_rows:
+            row_bytes = len(_json.dumps(row).encode("utf-8")) + 1  # +1 for newline
+            if current_chunk and (current_size + row_bytes) > MAX_CHUNK_BYTES:
+                chunks.append(current_chunk)
+                current_chunk = [row]
+                current_size = row_bytes
+            else:
+                current_chunk.append(row)
+                current_size += row_bytes
+
+        if current_chunk:
+            chunks.append(current_chunk)
+
+        if len(chunks) > 1:
+            self._logger.info(
+                f"Split {len(valid_rows)} rows into {len(chunks)} chunks "
+                f"to stay under 4MB limit for {landing_table}"
             )
+
+        try:
+            total_written = 0
+            continuation = self._channel_tokens.get(landing_table)
+
+            for i, chunk in enumerate(chunks):
+                next_token = await self._client.insert_rows(
+                    landing_table,
+                    "default",
+                    chunk,
+                    continuation,
+                )
+                continuation = next_token
+                total_written += len(chunk)
+                if len(chunks) > 1:
+                    self._logger.debug(
+                        f"Chunk {i + 1}/{len(chunks)}: wrote {len(chunk)} rows to {landing_table}"
+                    )
 
             # Update state on success
-            self._channel_tokens[landing_table] = next_token
+            self._channel_tokens[landing_table] = continuation
 
             self._logger.debug(
-                f"Successfully wrote {len(valid_rows)} rows to {landing_table}"
+                f"Successfully wrote {total_written} rows to {landing_table}"
             )
-            return len(valid_rows)
+            return total_written
 
         except Exception as e:
             self._logger.error(f"Failed to write to {landing_table}: {e}")
