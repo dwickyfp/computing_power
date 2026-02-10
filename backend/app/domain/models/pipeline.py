@@ -90,6 +90,13 @@ class Pipeline(Base, TimestampMixin):
         comment="Pipeline operational status: START, PAUSE, or REFRESH",
     )
 
+    ready_refresh: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,
+        nullable=False,
+        comment="Flag indicating pipeline needs refresh due to configuration changes",
+    )
+
     # Relationships
     source: Mapped["Source"] = relationship(
         "Source", back_populates="pipelines", lazy="selectin"

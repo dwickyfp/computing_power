@@ -101,7 +101,7 @@ class BackfillService:
         return BackfillJobResponse.from_orm(job)
 
     def get_pipeline_backfill_jobs(
-        self, pipeline_id: int, skip: int = 0, limit: int = 100
+        self, pipeline_id: int, skip: int = 0, limit: int = 10
     ) -> BackfillJobListResponse:
         """
         Get all backfill jobs for a pipeline.

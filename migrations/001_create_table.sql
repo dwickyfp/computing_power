@@ -43,9 +43,13 @@ CREATE TABLE IF NOT EXISTS pipelines (
     name VARCHAR(255) NOT NULL UNIQUE,-- 'SNOWFLAKE' or 'POSTGRESQL'
     source_id INTEGER NOT NULL REFERENCES sources(id) ON DELETE CASCADE,
     status VARCHAR(20) NOT NULL DEFAULT 'PAUSE', -- 'START' or 'PAUSE' or 'REFRESH
+    ready_refresh BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- Alter table pipelines add column ready_refresh if not exists
+ALTER TABLE pipelines ADD COLUMN IF NOT EXISTS ready_refresh BOOLEAN NOT NULL DEFAULT FALSE;
 
 -- 1 pipelines sources, now can have more then 1 destination
 CREATE TABLE IF NOT EXISTS pipelines_destination (

@@ -170,6 +170,66 @@ class BackgroundScheduler:
         except Exception as e:
             logger.error("Error running notification sender task", extra={"error": str(e)})
 
+    def _run_pipeline_refresh_check(self) -> None:
+        """
+        Synchronous wrapper for pipeline refresh check task.
+        """
+        try:
+            from app.core.database import db_manager
+            from app.domain.models.pipeline import Pipeline, PipelineStatus
+            
+            session_factory = db_manager.session_factory
+            db = session_factory()
+            try:
+                # Find pipelines ready for refresh
+                pipelines = db.query(Pipeline).filter(Pipeline.ready_refresh == True).all()
+                
+                for pipeline in pipelines:
+                    try:
+                        pipeline.status = PipelineStatus.REFRESH.value
+                        pipeline.ready_refresh = False
+                        logger.info(f"Auto-refreshing pipeline {pipeline.id} ({pipeline.name})")
+                    except Exception as e:
+                        logger.error(f"Failed to refresh pipeline {pipeline.id}: {e}")
+                
+                if pipelines:
+                    db.commit()
+                    self._record_job_metric("pipeline_refresh_check")
+            finally:
+                db.close()
+        except Exception as e:
+            logger.error("Error running pipeline refresh check task", extra={"error": str(e)})
+
+    def _run_pipeline_refresh_check(self) -> None:
+        """
+        Synchronous wrapper for pipeline refresh check task.
+        """
+        try:
+            from app.core.database import db_manager
+            from app.domain.models.pipeline import Pipeline, PipelineStatus
+            
+            session_factory = db_manager.session_factory
+            db = session_factory()
+            try:
+                # Find pipelines ready for refresh
+                pipelines = db.query(Pipeline).filter(Pipeline.ready_refresh == True).all()
+                
+                for pipeline in pipelines:
+                    try:
+                        pipeline.status = PipelineStatus.REFRESH.value
+                        pipeline.ready_refresh = False
+                        logger.info(f"Auto-refreshing pipeline {pipeline.id} ({pipeline.name})")
+                    except Exception as e:
+                        logger.error(f"Failed to refresh pipeline {pipeline.id}: {e}")
+                
+                if pipelines:
+                    db.commit()
+                    self._record_job_metric("pipeline_refresh_check")
+            finally:
+                db.close()
+        except Exception as e:
+            logger.error("Error running pipeline refresh check task", extra={"error": str(e)})
+
     def start(self) -> None:
         """
         Start the background scheduler.
@@ -297,6 +357,19 @@ class BackgroundScheduler:
         )
 
         logger.info("Replication, Credit, Table Refresh, and System Metrics monitoring scheduled")
+
+        # Schedule Pipeline Refresh Check (every 10 seconds)
+        self.scheduler.add_job(
+            self._run_pipeline_refresh_check,
+            trigger=IntervalTrigger(
+                seconds=10
+            ),
+            id="pipeline_refresh_check",
+            name="Pipeline Refresh Check",
+            replace_existing=True,
+            max_instances=1,
+            coalesce=True,
+        )
 
         # Start scheduler
         self.scheduler.start()
