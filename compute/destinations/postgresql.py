@@ -17,6 +17,7 @@ from core.models import Destination, PipelineDestinationTableSync
 from core.exceptions import DestinationException
 from core.security import decrypt_value
 from core.notification import NotificationLogRepository, NotificationLogCreate
+from core.error_sanitizer import sanitize_for_db
 
 logger = logging.getLogger(__name__)
 
@@ -138,8 +139,10 @@ class PostgreSQLDestination(BaseDestination):
             )
 
         except Exception as e:
+            # Sanitize error message to avoid exposing credentials
+            sanitized_msg = sanitize_for_db(e, self._config.name, "POSTGRES")
             raise DestinationException(
-                f"Failed to initialize PostgreSQL destination: {e}",
+                sanitized_msg,
                 {"destination_id": self._config.id},
             )
 
@@ -1009,35 +1012,35 @@ class PostgreSQLDestination(BaseDestination):
                         title=f"PostgreSQL Connection Error",
                         message=f"Failed to connect to PostgreSQL destination {self._config.name}: {str(e)}",
                         type="ERROR",
-                        is_force_sent=True
+                        is_force_sent=True,
                     )
                 )
             except Exception as notify_error:
                 self._logger.error(f"Failed to log notification: {notify_error}")
-            
+
             raise e
 
         except Exception as e:
             # Notify on error
             try:
                 notification_repo = NotificationLogRepository()
-                
+
                 # Check for connection issues in error message if generic exception caught
                 error_msg = str(e).lower()
                 is_force_sent = (
-                    "connection" in error_msg or 
-                    "refused" in error_msg or 
-                    "timeout" in error_msg or
-                    "operationalerror" in error_msg
+                    "connection" in error_msg
+                    or "refused" in error_msg
+                    or "timeout" in error_msg
+                    or "operationalerror" in error_msg
                 )
-                
+
                 notification_repo.upsert_notification_by_key(
                     NotificationLogCreate(
                         key_notification=f"destination_error_{self.destination_id}_{source_table}",
                         title=f"PostgreSQL Sync Error: {target_table}",
                         message=f"Failed to sync table {source_table} to {target_table}: {str(e)}",
                         type="ERROR",
-                        is_force_sent=is_force_sent
+                        is_force_sent=is_force_sent,
                     )
                 )
             except Exception as notify_error:

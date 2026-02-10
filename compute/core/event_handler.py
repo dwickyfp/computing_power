@@ -25,6 +25,7 @@ from core.repository import (
 from core.exceptions import DestinationException
 from core.dlq_manager import DLQManager
 from core.notification import NotificationLogRepository, NotificationLogCreate
+from core.error_sanitizer import sanitize_for_db, sanitize_for_log
 
 logger = logging.getLogger(__name__)
 
@@ -365,63 +366,73 @@ class CDCEventHandler(BasePythonChangeHandler):
 
         except DestinationException as e:
             # Destination-specific error (e.g., table not exists, schema mismatch)
-            error_msg = f"Destination error: {str(e)}"
+            log_msg = f"Destination error: {sanitize_for_log(e)}"
             self._logger.error(
                 f"✗ Failed to write to destination {routing.destination.name} "
-                f"for table {table_name}: {error_msg}",
+                f"for table {table_name}: {log_msg}",
                 exc_info=False,
             )
 
+            # Sanitize error for database storage and user display
+            db_error_msg = sanitize_for_db(
+                e, routing.destination.name, routing.destination._config.type
+            )
+
             # Enqueue failed records to DLQ if available
             if self._dlq_manager:
-                self._enqueue_to_dlq(records, routing, error_msg)
+                self._enqueue_to_dlq(records, routing, db_error_msg)
 
             # Insert notification with is_force_sent=True
             self._create_destination_failure_notification(
-                routing, table_name, error_msg, "DESTINATION_ERROR"
+                routing, table_name, db_error_msg, "DESTINATION_ERROR"
             )
 
             # Update error state for both table sync and pipeline destination
-            TableSyncRepository.update_error(routing.table_sync.id, True, error_msg)
+            TableSyncRepository.update_error(routing.table_sync.id, True, db_error_msg)
             PipelineDestinationRepository.update_error(
-                routing.pipeline_destination.id, True, error_msg
+                routing.pipeline_destination.id, True, db_error_msg
             )
 
             # Update in-memory state
             routing.table_sync.is_error = True
-            routing.table_sync.error_message = error_msg
+            routing.table_sync.error_message = db_error_msg
             routing.pipeline_destination.is_error = True
-            routing.pipeline_destination.error_message = error_msg
+            routing.pipeline_destination.error_message = db_error_msg
 
         except Exception as e:
             # Unexpected error (connection issues, authentication, etc.)
-            error_msg = f"Unexpected error: {str(e)}"
+            log_msg = f"Unexpected error: {sanitize_for_log(e)}"
             self._logger.error(
                 f"✗ Unexpected error writing to destination {routing.destination.name} "
-                f"for table {table_name}: {error_msg}",
+                f"for table {table_name}: {log_msg}",
                 exc_info=True,
+            )
+
+            # Sanitize error for database storage and user display
+            db_error_msg = sanitize_for_db(
+                e, routing.destination.name, routing.destination._config.type
             )
 
             # Enqueue failed records to DLQ if available
             if self._dlq_manager:
-                self._enqueue_to_dlq(records, routing, error_msg)
+                self._enqueue_to_dlq(records, routing, db_error_msg)
 
             # Insert notification with is_force_sent=True (connection issue)
             self._create_destination_failure_notification(
-                routing, table_name, error_msg, "CONNECTION_ERROR"
+                routing, table_name, db_error_msg, "CONNECTION_ERROR"
             )
 
             # Update error state for both table sync and pipeline destination
-            TableSyncRepository.update_error(routing.table_sync.id, True, error_msg)
+            TableSyncRepository.update_error(routing.table_sync.id, True, db_error_msg)
             PipelineDestinationRepository.update_error(
-                routing.pipeline_destination.id, True, error_msg
+                routing.pipeline_destination.id, True, db_error_msg
             )
 
             # Update in-memory state
             routing.table_sync.is_error = True
-            routing.table_sync.error_message = error_msg
+            routing.table_sync.error_message = db_error_msg
             routing.pipeline_destination.is_error = True
-            routing.pipeline_destination.error_message = error_msg
+            routing.pipeline_destination.error_message = db_error_msg
 
     def _update_monitoring(
         self,
@@ -494,6 +505,11 @@ class CDCEventHandler(BasePythonChangeHandler):
         """
         Create notification log entry for destination failure.
 
+        Anti-spam logic: Only creates notification if:
+        1. No previous notification exists, OR
+        2. Last notification was created >5 minutes ago, OR
+        3. Last notification has is_sent=True or is_read=True
+
         Args:
             routing: Routing information
             table_name: Table name that failed
@@ -501,10 +517,72 @@ class CDCEventHandler(BasePythonChangeHandler):
             error_type: Type of error (CONNECTION_ERROR, DESTINATION_ERROR)
         """
         try:
-            notif_repo = NotificationLogRepository()
+            from datetime import datetime, timezone, timedelta
+            from core.database import get_db_connection, return_db_connection
 
             # Create unique key for this destination+table combination
             key_notification = f"pipeline_{self._pipeline.id}_dest_{routing.destination.destination_id}_table_{table_name}_{error_type}"
+
+            # Check if we should create notification (anti-spam logic)
+            should_create = False
+            conn = None
+
+            try:
+                conn = get_db_connection()
+                with conn.cursor() as cursor:
+                    # Get last notification with this key
+                    cursor.execute(
+                        """
+                        SELECT created_at, is_sent, is_read
+                        FROM notification_log
+                        WHERE key_notification = %s AND is_deleted = FALSE
+                        ORDER BY created_at DESC
+                        LIMIT 1
+                        """,
+                        (key_notification,),
+                    )
+                    result = cursor.fetchone()
+
+                    if not result:
+                        # No previous notification, create new one
+                        should_create = True
+                    else:
+                        last_created_at, is_sent, is_read = result
+
+                        # Check if last notification was sent or read
+                        if is_sent or is_read:
+                            should_create = True
+                            self._logger.debug(
+                                f"Creating notification: last notification was {'sent' if is_sent else 'read'}"
+                            )
+                        else:
+                            # Check 5-minute gap
+                            now = datetime.now(timezone.utc)
+                            # Ensure last_created_at is timezone-aware
+                            if last_created_at.tzinfo is None:
+                                last_created_at = last_created_at.replace(
+                                    tzinfo=timezone.utc
+                                )
+
+                            time_diff = now - last_created_at
+                            if time_diff >= timedelta(minutes=5):
+                                should_create = True
+                                self._logger.debug(
+                                    f"Creating notification: {time_diff.total_seconds():.0f}s since last notification (>5min)"
+                                )
+                            else:
+                                self._logger.debug(
+                                    f"Skipping notification: only {time_diff.total_seconds():.0f}s since last notification (<5min), "
+                                    f"and not yet sent/read"
+                                )
+
+            finally:
+                if conn:
+                    return_db_connection(conn)
+
+            # If anti-spam conditions not met, skip notification
+            if not should_create:
+                return
 
             # Determine notification type and title based on error
             if (
@@ -530,6 +608,7 @@ class CDCEventHandler(BasePythonChangeHandler):
                     f"CDC events are being stored in DLQ for recovery."
                 )
 
+            notif_repo = NotificationLogRepository()
             notification = NotificationLogCreate(
                 key_notification=key_notification,
                 title=title,

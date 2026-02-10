@@ -18,6 +18,7 @@ from core.repository import (
     PipelineMetadataRepository,
 )
 from core.exceptions import PipelineException
+from core.error_sanitizer import sanitize_for_db, sanitize_for_log
 from core.dlq_manager import DLQManager
 from core.dlq_recovery import DLQRecoveryWorker
 from sources.base import BaseSource
@@ -179,14 +180,19 @@ class PipelineEngine:
 
                 except Exception as init_error:
                     # Log initialization error but keep destination object for DLQ/recovery
-                    error_msg = f"Failed to initialize destination {pd.destination.name}: {str(init_error)}"
-                    self._logger.warning(error_msg, exc_info=True)
+                    log_msg = f"Failed to initialize destination {pd.destination.name}: {sanitize_for_log(init_error)}"
+                    self._logger.warning(log_msg, exc_info=True)
                     failed_destinations += 1
 
-                    # Update error state in database
+                    # Update error state in database with sanitized message
                     from core.repository import PipelineDestinationRepository
 
-                    PipelineDestinationRepository.update_error(pd.id, True, error_msg)
+                    db_error_msg = sanitize_for_db(
+                        init_error, pd.destination.name, pd.destination.type
+                    )
+                    PipelineDestinationRepository.update_error(
+                        pd.id, True, db_error_msg
+                    )
 
                 # Add destination to registry regardless of initialization status
                 # This allows DLQ recovery worker to track and retry connection
@@ -194,16 +200,17 @@ class PipelineEngine:
 
             except Exception as e:
                 # Failed to even create destination object
-                error_msg = (
-                    f"Failed to create destination {pd.destination.name}: {str(e)}"
-                )
-                self._logger.error(error_msg, exc_info=True)
+                log_msg = f"Failed to create destination {pd.destination.name}: {sanitize_for_log(e)}"
+                self._logger.error(log_msg, exc_info=True)
                 failed_destinations += 1
 
-                # Update error state in database
+                # Update error state in database with sanitized message
                 from core.repository import PipelineDestinationRepository
 
-                PipelineDestinationRepository.update_error(pd.id, True, error_msg)
+                db_error_msg = sanitize_for_db(
+                    e, pd.destination.name, pd.destination.type
+                )
+                PipelineDestinationRepository.update_error(pd.id, True, db_error_msg)
 
         # Log status but don't fail if no destinations initialized
         # Pipeline will use DLQ for all writes until destinations recover
@@ -288,8 +295,11 @@ class PipelineEngine:
             self._engine = DebeziumJsonEngine(properties=props, handler=handler)
             self._engine.run()
         except Exception as e:
-            self._logger.error(f"Pipeline {self._pipeline.name} failed: {e}")
-            PipelineMetadataRepository.upsert(self._pipeline_id, "ERROR", str(e))
+            self._logger.error(
+                f"Pipeline {self._pipeline.name} failed: {sanitize_for_log(e)}"
+            )
+            db_error_msg = sanitize_for_db(e, self._pipeline.name, "PIPELINE")
+            PipelineMetadataRepository.upsert(self._pipeline_id, "ERROR", db_error_msg)
             raise
         finally:
             self._is_running = False

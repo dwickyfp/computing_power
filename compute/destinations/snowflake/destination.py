@@ -16,6 +16,7 @@ from core.exceptions import DestinationException
 from core.models import Destination, PipelineDestinationTableSync
 from core.security import decrypt_value
 from core.notification import NotificationLogRepository, NotificationLogCreate
+from core.error_sanitizer import sanitize_for_db
 from destinations.base import BaseDestination, CDCRecord
 from destinations.snowflake.client import SnowpipeClient
 
@@ -52,7 +53,7 @@ class SnowflakeDestination(BaseDestination):
         missing = [k for k in self.REQUIRED_CONFIG if k not in cfg]
         if missing:
             raise DestinationException(
-                f"Missing required Snowflake config: {missing}",
+                "Missing required Snowflake configuration fields",
                 {"destination_id": self._config.id},
             )
 
@@ -109,7 +110,7 @@ class SnowflakeDestination(BaseDestination):
         # Validate PEM format
         if not (private_key.startswith("-----BEGIN") and "-----END" in private_key):
             raise DestinationException(
-                "Private key must be in PEM format with proper headers (-----BEGIN/-----END)",
+                "Invalid private key format",
                 {"destination_id": self._config.id},
             )
 
@@ -174,8 +175,9 @@ class SnowflakeDestination(BaseDestination):
             self._logger.info(f"Snowflake destination initialized: {self._config.name}")
 
         except Exception as e:
+            sanitized_msg = sanitize_for_db(e, self._config.name, "SNOWFLAKE")
             raise DestinationException(
-                f"Failed to initialize Snowflake destination: {e}",
+                sanitized_msg,
                 {"destination_id": self._config.id},
             )
 
@@ -475,28 +477,28 @@ class SnowflakeDestination(BaseDestination):
             )
             return len(valid_rows)
 
-
-
         except Exception as e:
             self._logger.error(f"Failed to write to {landing_table}: {e}")
-            
+
             # Notify on error
             try:
                 notification_repo = NotificationLogRepository()
-                is_force_sent = "connection" in str(e).lower() or "authentication" in str(e).lower()
-                
+                is_force_sent = (
+                    "connection" in str(e).lower() or "authentication" in str(e).lower()
+                )
+
                 notification_repo.upsert_notification_by_key(
                     NotificationLogCreate(
                         key_notification=f"destination_error_{self.destination_id}_{landing_table}",
                         title=f"Snowflake Sync Error: {landing_table}",
                         message=f"Failed to sync to {landing_table}: {str(e)}",
                         type="ERROR",
-                        is_force_sent=is_force_sent
+                        is_force_sent=is_force_sent,
                     )
                 )
             except Exception as notify_error:
                 self._logger.error(f"Failed to log notification: {notify_error}")
-            
+
             # Clear tokens to force channel re-open on retry
             self._channel_tokens.pop(landing_table, None)
             raise
