@@ -366,6 +366,104 @@ class DLQManager:
             self._logger.error(f"Failed to list queues: {e}")
             return []
 
+    def purge_old_messages(
+        self,
+        source_id: int,
+        table_name: str,
+        destination_id: int,
+        max_retry_count: int = 10,
+        max_age_days: int = 7,
+    ) -> int:
+        """
+        Purge messages that exceed retry limits or age to prevent indefinite bloat.
+
+        Args:
+            source_id: Source database ID
+            table_name: Table name
+            destination_id: Destination database ID
+            max_retry_count: Maximum retry attempts before purging
+            max_age_days: Maximum age in days before purging
+
+        Returns:
+            Number of messages purged
+        """
+        try:
+            key = (source_id, table_name, destination_id)
+            if key not in self._queues:
+                return 0
+
+            queue = self._queues[key]
+
+            # Peek at messages without removing
+            all_messages_raw = queue.pop(
+                max_elements=10000, no_gil=True
+            )  # Get all messages
+            if not all_messages_raw:
+                return 0
+
+            messages = [DLQMessage.from_bytes(msg) for msg in all_messages_raw]
+
+            # Filter messages to keep (not expired)
+            from datetime import datetime, timedelta
+
+            cutoff_date = datetime.utcnow() - timedelta(days=max_age_days)
+
+            kept_messages = []
+            purged_count = 0
+
+            for msg in messages:
+                should_purge = False
+
+                # Check retry count
+                if msg.retry_count >= max_retry_count:
+                    should_purge = True
+                    self._logger.warning(
+                        f"Purging DLQ message due to retry limit: "
+                        f"source_{source_id}/table_{table_name}/dest_{destination_id} "
+                        f"retry_count={msg.retry_count}"
+                    )
+
+                # Check age
+                try:
+                    first_failed = datetime.fromisoformat(msg.first_failed_at)
+                    if first_failed < cutoff_date:
+                        should_purge = True
+                        self._logger.warning(
+                            f"Purging DLQ message due to age: "
+                            f"source_{source_id}/table_{table_name}/dest_{destination_id} "
+                            f"age={datetime.utcnow() - first_failed}"
+                        )
+                except Exception:
+                    pass  # If we can't parse date, keep the message
+
+                if should_purge:
+                    purged_count += 1
+                else:
+                    kept_messages.append(msg.to_bytes())
+
+            # Push back only the messages we want to keep
+            if kept_messages:
+                queue.push(kept_messages, no_gil=True)
+
+            if purged_count > 0:
+                self._logger.info(
+                    f"Purged {purged_count} old messages from DLQ: "
+                    f"source_{source_id}/table_{table_name}/dest_{destination_id}"
+                )
+
+                # If queue is now empty, delete it
+                if not kept_messages:
+                    self.delete_queue(source_id, table_name, destination_id)
+
+            return purged_count
+
+        except Exception as e:
+            self._logger.error(
+                f"Failed to purge old messages: source_{source_id}/table_{table_name}/dest_{destination_id} - {e}",
+                exc_info=True,
+            )
+            return 0
+
     def has_messages(
         self,
         source_id: int,
@@ -398,6 +496,84 @@ class DLQManager:
         except Exception as e:
             self._logger.error(f"Failed to check queue: {e}")
             return False
+
+    def delete_queue(
+        self,
+        source_id: int,
+        table_name: str,
+        destination_id: int,
+    ) -> bool:
+        """
+        Delete a queue completely from memory and disk.
+
+        Used after successful message replay to clean up persistent storage
+        and prevent bloat.
+
+        Args:
+            source_id: Source database ID
+            table_name: Table name
+            destination_id: Destination database ID
+
+        Returns:
+            True if queue was deleted successfully
+        """
+        try:
+            key = (source_id, table_name, destination_id)
+
+            # Remove from memory cache
+            with self._queues_lock:
+                if key in self._queues:
+                    # Queue is open, close it first
+                    try:
+                        # RocksQ queues don't have explicit close, just remove reference
+                        del self._queues[key]
+                    except Exception as e:
+                        self._logger.warning(f"Error closing queue: {e}")
+
+            # Delete from disk
+            queue_path = self._get_queue_path(source_id, table_name, destination_id)
+            if queue_path.exists():
+                import shutil
+
+                shutil.rmtree(queue_path)
+                self._logger.info(
+                    f"Deleted DLQ queue: source_{source_id}/table_{table_name}/dest_{destination_id}"
+                )
+
+                # Try to clean up parent directories if empty
+                self._cleanup_empty_parent_dirs(queue_path)
+                return True
+
+            return False
+
+        except Exception as e:
+            self._logger.error(
+                f"Failed to delete queue source_{source_id}/table_{table_name}/dest_{destination_id}: {e}",
+                exc_info=True,
+            )
+            return False
+
+    def _cleanup_empty_parent_dirs(self, queue_path: Path) -> None:
+        """
+        Clean up empty parent directories after queue deletion.
+
+        Removes table_* and source_* directories if they become empty.
+        """
+        try:
+            # Try to remove table directory if empty
+            table_dir = queue_path.parent
+            if table_dir.exists() and not any(table_dir.iterdir()):
+                table_dir.rmdir()
+                self._logger.debug(f"Removed empty directory: {table_dir}")
+
+                # Try to remove source directory if empty
+                source_dir = table_dir.parent
+                if source_dir.exists() and not any(source_dir.iterdir()):
+                    source_dir.rmdir()
+                    self._logger.debug(f"Removed empty directory: {source_dir}")
+        except Exception as e:
+            # Non-critical error, just log
+            self._logger.debug(f"Could not cleanup parent directories: {e}")
 
     def close_all(self) -> None:
         """Close all open queues and cleanup resources."""

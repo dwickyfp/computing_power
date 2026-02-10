@@ -98,8 +98,16 @@ class DLQRecoveryWorker:
         """Main recovery loop - runs continuously until stopped."""
         self._logger.info("DLQ recovery loop started")
 
+        # Track iterations for periodic cleanup
+        iteration_count = 0
+        cleanup_interval = (
+            10  # Run purge every 10 iterations (10 * check_interval seconds)
+        )
+
         while self._running:
             try:
+                iteration_count += 1
+
                 # Get all queue identifiers from DLQ
                 queues = self._dlq_manager.list_queues()
 
@@ -112,6 +120,16 @@ class DLQRecoveryWorker:
 
                         # Process this queue
                         self._process_queue(source_id, table_name, destination_id)
+
+                        # Periodic cleanup: purge old messages to prevent indefinite bloat
+                        if iteration_count % cleanup_interval == 0:
+                            self._dlq_manager.purge_old_messages(
+                                source_id,
+                                table_name,
+                                destination_id,
+                                max_retry_count=10,
+                                max_age_days=7,
+                            )
 
                 # Sleep before next check
                 time.sleep(self._check_interval)
@@ -302,7 +320,19 @@ class DLQRecoveryWorker:
                 f"{destination.name} for table {table_name}"
             )
 
-            # Success! Messages are already dequeued, no need to re-enqueue
+            # Success! Messages are already dequeued
+            # Check if queue is now empty and clean up persistent storage to prevent bloat
+            source_id = first_msg.source_id
+            destination_id = first_msg.destination_id
+
+            if not self._dlq_manager.has_messages(
+                source_id, table_name, destination_id
+            ):
+                self._logger.info(
+                    f"Queue empty after replay, cleaning up persistent storage: "
+                    f"source_{source_id}/table_{table_name}/dest_{destination_id}"
+                )
+                self._dlq_manager.delete_queue(source_id, table_name, destination_id)
 
         except DestinationException as e:
             # Destination error - re-enqueue with incremented retry count
