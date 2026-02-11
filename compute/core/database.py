@@ -43,10 +43,22 @@ def init_connection_pool(
     config = get_config()
 
     try:
-        _connection_pool = pool.ThreadedConnectionPool(
-            minconn=min_conn, maxconn=max_conn, **config.database.dsn
+        # Add keepalive and timeout settings to prevent connection drops
+        dsn = config.database.dsn.copy()
+        dsn.update(
+            {
+                "connect_timeout": 10,
+                "keepalives": 1,
+                "keepalives_idle": 30,
+                "keepalives_interval": 10,
+                "keepalives_count": 5,
+            }
         )
-        logger.info("Database connection pool initialized")
+
+        _connection_pool = pool.ThreadedConnectionPool(
+            minconn=min_conn, maxconn=max_conn, **dsn
+        )
+        logger.info("Database connection pool initialized with keepalive settings")
         return _connection_pool
     except psycopg2.Error as e:
         raise DatabaseException(f"Failed to initialize connection pool: {e}")
@@ -84,7 +96,18 @@ def get_db_connection() -> psycopg2.extensions.connection:
     """
     pool = get_connection_pool()
     try:
-        return pool.getconn()
+        conn = pool.getconn()
+
+        # Validate connection is alive
+        try:
+            conn.isolation_level  # Quick check if connection is valid
+        except (psycopg2.OperationalError, psycopg2.InterfaceError):
+            # Connection is dead, remove it and get a new one
+            logger.warning("Detected dead connection, removing from pool")
+            pool.putconn(conn, close=True)
+            conn = pool.getconn()
+
+        return conn
     except psycopg2.Error as e:
         raise DatabaseException(f"Failed to get connection from pool: {e}")
 
@@ -115,6 +138,7 @@ class DatabaseSession:
         self._conn: psycopg2.extensions.connection | None = None
         self._cursor: RealDictCursor | None = None
         self._autocommit = autocommit
+        self._has_writes = False  # Track if any write operations occurred
 
     def __enter__(self) -> "DatabaseSession":
         """Acquire connection and cursor."""
@@ -125,22 +149,52 @@ class DatabaseSession:
 
     def __exit__(self, exc_type, exc_val, exc_tb) -> bool:
         """Handle transaction commit/rollback and cleanup."""
+        connection_valid = True
+
         try:
             if exc_type is not None:
                 # Rollback on exception
                 if self._conn and not self._autocommit:
-                    self._conn.rollback()
-                    logger.warning(f"Transaction rolled back due to: {exc_val}")
+                    try:
+                        self._conn.rollback()
+                        logger.warning(f"Transaction rolled back due to: {exc_val}")
+                    except (psycopg2.OperationalError, psycopg2.InterfaceError) as e:
+                        logger.error(
+                            f"Failed to rollback transaction (connection may be closed): {e}"
+                        )
+                        connection_valid = False
             else:
-                # Commit on success
-                if self._conn and not self._autocommit:
-                    self._conn.commit()
+                # Only commit if there were write operations
+                if self._conn and not self._autocommit and self._has_writes:
+                    try:
+                        self._conn.commit()
+                    except (psycopg2.OperationalError, psycopg2.InterfaceError) as e:
+                        logger.error(
+                            f"Failed to commit transaction (connection may be closed): {e}"
+                        )
+                        connection_valid = False
+                        raise DatabaseException(f"Commit failed: {e}")
         finally:
             # Always cleanup
             if self._cursor:
-                self._cursor.close()
+                try:
+                    self._cursor.close()
+                except Exception:
+                    pass  # Ignore cursor close errors
+
             if self._conn:
-                return_db_connection(self._conn)
+                # If connection is invalid, close it instead of returning to pool
+                if not connection_valid:
+                    try:
+                        pool = get_connection_pool()
+                        pool.putconn(self._conn, close=True)
+                        logger.warning(
+                            "Closed invalid connection instead of returning to pool"
+                        )
+                    except Exception as e:
+                        logger.error(f"Error closing invalid connection: {e}")
+                else:
+                    return_db_connection(self._conn)
 
         return False  # Don't suppress exceptions
 
@@ -162,6 +216,14 @@ class DatabaseSession:
 
         try:
             self._cursor.execute(query, params)
+
+            # Track if this is a write operation
+            query_upper = query.strip().upper()
+            if query_upper.startswith(
+                ("INSERT", "UPDATE", "DELETE", "CREATE", "ALTER", "DROP")
+            ):
+                self._has_writes = True
+
             return self
         except psycopg2.Error as e:
             raise DatabaseException(f"Query execution failed: {e}", {"query": query})
@@ -182,6 +244,8 @@ class DatabaseSession:
 
         try:
             self._cursor.executemany(query, params_list)
+            # executemany is typically used for writes
+            self._has_writes = True
             return self
         except psycopg2.Error as e:
             raise DatabaseException(f"Batch execution failed: {e}", {"query": query})

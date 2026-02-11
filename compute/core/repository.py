@@ -9,6 +9,7 @@ from typing import Optional
 from datetime import datetime
 
 from core.database import DatabaseSession
+from core.db_utils import retry_on_connection_error
 from core.models import (
     Source,
     Destination,
@@ -76,6 +77,7 @@ class PipelineRepository:
     """Repository for Pipeline CRUD operations."""
 
     @staticmethod
+    @retry_on_connection_error(max_retries=3, delay=0.5)
     def get_by_id(
         pipeline_id: int, include_relations: bool = False
     ) -> Optional[Pipeline]:
@@ -117,6 +119,7 @@ class PipelineRepository:
             return Pipeline.from_dict(row) if row else None
 
     @staticmethod
+    @retry_on_connection_error(max_retries=3, delay=0.5)
     def get_active_pipelines() -> list[Pipeline]:
         """Get all pipelines with START status."""
         with DatabaseSession() as session:
@@ -133,6 +136,7 @@ class PipelineRepository:
             return [Pipeline.from_dict(row) for row in session.fetchall()]
 
     @staticmethod
+    @retry_on_connection_error(max_retries=3, delay=0.5)
     def update_status(pipeline_id: int, status: str) -> bool:
         """Update pipeline status."""
         with DatabaseSession() as session:
@@ -333,6 +337,7 @@ class PipelineMetadataRepository:
             return PipelineMetadata.from_dict(row) if row else None
 
     @staticmethod
+    @retry_on_connection_error(max_retries=3, delay=0.5)
     def upsert(pipeline_id: int, status: str, error: Optional[str] = None) -> int:
         """Insert or update pipeline metadata."""
         with DatabaseSession() as session:
