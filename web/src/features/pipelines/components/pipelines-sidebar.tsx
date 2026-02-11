@@ -13,7 +13,7 @@ import { useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
 import { pipelinesRepo, Pipeline } from '@/repo/pipelines'
 import { sourcesRepo, SourceDetailResponse } from '@/repo/sources'
 import { Link, useParams, useNavigate } from '@tanstack/react-router'
-import { Database, Table, Layers, Workflow, Loader2, Search, RefreshCw, X, FolderInput, FolderSync } from "lucide-react"
+import { Database, Table, Layers, Workflow, Loader2, Search, RefreshCw, X, FolderInput, FolderSync, Command } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useState, useMemo, useEffect } from "react"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -402,9 +402,9 @@ export function PipelinesSidebar() {
         <div className="h-full flex flex-col bg-background border-r border-sidebar-border">
             {/* Header: Title & Branding */}
             <div className="px-4 pt-4 pb-0">
-                <h1 className="text-xl font-bold text-foreground dark:text-[#bec4d6] mb-2">Pipelines Explorer</h1>
+                <h1 className="text-xl font-bold text-foreground dark:text-[#bec4d6] ">Pipelines Explorer</h1>
                 <div className="flex items-center gap-2 mb-4">
-                    <Workflow className="h-4 w-4 text-cyan-500" />
+                    <Command className="h-4 w-4 text-cyan-500" />
                     <span className="text-sm font-semibold text-cyan-500">
                         ROSETTA CATALOG
                     </span>
