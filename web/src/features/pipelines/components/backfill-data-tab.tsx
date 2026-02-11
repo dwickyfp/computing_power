@@ -3,7 +3,6 @@ import { formatDistanceToNow, format } from 'date-fns'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { backfillApi, BackfillFilter } from '@/repo/backfill'
 import { sourcesRepo } from '@/repo/sources'
-import { DatePicker } from '@/components/date-picker'
 import {
   Plus,
   X,
@@ -12,9 +11,19 @@ import {
   CheckCircle2,
   Clock,
 } from 'lucide-react'
+import { Check, ChevronsUpDown } from 'lucide-react'
 import { toast } from 'sonner'
+import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from '@/components/ui/command'
 import {
   Dialog,
   DialogContent,
@@ -26,6 +35,11 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover'
 import { Progress } from '@/components/ui/progress'
 import {
   Select,
@@ -42,21 +56,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from '@/components/ui/command'
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from '@/components/ui/popover'
-import { Check, ChevronsUpDown } from 'lucide-react'
-import { cn } from '@/lib/utils'
+import { DatePicker } from '@/components/date-picker'
 
 interface BackfillDataTabProps {
   pipelineId: number
@@ -188,14 +188,16 @@ function CreateBackfillDialog({ pipelineId, sourceId }: BackfillDataTabProps) {
     ?.schema_table?.filter((col) => {
       const dataType = (col.data_type || col.real_data_type || '').toLowerCase()
       // Exclude text/varchar/char types
-      return !dataType.includes('text') && 
-             !dataType.includes('char') && 
-             !dataType.includes('string')
+      return (
+        !dataType.includes('text') &&
+        !dataType.includes('char') &&
+        !dataType.includes('string')
+      )
     })
 
   // Helper to get column data type
   const getColumnType = (columnName: string): string => {
-    const col = selectedTableColumns?.find(c => c.column_name === columnName)
+    const col = selectedTableColumns?.find((c) => c.column_name === columnName)
     return (col?.data_type || col?.real_data_type || '').toLowerCase()
   }
 
@@ -208,10 +210,15 @@ function CreateBackfillDialog({ pipelineId, sourceId }: BackfillDataTabProps) {
   // Helper to determine if column is numeric
   const isNumericColumn = (columnName: string): boolean => {
     const type = getColumnType(columnName)
-    return type.includes('int') || type.includes('numeric') || 
-           type.includes('decimal') || type.includes('float') || 
-           type.includes('double') || type.includes('real') ||
-           type.includes('money')
+    return (
+      type.includes('int') ||
+      type.includes('numeric') ||
+      type.includes('decimal') ||
+      type.includes('float') ||
+      type.includes('double') ||
+      type.includes('real') ||
+      type.includes('money')
+    )
   }
 
   const handleSubmit = () => {
@@ -241,7 +248,7 @@ function CreateBackfillDialog({ pipelineId, sourceId }: BackfillDataTabProps) {
           Create Backfill
         </Button>
       </DialogTrigger>
-      <DialogContent className='sm:max-w-3xl max-h-[90vh] overflow-y-auto'>
+      <DialogContent className='max-h-[90vh] overflow-y-auto sm:max-w-3xl'>
         <DialogHeader>
           <DialogTitle>Create Backfill Job</DialogTitle>
           <DialogDescription>
@@ -266,7 +273,7 @@ function CreateBackfillDialog({ pipelineId, sourceId }: BackfillDataTabProps) {
                   <ChevronsUpDown className='ml-2 h-4 w-4 shrink-0 opacity-50' />
                 </Button>
               </PopoverTrigger>
-              <PopoverContent className='w-[400px] p-0'>
+              <PopoverContent className='w-100 p-0'>
                 <Command>
                   <CommandInput placeholder='Search table...' />
                   <CommandList>
@@ -323,7 +330,9 @@ function CreateBackfillDialog({ pipelineId, sourceId }: BackfillDataTabProps) {
             {tableName && filters.length === 0 && (
               <div className='rounded-lg border border-dashed p-8 text-center'>
                 <p className='text-sm text-muted-foreground'>
-                  No filters active. All records from <span className="font-mono text-foreground">{tableName}</span> will be backfilled.
+                  No filters active. All records from{' '}
+                  <span className='font-mono text-foreground'>{tableName}</span>{' '}
+                  will be backfilled.
                 </p>
               </div>
             )}
@@ -336,7 +345,9 @@ function CreateBackfillDialog({ pipelineId, sourceId }: BackfillDataTabProps) {
                     className='grid grid-cols-[1fr_140px_1fr_auto] items-end gap-2 rounded-lg border bg-muted/40 p-3'
                   >
                     <div className='space-y-1.5'>
-                      <Label className='text-xs text-muted-foreground'>Column</Label>
+                      <Label className='text-xs text-muted-foreground'>
+                        Column
+                      </Label>
                       <Select
                         value={filter.column}
                         onValueChange={(value) =>
@@ -344,7 +355,7 @@ function CreateBackfillDialog({ pipelineId, sourceId }: BackfillDataTabProps) {
                         }
                         disabled={!tableName}
                       >
-                        <SelectTrigger className="h-8">
+                        <SelectTrigger className='h-8'>
                           <SelectValue placeholder='Select column' />
                         </SelectTrigger>
                         <SelectContent>
@@ -361,14 +372,16 @@ function CreateBackfillDialog({ pipelineId, sourceId }: BackfillDataTabProps) {
                     </div>
 
                     <div className='space-y-1.5'>
-                      <Label className='text-xs text-muted-foreground'>Operator</Label>
+                      <Label className='text-xs text-muted-foreground'>
+                        Operator
+                      </Label>
                       <Select
                         value={filter.operator}
                         onValueChange={(value) =>
                           updateFilter(index, 'operator', value)
                         }
                       >
-                        <SelectTrigger className="h-8">
+                        <SelectTrigger className='h-8'>
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
@@ -382,24 +395,29 @@ function CreateBackfillDialog({ pipelineId, sourceId }: BackfillDataTabProps) {
                     </div>
 
                     <div className='space-y-1.5'>
-                      <Label className='text-xs text-muted-foreground'>Value</Label>
-                      {filter.operator === 'IS NULL' || filter.operator === 'IS NOT NULL' ? (
-                        <Input
-                          className="h-8"
-                          placeholder='N/A'
-                          disabled
-                        />
+                      <Label className='text-xs text-muted-foreground'>
+                        Value
+                      </Label>
+                      {filter.operator === 'IS NULL' ||
+                      filter.operator === 'IS NOT NULL' ? (
+                        <Input className='h-8' placeholder='N/A' disabled />
                       ) : filter.column && isDateColumn(filter.column) ? (
                         <DatePicker
-                          selected={filter.value ? new Date(filter.value) : undefined}
+                          selected={
+                            filter.value ? new Date(filter.value) : undefined
+                          }
                           onSelect={(date) =>
-                            updateFilter(index, 'value', date ? format(date, 'yyyy-MM-dd') : '')
+                            updateFilter(
+                              index,
+                              'value',
+                              date ? format(date, 'yyyy-MM-dd') : ''
+                            )
                           }
                           placeholder='Select date'
                         />
                       ) : filter.column && isNumericColumn(filter.column) ? (
                         <Input
-                          className="h-8"
+                          className='h-8'
                           type='number'
                           placeholder='Enter number'
                           value={filter.value}
@@ -409,7 +427,7 @@ function CreateBackfillDialog({ pipelineId, sourceId }: BackfillDataTabProps) {
                         />
                       ) : (
                         <Input
-                          className="h-8"
+                          className='h-8'
                           placeholder='Enter value'
                           value={filter.value}
                           onChange={(e) =>
@@ -423,7 +441,7 @@ function CreateBackfillDialog({ pipelineId, sourceId }: BackfillDataTabProps) {
                       type='button'
                       variant='ghost'
                       size='icon'
-                      className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                      className='h-8 w-8 text-muted-foreground hover:text-destructive'
                       onClick={() => removeFilter(index)}
                     >
                       <X className='h-4 w-4' />
@@ -590,27 +608,27 @@ export function BackfillDataTab({
                       <div className='flex justify-end gap-2'>
                         {(job.status === 'PENDING' ||
                           job.status === 'EXECUTING') && (
-                            <Button
-                              variant='outline'
-                              size='sm'
-                              onClick={() => cancelMutation.mutate(job.id)}
-                              disabled={cancelMutation.isPending}
-                            >
-                              Cancel
-                            </Button>
-                          )}
+                          <Button
+                            variant='outline'
+                            size='sm'
+                            onClick={() => cancelMutation.mutate(job.id)}
+                            disabled={cancelMutation.isPending}
+                          >
+                            Cancel
+                          </Button>
+                        )}
                         {(job.status === 'COMPLETED' ||
                           job.status === 'FAILED' ||
                           job.status === 'CANCELLED') && (
-                            <Button
-                              variant='ghost'
-                              size='sm'
-                              onClick={() => deleteMutation.mutate(job.id)}
-                              disabled={deleteMutation.isPending}
-                            >
-                              Delete
-                            </Button>
-                          )}
+                          <Button
+                            variant='ghost'
+                            size='sm'
+                            onClick={() => deleteMutation.mutate(job.id)}
+                            disabled={deleteMutation.isPending}
+                          >
+                            Delete
+                          </Button>
+                        )}
                       </div>
                     </TableCell>
                   </TableRow>
