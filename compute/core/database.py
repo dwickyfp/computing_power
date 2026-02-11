@@ -152,13 +152,25 @@ class DatabaseSession:
         connection_valid = True
 
         try:
+            # Close cursor first to ensure all results are consumed
+            if self._cursor:
+                try:
+                    self._cursor.close()
+                    self._cursor = None
+                except Exception as e:
+                    logger.warning(f"Error closing cursor: {e}")
+
             if exc_type is not None:
                 # Rollback on exception
                 if self._conn and not self._autocommit:
                     try:
                         self._conn.rollback()
                         logger.warning(f"Transaction rolled back due to: {exc_val}")
-                    except (psycopg2.OperationalError, psycopg2.InterfaceError) as e:
+                    except (
+                        psycopg2.OperationalError,
+                        psycopg2.InterfaceError,
+                        psycopg2.DatabaseError,
+                    ) as e:
                         logger.error(
                             f"Failed to rollback transaction (connection may be closed): {e}"
                         )
@@ -168,20 +180,18 @@ class DatabaseSession:
                 if self._conn and not self._autocommit and self._has_writes:
                     try:
                         self._conn.commit()
-                    except (psycopg2.OperationalError, psycopg2.InterfaceError) as e:
+                    except (
+                        psycopg2.OperationalError,
+                        psycopg2.InterfaceError,
+                        psycopg2.DatabaseError,
+                    ) as e:
                         logger.error(
                             f"Failed to commit transaction (connection may be closed): {e}"
                         )
                         connection_valid = False
                         raise DatabaseException(f"Commit failed: {e}")
         finally:
-            # Always cleanup
-            if self._cursor:
-                try:
-                    self._cursor.close()
-                except Exception:
-                    pass  # Ignore cursor close errors
-
+            # Return connection to pool
             if self._conn:
                 # If connection is invalid, close it instead of returning to pool
                 if not connection_valid:
