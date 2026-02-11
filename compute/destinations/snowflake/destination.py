@@ -328,7 +328,7 @@ class SnowflakeDestination(BaseDestination):
             # TIMESTAMP Handling - Multiple Debezium types
             # These types come from PostgreSQL TIMESTAMP (without timezone)
             # Target Snowflake column is TIMESTAMP_NTZ, so output WITHOUT timezone
-            
+
             # MicroTimestamp: int64 microseconds since epoch UTC
             # From PostgreSQL: timestamp without time zone
             if type_name == "io.debezium.time.MicroTimestamp":
