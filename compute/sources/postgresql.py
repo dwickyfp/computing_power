@@ -230,13 +230,15 @@ class PostgreSQLSource(BaseSource):
             "database.dbname": self._config.pg_database,
             # Connection pooling and stability
             "database.tcpKeepAlive": "true",
-            "database.connectTimeout": "30000",  # 30 seconds
-            "database.socketTimeout": "60000",  # 60 seconds - prevents hang on long queries
+            "database.connectTimeout": "30000",  # 30 seconds - connection establishment timeout
+            "database.socketTimeout": "0",  # 0 = unlimited - prevents timeout on long queries/snapshots
             # Replication settings
             "plugin.name": self.PLUGIN_NAME,
             "slot.name": slot_name,
             "publication.name": self._config.publication_name,
-            # Publication auto-create (disabled - publication must exist)
+            # Publication auto-create mode
+            # "filtered" = create publication with only tables from table.include.list
+            # "disabled" = publication must already exist
             "publication.autocreate.mode": "filtered",
             # Snapshot behavior - skip initial data snapshot
             "snapshot.mode": "no_data",
