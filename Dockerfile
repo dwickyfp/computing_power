@@ -122,7 +122,7 @@ COPY migrations ./migrations
 
 # Set environment variables
 ENV MODE=worker
-ENV PYTHONPATH=/app
+ENV PYTHONPATH=/app/compute
 ENV TZ=Asia/Jakarta
 
 # Create non-root user for security
