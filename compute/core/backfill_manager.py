@@ -38,7 +38,7 @@ class BackfillManager:
     """
 
     # Configuration constants
-    STALE_JOB_THRESHOLD_MINUTES = 2  # Jobs older than this are considered stale
+    STALE_JOB_THRESHOLD_MINUTES = 0  # Recover all EXECUTING jobs on startup (0 = immediate)
     MAX_RESUME_ATTEMPTS = 3  # Fail job after 3 resume attempts
 
     def __init__(self, check_interval: int = 5, batch_size: int = 10000):
@@ -379,8 +379,9 @@ class BackfillManager:
                     f"Job {job_id}: Starting new backfill - Total rows: {total_rows}"
                 )
 
-            # Update total_record in database (only once)
-            if start_offset == 0:
+            # Update total_record in database if not already set
+            # (This handles both new jobs and recovered jobs)
+            if job.get("total_record") is None or job.get("total_record") == 0:
                 self._update_job_total_record(job_id, total_rows)
 
             # Process in batches, starting from checkpoint

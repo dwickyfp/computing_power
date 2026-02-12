@@ -678,6 +678,7 @@ export function BackfillDataTab({
                               onClick={() => cancelMutation.mutate(job.id)}
                               disabled={cancelMutation.isPending}
                               title='Cancel backfill'
+                              className='text-red-600 hover:text-red-700 hover:bg-red-50 dark:text-red-500 dark:hover:text-red-400 dark:hover:bg-red-950'
                             >
                               <Square className='h-4 w-4' />
                             </Button>
@@ -691,6 +692,7 @@ export function BackfillDataTab({
                               onClick={() => deleteMutation.mutate(job.id)}
                               disabled={deleteMutation.isPending}
                               title='Delete backfill'
+                              className='text-red-600 hover:text-red-700 hover:bg-red-50 dark:text-red-500 dark:hover:text-red-400 dark:hover:bg-red-950'
                             >
                               <Trash2 className='h-4 w-4' />
                             </Button>
