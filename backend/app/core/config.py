@@ -88,10 +88,10 @@ class Settings(BaseSettings):
         default=True, description="Enable WAL monitoring background task"
     )
     wal_monitor_interval_seconds: int = Field(
-        default=300, ge=60, le=3600, description="Interval between WAL checks (seconds)"
+        default=60, ge=60, le=3600, description="Interval between WAL checks (seconds)"
     )
     wal_monitor_timeout_seconds: int = Field(
-        default=30, ge=5, le=300, description="Timeout for WAL query execution"
+        default=60, ge=5, le=300, description="Timeout for WAL query execution"
     )
     wal_monitor_max_retries: int = Field(
         default=3,
@@ -143,7 +143,6 @@ class Settings(BaseSettings):
     compute_node_url: str = Field(
         default="http://0.0.0.0:8001", description="URL for the compute node API"
     )
-
 
     @validator("app_env")
     def validate_environment(cls, v: str) -> str:

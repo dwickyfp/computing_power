@@ -45,12 +45,13 @@ class BackgroundScheduler:
         try:
             from app.core.database import db_manager
             from app.domain.repositories.job_metric import JobMetricRepository
-            
+
             session_factory = db_manager.session_factory
             db = session_factory()
             try:
                 repo = JobMetricRepository(db)
                 from datetime import datetime, timezone, timedelta
+
                 # User requested Asia/Jakarta (UTC+7)
                 jakarta_tz = timezone(timedelta(hours=7))
                 repo.upsert_metric(key, datetime.now(jakarta_tz))
@@ -82,7 +83,9 @@ class BackgroundScheduler:
                 asyncio.run(self.replication_monitor.monitor_all_sources())
                 self._record_job_metric("replication_monitor")
         except Exception as e:
-            logger.error("Error running replication monitor task", extra={"error": str(e)})
+            logger.error(
+                "Error running replication monitor task", extra={"error": str(e)}
+            )
 
     def _run_schema_monitor(self) -> None:
         """
@@ -113,7 +116,7 @@ class BackgroundScheduler:
         try:
             from app.core.database import db_manager
             from app.domain.services.source import SourceService
-            
+
             session_factory = db_manager.session_factory
             db = session_factory()
             try:
@@ -123,13 +126,17 @@ class BackgroundScheduler:
                     try:
                         service.refresh_available_tables(source.id)
                     except Exception as e:
-                        logger.error(f"Failed to auto-refresh tables for source {source.id}: {e}")
+                        logger.error(
+                            f"Failed to auto-refresh tables for source {source.id}: {e}"
+                        )
                 self._record_job_metric("table_list_refresh")
             finally:
                 db.close()
-                
+
         except Exception as e:
-            logger.error("Error running table list refresh task", extra={"error": str(e)})
+            logger.error(
+                "Error running table list refresh task", extra={"error": str(e)}
+            )
 
     def _run_system_metric_collection(self) -> None:
         """
@@ -148,7 +155,9 @@ class BackgroundScheduler:
             finally:
                 db.close()
         except Exception as e:
-            logger.error("Error running system metric collection task", extra={"error": str(e)})
+            logger.error(
+                "Error running system metric collection task", extra={"error": str(e)}
+            )
 
     def _run_notification_sender(self) -> None:
         """
@@ -168,7 +177,9 @@ class BackgroundScheduler:
             finally:
                 db.close()
         except Exception as e:
-            logger.error("Error running notification sender task", extra={"error": str(e)})
+            logger.error(
+                "Error running notification sender task", extra={"error": str(e)}
+            )
 
     def _run_pipeline_refresh_check(self) -> None:
         """
@@ -177,29 +188,35 @@ class BackgroundScheduler:
         try:
             from app.core.database import db_manager
             from app.domain.models.pipeline import Pipeline, PipelineStatus
-            
+
             session_factory = db_manager.session_factory
             db = session_factory()
             try:
                 # Find pipelines ready for refresh
-                pipelines = db.query(Pipeline).filter(Pipeline.ready_refresh == True).all()
-                
+                pipelines = (
+                    db.query(Pipeline).filter(Pipeline.ready_refresh == True).all()
+                )
+
                 for pipeline in pipelines:
                     try:
                         pipeline.status = PipelineStatus.REFRESH.value
                         pipeline.ready_refresh = False
-                        logger.info(f"Auto-refreshing pipeline {pipeline.id} ({pipeline.name})")
+                        logger.info(
+                            f"Auto-refreshing pipeline {pipeline.id} ({pipeline.name})"
+                        )
                     except Exception as e:
                         logger.error(f"Failed to refresh pipeline {pipeline.id}: {e}")
-                
+
                 if pipelines:
                     db.commit()
-                
+
                 self._record_job_metric("pipeline_refresh_check")
             finally:
                 db.close()
         except Exception as e:
-            logger.error("Error running pipeline refresh check task", extra={"error": str(e)})
+            logger.error(
+                "Error running pipeline refresh check task", extra={"error": str(e)}
+            )
 
     def start(self) -> None:
         """
@@ -242,13 +259,11 @@ class BackgroundScheduler:
 
         # Initialize Replication monitor
         self.replication_monitor = ReplicationMonitorService()
-        
+
         # Schedule Replication monitoring task
         self.scheduler.add_job(
             self._run_replication_monitor,
-            trigger=IntervalTrigger(
-                seconds=60  # Default to 60s
-            ),
+            trigger=IntervalTrigger(seconds=60),  # Default to 60s
             id="replication_monitor",
             name="Replication Monitor",
             replace_existing=True,
@@ -262,25 +277,21 @@ class BackgroundScheduler:
         # Schedule Schema monitoring task
         self.scheduler.add_job(
             self._run_schema_monitor,
-            trigger=IntervalTrigger(
-                seconds=60  # Default to 60s
-            ),
+            trigger=IntervalTrigger(seconds=60),  # Default to 60s
             id="schema_monitor",
             name="Schema Monitor",
             replace_existing=True,
             max_instances=1,
             coalesce=True,
         )
-        
+
         # Initialize Credit monitor
         self.credit_monitor = CreditMonitorService()
-        
+
         # Schedule Credit monitoring task (every 6 hours)
         self.scheduler.add_job(
             self._run_credit_monitor,
-            trigger=IntervalTrigger(
-                hours=6
-            ),
+            trigger=IntervalTrigger(hours=6),
             id="credit_monitor",
             name="Credit Monitor",
             replace_existing=True,
@@ -291,9 +302,7 @@ class BackgroundScheduler:
         # Schedule Table List Refresh (every 10 minutes)
         self.scheduler.add_job(
             self._run_table_list_refresh,
-            trigger=IntervalTrigger(
-                minutes=10
-            ),
+            trigger=IntervalTrigger(minutes=10),
             id="table_list_refresh",
             name="Table List Refresh",
             replace_existing=True,
@@ -304,9 +313,7 @@ class BackgroundScheduler:
         # Schedule System Metric Collection (every 5 seconds)
         self.scheduler.add_job(
             self._run_system_metric_collection,
-            trigger=IntervalTrigger(
-                seconds=5
-            ),
+            trigger=IntervalTrigger(seconds=5),
             id="system_metric_collection",
             name="System Metric Collection",
             replace_existing=True,
@@ -317,9 +324,7 @@ class BackgroundScheduler:
         # Schedule Notification Sender (every 30 seconds)
         self.scheduler.add_job(
             self._run_notification_sender,
-            trigger=IntervalTrigger(
-                seconds=30
-            ),
+            trigger=IntervalTrigger(seconds=30),
             id="notification_sender",
             name="Notification Sender",
             replace_existing=True,
@@ -327,14 +332,14 @@ class BackgroundScheduler:
             coalesce=True,
         )
 
-        logger.info("Replication, Credit, Table Refresh, and System Metrics monitoring scheduled")
+        logger.info(
+            "Replication, Credit, Table Refresh, and System Metrics monitoring scheduled"
+        )
 
         # Schedule Pipeline Refresh Check (every 10 seconds)
         self.scheduler.add_job(
             self._run_pipeline_refresh_check,
-            trigger=IntervalTrigger(
-                seconds=10
-            ),
+            trigger=IntervalTrigger(seconds=10),
             id="pipeline_refresh_check",
             name="Pipeline Refresh Check",
             replace_existing=True,
@@ -365,13 +370,15 @@ class BackgroundScheduler:
         if self.replication_monitor:
             self.replication_monitor.stop()
             self.replication_monitor = None
-            
+
         if self.schema_monitor:
             self.schema_monitor.stop()
             self.schema_monitor = None
 
         if self.credit_monitor:
-            self.credit_monitor = None  # No stop method needed strictly but consistent cleanup
+            self.credit_monitor = (
+                None  # No stop method needed strictly but consistent cleanup
+            )
 
         logger.info("Background task scheduler stopped")
 
