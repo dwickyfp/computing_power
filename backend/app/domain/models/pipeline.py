@@ -97,6 +97,12 @@ class Pipeline(Base, TimestampMixin):
         comment="Flag indicating pipeline needs refresh due to configuration changes",
     )
 
+    last_refresh_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        comment="Timestamp of last pipeline refresh",
+    )
+
     # Relationships
     source: Mapped["Source"] = relationship(
         "Source", back_populates="pipelines", lazy="selectin"

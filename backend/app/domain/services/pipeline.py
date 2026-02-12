@@ -513,10 +513,13 @@ class PipelineService:
         Returns:
             Updated pipeline
         """
+        from datetime import datetime, timezone
+
         logger.info("Refreshing pipeline", extra={"pipeline_id": pipeline_id})
 
         pipeline = self.repository.get_by_id(pipeline_id)
         pipeline.refresh()
+        pipeline.last_refresh_at = datetime.now(timezone.utc)
 
         self.db.commit()
         self.db.refresh(pipeline)

@@ -274,6 +274,7 @@ export default function PipelineDetailsPage() {
               <BackfillDataTab
                 pipelineId={pipeline.id}
                 sourceId={pipeline.source_id}
+                pipeline={pipeline}
               />
             ) : (
               <div className='p-4 text-muted-foreground'>

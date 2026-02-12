@@ -18,6 +18,7 @@ from app.domain.services.wal_monitor import WALMonitorService
 from app.domain.services.replication_monitor import ReplicationMonitorService
 from app.domain.services.schema_monitor import SchemaMonitorService
 from app.domain.services.credit_monitor import CreditMonitorService
+from zoneinfo import ZoneInfo
 
 logger = get_logger(__name__)
 
@@ -188,6 +189,7 @@ class BackgroundScheduler:
         try:
             from app.core.database import db_manager
             from app.domain.models.pipeline import Pipeline, PipelineStatus
+            from datetime import datetime, timezone
 
             session_factory = db_manager.session_factory
             db = session_factory()
@@ -201,6 +203,7 @@ class BackgroundScheduler:
                     try:
                         pipeline.status = PipelineStatus.REFRESH.value
                         pipeline.ready_refresh = False
+                        pipeline.last_refresh_at = datetime.now(timezone.utc)
                         logger.info(
                             f"Auto-refreshing pipeline {pipeline.id} ({pipeline.name})"
                         )
