@@ -213,7 +213,6 @@ export function NotificationsForm() {
                     <Input
                       type='number'
                       placeholder='3'
-                      disabled={!isWebhookEnabled}
                       {...field}
                       onChange={(e) => field.onChange(e.target.valueAsNumber)}
                       className='max-w-50'
