@@ -1,7 +1,7 @@
 import { useState } from 'react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import { useParams, Link } from '@tanstack/react-router'
-import { pipelinesRepo, Pipeline } from '@/repo/pipelines'
+import { pipelinesRepo } from '@/repo/pipelines'
 import { sourcesRepo } from '@/repo/sources'
 import {
   RefreshCcw,
@@ -30,7 +30,6 @@ import {
   CustomTabsTrigger,
 } from '@/components/ui/custom-tabs'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Switch } from '@/components/ui/switch'
 import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
 import { Search } from '@/components/search'
@@ -38,42 +37,7 @@ import { ThemeSwitch } from '@/components/theme-switch'
 import { BackfillDataTab } from '@/features/pipelines/components/backfill-data-tab'
 import { PipelineDataFlow } from '@/features/pipelines/components/pipeline-data-flow'
 import { PipelineFlowTab } from '@/features/pipelines/components/pipeline-flow-tab'
-
-function PipelineStatusSwitch({ pipeline }: { pipeline: Pipeline }) {
-  const queryClient = useQueryClient()
-  const isRunning = pipeline.status === 'START' || pipeline.status === 'REFRESH'
-
-  const { mutate, isPending } = useMutation({
-    mutationFn: async (checked: boolean) => {
-      if (checked) {
-        return pipelinesRepo.start(pipeline.id)
-      } else {
-        return pipelinesRepo.pause(pipeline.id)
-      }
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['pipelines'] })
-      queryClient.invalidateQueries({ queryKey: ['pipeline', pipeline.id] })
-      toast.success('Pipeline status updated')
-    },
-    onError: (error) => {
-      toast.error(`Failed to update status: ${error}`)
-    },
-  })
-
-  return (
-    <div className='flex items-center space-x-2'>
-      <span className='text-sm font-medium'>
-        {isRunning ? 'Running' : 'Paused'}
-      </span>
-      <Switch
-        checked={isRunning}
-        onCheckedChange={(checked) => mutate(checked)}
-        disabled={isPending}
-      />
-    </div>
-  )
-}
+import { PipelineStatusSwitch } from '@/features/pipelines/components/pipeline-status-switch'
 
 export default function PipelineDetailsPage() {
   const { pipelineId } = useParams({
