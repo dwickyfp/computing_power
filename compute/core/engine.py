@@ -340,7 +340,10 @@ class PipelineEngine:
         """Stop the pipeline engine."""
         self._is_running = False
 
-        # Stop DLQ recovery worker
+        # CRITICAL: Stop all Python threads BEFORE stopping Debezium/JPype
+        # This prevents GIL conflicts during JPype shutdown
+
+        # Stop DLQ recovery worker FIRST
         if self._dlq_recovery_worker:
             try:
                 self._dlq_recovery_worker.stop()
@@ -349,15 +352,7 @@ class PipelineEngine:
                 self._logger.warning(f"Error stopping DLQ recovery worker: {e}")
             self._dlq_recovery_worker = None
 
-        # Close DLQ manager
-        if self._dlq_manager:
-            try:
-                self._dlq_manager.close_all()
-            except Exception as e:
-                self._logger.warning(f"Error closing DLQ manager: {e}")
-            self._dlq_manager = None
-
-        # Close destinations
+        # Close destinations (stops Snowflake async thread) SECOND
         for dest in self._destinations.values():
             try:
                 dest.close()
@@ -365,6 +360,14 @@ class PipelineEngine:
                 self._logger.warning(f"Error closing destination: {e}")
 
         self._destinations.clear()
+
+        # Close DLQ manager THIRD
+        if self._dlq_manager:
+            try:
+                self._dlq_manager.close_all()
+            except Exception as e:
+                self._logger.warning(f"Error closing DLQ manager: {e}")
+            self._dlq_manager = None
 
         # Update metadata
         if self._pipeline:
