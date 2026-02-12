@@ -7,6 +7,8 @@ export interface Pipeline {
   source_id: number
   destination_id: number
   status: 'START' | 'PAUSE' | 'REFRESH'
+  ready_refresh?: boolean
+  last_refresh_at?: string
   pipeline_metadata?: {
     status: 'RUNNING' | 'PAUSED' | 'ERROR'
     last_error?: string
@@ -55,7 +57,7 @@ export const pipelinesRepo = {
     const response: AxiosResponse<Pipeline[]> = await api.get('/pipelines')
     return {
       pipelines: response.data,
-      total: response.data.length
+      total: response.data.length,
     }
   },
   create: async (data: CreatePipelineRequest): Promise<Pipeline> => {
@@ -66,11 +68,15 @@ export const pipelinesRepo = {
     await api.delete(`/pipelines/${id}`)
   },
   start: async (id: number): Promise<Pipeline> => {
-    const response: AxiosResponse<Pipeline> = await api.post(`/pipelines/${id}/start`)
+    const response: AxiosResponse<Pipeline> = await api.post(
+      `/pipelines/${id}/start`
+    )
     return response.data
   },
   pause: async (id: number): Promise<Pipeline> => {
-    const response: AxiosResponse<Pipeline> = await api.post(`/pipelines/${id}/pause`)
+    const response: AxiosResponse<Pipeline> = await api.post(
+      `/pipelines/${id}/pause`
+    )
     return response.data
   },
   get: async (id: number): Promise<Pipeline> => {
@@ -78,23 +84,40 @@ export const pipelinesRepo = {
     return response.data
   },
   refresh: async (id: number): Promise<Pipeline> => {
-    const response: AxiosResponse<Pipeline> = await api.post(`/pipelines/${id}/refresh`)
+    const response: AxiosResponse<Pipeline> = await api.post(
+      `/pipelines/${id}/refresh`
+    )
     return response.data
   },
   getStats: async (id: number, days: number = 7): Promise<PipelineStats[]> => {
-    const response: AxiosResponse<PipelineStats[]> = await api.get(`/pipelines/${id}/stats`, { params: { days } })
+    const response: AxiosResponse<PipelineStats[]> = await api.get(
+      `/pipelines/${id}/stats`,
+      { params: { days } }
+    )
     return response.data
   },
-  addDestination: async (id: number, destinationId: number): Promise<Pipeline> => {
-    const response: AxiosResponse<Pipeline> = await api.post(`/pipelines/${id}/destinations`, null, {
-      params: { destination_id: destinationId }
-    })
+  addDestination: async (
+    id: number,
+    destinationId: number
+  ): Promise<Pipeline> => {
+    const response: AxiosResponse<Pipeline> = await api.post(
+      `/pipelines/${id}/destinations`,
+      null,
+      {
+        params: { destination_id: destinationId },
+      }
+    )
     return response.data
   },
-  removeDestination: async (id: number, destinationId: number): Promise<Pipeline> => {
-    const response: AxiosResponse<Pipeline> = await api.delete(`/pipelines/${id}/destinations/${destinationId}`)
+  removeDestination: async (
+    id: number,
+    destinationId: number
+  ): Promise<Pipeline> => {
+    const response: AxiosResponse<Pipeline> = await api.delete(
+      `/pipelines/${id}/destinations/${destinationId}`
+    )
     return response.data
-  }
+  },
 }
 
 export interface PipelineStats {
@@ -169,7 +192,6 @@ export interface TableValidationResponse {
   exists: boolean
   message: string | null
 }
-
 
 export const tableSyncRepo = {
   getDestinationTables: async (

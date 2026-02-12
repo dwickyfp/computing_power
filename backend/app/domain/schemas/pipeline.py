@@ -169,15 +169,21 @@ class PipelineDestinationTableSyncResponse(BaseSchema):
     table_name_target: str = Field(..., description="Target table name")
     custom_sql: str | None = Field(default=None, description="Custom SQL")
     filter_sql: str | None = Field(default=None, description="Filter SQL")
-    
+
     # Snowflake Status Flags
-    is_exists_table_landing: bool = Field(default=False, description="Landing table exists")
+    is_exists_table_landing: bool = Field(
+        default=False, description="Landing table exists"
+    )
     is_exists_stream: bool = Field(default=False, description="Stream exists")
     is_exists_task: bool = Field(default=False, description="Task exists")
-    is_exists_table_destination: bool = Field(default=False, description="Target table exists")
+    is_exists_table_destination: bool = Field(
+        default=False, description="Target table exists"
+    )
 
     is_error: bool = Field(default=False, description="Whether sync is in error state")
-    error_message: str | None = Field(default=None, description="Error message if in error state")
+    error_message: str | None = Field(
+        default=None, description="Error message if in error state"
+    )
     created_at: datetime = Field(..., description="Creation timestamp")
     updated_at: datetime = Field(..., description="Last update timestamp")
 
@@ -191,12 +197,14 @@ class TableSyncCreateRequest(BaseSchema):
     """
 
     id: int | None = Field(default=None, description="Sync ID (optional, for updates)")
-    table_name: str = Field(..., min_length=1, max_length=255, description="Source table name")
+    table_name: str = Field(
+        ..., min_length=1, max_length=255, description="Source table name"
+    )
     table_name_target: str | None = Field(
-        default=None, 
-        min_length=1, 
-        max_length=255, 
-        description="Target table name (defaults to table_name if not provided)"
+        default=None,
+        min_length=1,
+        max_length=255,
+        description="Target table name (defaults to table_name if not provided)",
     )
     custom_sql: str | None = Field(default=None, description="Custom SQL query")
     filter_sql: str | None = Field(
@@ -220,6 +228,7 @@ class TableValidationRequest(BaseSchema):
     """
     Schema for table name validation request.
     """
+
     table_name: str = Field(..., description="Target table name to validate")
 
 
@@ -227,9 +236,14 @@ class TableValidationResponse(BaseSchema):
     """
     Schema for table name validation response.
     """
+
     valid: bool = Field(..., description="Whether the table name is valid")
-    exists: bool = Field(..., description="Whether the table already exists in destination")
-    message: str | None = Field(default=None, description="Validation message or error details")
+    exists: bool = Field(
+        ..., description="Whether the table already exists in destination"
+    )
+    message: str | None = Field(
+        default=None, description="Validation message or error details"
+    )
 
 
 class ColumnSchemaResponse(BaseSchema):
@@ -239,10 +253,16 @@ class ColumnSchemaResponse(BaseSchema):
 
     column_name: str = Field(..., description="Column name")
     data_type: str = Field(..., description="PostgreSQL data type")
-    real_data_type: str | None = Field(default=None, description="Detailed PostgreSQL data type")
+    real_data_type: str | None = Field(
+        default=None, description="Detailed PostgreSQL data type"
+    )
     is_nullable: bool = Field(default=True, description="Whether column is nullable")
-    is_primary_key: bool = Field(default=False, description="Whether column is primary key")
-    has_default: bool = Field(default=False, description="Whether column has a default value")
+    is_primary_key: bool = Field(
+        default=False, description="Whether column is primary key"
+    )
+    has_default: bool = Field(
+        default=False, description="Whether column has a default value"
+    )
     default_value: str | None = Field(default=None, description="Default value")
     numeric_scale: int | None = Field(default=None, description="Numeric scale")
     numeric_precision: int | None = Field(default=None, description="Numeric precision")
@@ -259,13 +279,19 @@ class TableWithSyncInfoResponse(BaseSchema):
         default=[], description="Current sync configurations (branches)"
     )
     # Snowflake status flags (might need to be per-sync/target in future, but keeping simple for now)
-    # These flags originally tracked landing/stream/task existence. 
+    # These flags originally tracked landing/stream/task existence.
     # With branching, landing/stream are shared (per source table), but Tasks/Target Tables are per branch.
     # We'll need to think about how these map. For now, let's keep them as indicative of *at least one* path or the landing setup.
-    is_exists_table_landing: bool = Field(default=False, description="Landing table exists")
+    is_exists_table_landing: bool = Field(
+        default=False, description="Landing table exists"
+    )
     is_exists_stream: bool = Field(default=False, description="Stream exists")
-    is_exists_task: bool = Field(default=False, description="Task exists (at least one)")
-    is_exists_table_destination: bool = Field(default=False, description="Target table exists (at least one)")
+    is_exists_task: bool = Field(
+        default=False, description="Task exists (at least one)"
+    )
+    is_exists_table_destination: bool = Field(
+        default=False, description="Target table exists (at least one)"
+    )
 
 
 class PipelineDestinationResponse(BaseSchema):
@@ -283,9 +309,15 @@ class PipelineDestinationResponse(BaseSchema):
         default=[], description="Table sync settings"
     )
     # Error tracking
-    is_error: bool = Field(default=False, description="Whether destination is in error state")
-    error_message: str | None = Field(default=None, description="Error message if in error state")
-    last_error_at: datetime | None = Field(default=None, description="Timestamp of last error")
+    is_error: bool = Field(
+        default=False, description="Whether destination is in error state"
+    )
+    error_message: str | None = Field(
+        default=None, description="Error message if in error state"
+    )
+    last_error_at: datetime | None = Field(
+        default=None, description="Timestamp of last error"
+    )
     created_at: datetime = Field(..., description="Creation timestamp")
     updated_at: datetime = Field(..., description="Last update timestamp")
 
@@ -294,7 +326,6 @@ class PipelineDestinationResponse(BaseSchema):
 
 
 class PipelineResponse(PipelineBase, TimestampSchema):
-
     """
     Schema for pipeline API responses.
 
@@ -304,6 +335,12 @@ class PipelineResponse(PipelineBase, TimestampSchema):
     id: int = Field(..., description="Unique pipeline identifier", examples=[1, 42])
     source_id: int = Field(..., description="ID of the source database")
     status: PipelineStatus = Field(..., description="Pipeline operational status")
+    ready_refresh: bool = Field(
+        default=False, description="Flag indicating pipeline needs refresh"
+    )
+    last_refresh_at: datetime | None = Field(
+        default=None, description="Timestamp of last pipeline refresh"
+    )
 
     # Nested relationships
     source: SourceResponse | None = Field(

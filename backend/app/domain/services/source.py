@@ -18,19 +18,21 @@ from app.domain.models.source import Source
 from app.domain.repositories.source import SourceRepository
 from app.domain.repositories.wal_monitor_repo import WALMonitorRepository
 from app.domain.repositories.table_metadata_repo import TableMetadataRepository
-from app.domain.repositories.history_schema_evolution_repo import HistorySchemaEvolutionRepository
+from app.domain.repositories.history_schema_evolution_repo import (
+    HistorySchemaEvolutionRepository,
+)
 from app.domain.repositories.pipeline import PipelineRepository
 from app.domain.schemas.source import (
-    SourceConnectionTest, 
-    SourceCreate, 
+    SourceConnectionTest,
+    SourceCreate,
     SourceUpdate,
-    SourceResponse
+    SourceResponse,
 )
 from app.domain.schemas.source_detail import (
-    SourceDetailResponse, 
+    SourceDetailResponse,
     SourceTableInfo,
     TableSchemaResponse,
-    TableSchemaDiff
+    TableSchemaDiff,
 )
 from app.domain.schemas.wal_monitor import WALMonitorResponse
 from app.domain.services.schema_monitor import SchemaMonitorService
@@ -151,7 +153,9 @@ class SourceService:
         update_data = source_data.dict(exclude_unset=True)
 
         # Remove empty string password if present (treat as no update)
-        if "pg_password" in update_data and (update_data["pg_password"] is None or update_data["pg_password"] == ""):
+        if "pg_password" in update_data and (
+            update_data["pg_password"] is None or update_data["pg_password"] == ""
+        ):
             del update_data["pg_password"]
 
         # Encrypt password if provided
@@ -161,7 +165,10 @@ class SourceService:
         source = self.repository.update(source_id, **update_data)
 
         # Update table list if connection details changed
-        if any(k in update_data for k in ['pg_host', 'pg_port', 'pg_database', 'pg_username', 'pg_password']):
+        if any(
+            k in update_data
+            for k in ["pg_host", "pg_port", "pg_database", "pg_username", "pg_password"]
+        ):
             try:
                 self._update_source_table_list(source)
                 self.db.commit()
@@ -184,6 +191,7 @@ class SourceService:
 
         # Explicitly delete WAL Metrics first
         from app.domain.models.wal_metric import WALMetric
+
         self.db.query(WALMetric).filter(WALMetric.source_id == source_id).delete()
 
         self.repository.delete(source_id)
@@ -201,20 +209,24 @@ class SourceService:
             True if connection successful, False otherwise
         """
         import psycopg2
-        
+
         try:
             logger.info(
                 "Testing connection configuration",
-                extra={"host": config.pg_host, "port": config.pg_port, "db": config.pg_database}
+                extra={
+                    "host": config.pg_host,
+                    "port": config.pg_port,
+                    "db": config.pg_database,
+                },
             )
-            
+
             conn = psycopg2.connect(
                 host=config.pg_host,
                 port=config.pg_port,
                 dbname=config.pg_database,
                 user=config.pg_username,
                 password=config.pg_password,
-                connect_timeout=5
+                connect_timeout=5,
             )
             conn.close()
             return True
@@ -228,7 +240,6 @@ class SourceService:
             )
             return False
 
-
     def test_connection(self, source_id: int) -> bool:
         """
         Test database connection for a source.
@@ -240,14 +251,14 @@ class SourceService:
             True if connection successful, False otherwise
         """
         source = self.repository.get_by_id(source_id)
-        
+
         # Create config from source
         config = SourceConnectionTest(
             pg_host=source.pg_host,
             pg_port=source.pg_port,
             pg_database=source.pg_database,
             pg_username=source.pg_username,
-            pg_password=decrypt_value(source.pg_password) if source.pg_password else ""
+            pg_password=decrypt_value(source.pg_password) if source.pg_password else "",
         )
 
         return self.test_connection_config(config)
@@ -255,12 +266,12 @@ class SourceService:
     def get_source_details(self, source_id: int) -> SourceDetailResponse:
         """
         Get detailed information for a source.
-        
+
         Includes WAL monitor metrics and table metadata.
-        
+
         Args:
             source_id: Source identifier
-            
+
         Returns:
             Source details
         """
@@ -273,15 +284,15 @@ class SourceService:
         self.db.add(source)
         self.db.commit()
         self.db.refresh(source)
-        
+
         # 2. Get WAL Monitor
         wal_monitor_repo = WALMonitorRepository(self.db)
         wal_monitor = wal_monitor_repo.get_by_source(source_id)
-        
+
         # 3. Get Tables with Version Count
         table_repo = TableMetadataRepository(self.db)
         tables_with_count = table_repo.get_tables_with_version_count(source_id)
-        
+
         source_tables = []
         for table, count in tables_with_count:
             # Filter: Only include tables present in the REALTIME publication query
@@ -291,77 +302,94 @@ class SourceService:
             # logic: if count table is 0, then version 1, if count table 1 then version 2 etc.
             # So generic formula: version = count + 1
             version = count + 1
-            
+
             source_tables.append(
                 SourceTableInfo(
                     id=table.id,
                     table_name=table.table_name or "Unknown",
                     version=version,
-                    schema_table=list(table.schema_table.values()) if isinstance(table.schema_table, dict) else (table.schema_table if isinstance(table.schema_table, list) else [])
+                    schema_table=(
+                        list(table.schema_table.values())
+                        if isinstance(table.schema_table, dict)
+                        else (
+                            table.schema_table
+                            if isinstance(table.schema_table, list)
+                            else []
+                        )
+                    ),
                 )
             )
-            
+
         # 4. Get Destinations via Pipelines
         pipeline_repo = PipelineRepository(self.db)
         pipelines = pipeline_repo.get_by_source_id(source_id)
-        
+
         # Extract unique destination names from all pipelines' destinations
-        destination_names = list(set(
-            pd.destination.name 
-            for p in pipelines 
-            for pd in p.destinations 
-            if pd.destination
-        ))
+        destination_names = list(
+            set(
+                pd.destination.name
+                for p in pipelines
+                for pd in p.destinations
+                if pd.destination
+            )
+        )
 
         return SourceDetailResponse(
             source=SourceResponse.from_orm(source),
-            wal_monitor=WALMonitorResponse.from_orm(wal_monitor) if wal_monitor else None,
+            wal_monitor=(
+                WALMonitorResponse.from_orm(wal_monitor) if wal_monitor else None
+            ),
             tables=source_tables,
-            destinations=destination_names
+            destinations=destination_names,
         )
 
-    def get_table_schema_by_version(self, table_id: int, version: int) -> TableSchemaResponse:
+    def get_table_schema_by_version(
+        self, table_id: int, version: int
+    ) -> TableSchemaResponse:
         """
         Get table schema for a specific version with evolution info.
-        
+
         Args:
             table_id: Table ID
             version: Schema version
-            
+
         Returns:
             TableSchemaResponse containing columns and diff
         """
         table_repo = TableMetadataRepository(self.db)
         history_repo = HistorySchemaEvolutionRepository(self.db)
-        
+
         table = table_repo.get_by_id(table_id)
         if not table:
             raise EntityNotFoundError(entity_type="TableMetadata", entity_id=table_id)
-            
+
         current_version = (
             self.db.query(HistorySchemaEvolution)
             .filter(HistorySchemaEvolution.table_metadata_list_id == table.id)
             .count()
         ) + 1
-        
+
         if version < 1 or version > current_version:
-             raise ValueError(f"Version must be between 1 and {current_version}")
-             
+            raise ValueError(f"Version must be between 1 and {current_version}")
+
         # 1. Fetch Schema Column Data
         if version == current_version:
             schema_data = table.schema_table
         else:
             history = history_repo.get_by_table_and_version(table.id, version)
             if not history:
-                 raise EntityNotFoundError(entity_type="HistorySchemaEvolution", entity_id=f"{table.id}-v{version}")
+                raise EntityNotFoundError(
+                    entity_type="HistorySchemaEvolution",
+                    entity_id=f"{table.id}-v{version}",
+                )
             schema_data = history.schema_table_old
-            
+
         columns = []
         if isinstance(schema_data, dict):
             columns = list(schema_data.values())
         elif isinstance(schema_data, list):
             columns = schema_data
-            
+
         # 2. Calculate Diff (Changes introduced IN this version)
         diff = None
         if version > 1:
@@ -371,27 +399,27 @@ class SourceService:
             if hist_diff:
                 old = hist_diff.schema_table_old or {}
                 new = hist_diff.schema_table_new or {}
-                
+
                 # New Columns: Present in NEW but not OLD
                 new_cols = list(set(new.keys()) - set(old.keys()))
-                
+
                 # Dropped Columns: Present in OLD but not NEW
                 dropped_keys = set(old.keys()) - set(new.keys())
                 dropped_cols = [old[k] for k in dropped_keys]
-                
+
                 # Type Changes: Present in both, different types
                 type_changes = {}
                 common = set(old.keys()) & set(new.keys())
                 for k in common:
-                    old_t = old[k].get('real_data_type') or old[k].get('data_type')
-                    new_t = new[k].get('real_data_type') or new[k].get('data_type')
+                    old_t = old[k].get("real_data_type") or old[k].get("data_type")
+                    new_t = new[k].get("real_data_type") or new[k].get("data_type")
                     if old_t != new_t:
                         type_changes[k] = {"old_type": old_t, "new_type": new_t}
-                
+
                 diff = TableSchemaDiff(
                     new_columns=new_cols,
                     dropped_columns=dropped_cols,
-                    type_changes=type_changes
+                    type_changes=type_changes,
                 )
 
         return TableSchemaResponse(columns=columns, diff=diff)
@@ -404,7 +432,7 @@ class SourceService:
             dbname=source.pg_database,
             user=source.pg_username,
             password=decrypt_value(source.pg_password) if source.pg_password else None,
-            connect_timeout=5
+            connect_timeout=5,
         )
         return conn
 
@@ -427,26 +455,30 @@ class SourceService:
                 # source.list_tables = tables
 
                 # 2. Check Publication Status
-                cur.execute("SELECT 1 FROM pg_publication WHERE pubname = %s", (source.publication_name,))
+                cur.execute(
+                    "SELECT 1 FROM pg_publication WHERE pubname = %s",
+                    (source.publication_name,),
+                )
                 source.is_publication_enabled = bool(cur.fetchone())
 
                 # 3. Check Replication Status
                 slot_name = source.replication_name
-                cur.execute("SELECT 1 FROM pg_replication_slots WHERE slot_name = %s", (slot_name,))
+                cur.execute(
+                    "SELECT 1 FROM pg_replication_slots WHERE slot_name = %s",
+                    (slot_name,),
+                )
                 source.is_replication_enabled = bool(cur.fetchone())
-                
+
                 # 4. Update check timestamp
                 # Use Asia/Jakarta (UTC+7)
                 jakarta_tz = timezone(timedelta(hours=7))
                 source.last_check_replication_publication = datetime.now(jakarta_tz)
-                
+
             conn.close()
-            
+
         except Exception as e:
             logger.error(f"Error fetching metadata for source {source.name}: {e}")
             pass
-
-
 
     def _sync_publication_tables(self, source: Source) -> None:
         """
@@ -465,49 +497,57 @@ class SourceService:
             # But _get_table_schema takes conn.
             # Let's keep conn open or pass checks.
             # Actually conn is closed below. Let's create missing, THEN fetch schema.
-            pass # Placeholder line to match context if needed, but we'll rewrite logic slightly.
-            
+            pass  # Placeholder line to match context if needed, but we'll rewrite logic slightly.
+
             # 2. Sync with local TableMetadata
             table_repo = TableMetadataRepository(self.db)
             existing_tables = table_repo.get_by_source_id(source.id)
             existing_table_names = {t.table_name for t in existing_tables}
 
-            conn_for_schema = self._get_connection(source) # Open new conn for schema fetching loop
-            
+            conn_for_schema = self._get_connection(
+                source
+            )  # Open new conn for schema fetching loop
+
             try:
                 # 3. Create missing tables
                 monitor = SchemaMonitorService()
                 for table_name in registered_tables:
                     if table_name not in existing_table_names:
                         # Fetch Schema using SchemaMonitorService
-                        schema_list = monitor.fetch_table_schema(conn_for_schema, table_name)
-                        
+                        schema_list = monitor.fetch_table_schema(
+                            conn_for_schema, table_name
+                        )
+
                         # Convert to dict format as expected by SchemaMonitor logic
-                        schema_details = {col['column_name']: dict(col) for col in schema_list}
-                        
+                        schema_details = {
+                            col["column_name"]: dict(col) for col in schema_list
+                        }
+
                         # Create new TableMetadata
                         try:
                             table_repo.create(
                                 source_id=source.id,
                                 table_name=table_name,
-                                schema_table=schema_details 
+                                schema_table=schema_details,
                             )
                         except Exception as e:
                             # Likely IntegrityError if race condition
                             logger.warning(f"Skipping creation of {table_name}: {e}")
-                            self.db.rollback() 
+                            self.db.rollback()
             finally:
                 conn_for_schema.close()
 
             conn.close()
-            
+
             # Update total tables count on source
             source.total_tables = len(registered_tables)
-            
+
             return registered_tables
 
         except Exception as e:
-            logger.error(f"Error syncing publication tables for source {source.name}: {e}")
+            logger.error(
+                f"Error syncing publication tables for source {source.name}: {e}"
+            )
             return set()
 
     def refresh_source_metadata(self, source_id: int) -> None:
@@ -617,29 +657,50 @@ class SourceService:
             try:
                 # Local import to avoid circular dependency
                 from app.domain.services.pipeline import PipelineService
-                from app.domain.repositories.table_metadata_repo import TableMetadataRepository
-                
+                from app.domain.repositories.table_metadata_repo import (
+                    TableMetadataRepository,
+                )
+
                 pipeline_repo = PipelineRepository(self.db)
                 pipelines = pipeline_repo.get_by_source_id(source_id)
-                
+
                 if pipelines:
-                    logger.info(f"Triggering auto-provisioning for table {table_name} on {len(pipelines)} pipelines")
-                    
+                    logger.info(
+                        f"Triggering auto-provisioning for table {table_name} on {len(pipelines)} pipelines"
+                    )
+
                     # Fetch table info (metadata)
                     table_repo = TableMetadataRepository(self.db)
-                    table_meta = table_repo.get_by_source_and_name(source_id, table_name)
-                    
+                    table_meta = table_repo.get_by_source_and_name(
+                        source_id, table_name
+                    )
+
                     if table_meta:
                         pipeline_service = PipelineService(self.db)
                         for pipeline in pipelines:
-                             for pd in pipeline.destinations:
-                                 if pd.destination.type == "SNOWFLAKE":
-                                     try:
-                                         pipeline_service.provision_table(pipeline, pd.destination, table_meta)
-                                     except Exception as exc:
-                                         logger.error(f"Failed to auto-provision table {table_name} for pipeline {pipeline.id} destination {pd.destination.name}: {exc}")
+                            # Set ready_refresh=True for pipelines connected to this source
+                            pipeline.ready_refresh = True
+
+                            for pd in pipeline.destinations:
+                                if pd.destination.type == "SNOWFLAKE":
+                                    try:
+                                        pipeline_service.provision_table(
+                                            pipeline, pd.destination, table_meta
+                                        )
+                                    except Exception as exc:
+                                        logger.error(
+                                            f"Failed to auto-provision table {table_name} for pipeline {pipeline.id} destination {pd.destination.name}: {exc}"
+                                        )
+
+                        # Commit the ready_refresh changes
+                        self.db.commit()
+                        logger.info(
+                            f"Marked {len(pipelines)} pipeline(s) as ready for refresh"
+                        )
                     else:
-                        logger.warning(f"Metadata for table {table_name} not found after refresh, skipping provisioning")
+                        logger.warning(
+                            f"Metadata for table {table_name} not found after refresh, skipping provisioning"
+                        )
 
             except Exception as e:
                 logger.error(f"Auto-provisioning process failed: {e}")
@@ -649,7 +710,9 @@ class SourceService:
             logger.error(f"Failed to register table {table_name}: {e}")
             raise ValueError(f"Failed to register table: {str(e)}")
 
-    def unregister_table_from_publication(self, source_id: int, table_name: str) -> None:
+    def unregister_table_from_publication(
+        self, source_id: int, table_name: str
+    ) -> None:
         """
         Unregister (drop) a table from the publication.
         """
@@ -675,25 +738,26 @@ class SourceService:
     def fetch_available_tables(self, source_id: int) -> List[str]:
         """
         Fetch all available public tables from the source database.
-        
+
         Returns:
             List of table names
         """
         source = self.get_source(source_id)
-        
+
         # Redis Key
         cache_key = f"source:{source_id}:tables"
-        
+
         try:
             # 1. Try Cache
             redis_client = RedisClient.get_instance()
             cached_tables = redis_client.get(cache_key)
             if cached_tables:
                 import json
+
                 return json.loads(cached_tables)
         except Exception as e:
             logger.warning(f"Redis cache error: {e}")
-            
+
         # 2. Fetch from DB
         try:
             conn = self._get_connection(source)
@@ -708,18 +772,21 @@ class SourceService:
                 cur.execute(query)
                 tables = [row[0] for row in cur.fetchall()]
             conn.close()
-            
+
             # 3. Set Cache (TTL 5 minutes)
             try:
                 import json
+
                 redis_client = RedisClient.get_instance()
                 redis_client.setex(cache_key, 300, json.dumps(tables))
             except Exception as e:
                 logger.warning(f"Failed to cache tables for source {source_id}: {e}")
-                
+
             return tables
         except Exception as e:
-            logger.error(f"Failed to fetch available tables for source {source.name}: {e}")
+            logger.error(
+                f"Failed to fetch available tables for source {source.name}: {e}"
+            )
             raise ValueError(f"Failed to fetch tables: {str(e)}")
 
     def refresh_available_tables(self, source_id: int) -> List[str]:
@@ -728,7 +795,7 @@ class SourceService:
         """
         source = self.get_source(source_id)
         cache_key = f"source:{source_id}:tables"
-        
+
         try:
             conn = self._get_connection(source)
             with conn.cursor() as cur:
@@ -742,15 +809,18 @@ class SourceService:
                 cur.execute(query)
                 tables = [row[0] for row in cur.fetchall()]
             conn.close()
-            
+
             # Update Cache
             try:
                 import json
+
                 redis_client = RedisClient.get_instance()
                 redis_client.setex(cache_key, 300, json.dumps(tables))
             except Exception as e:
-                logger.error(f"Failed to update cache during refresh for source {source_id}: {e}")
-                
+                logger.error(
+                    f"Failed to update cache during refresh for source {source_id}: {e}"
+                )
+
             return tables
         except Exception as e:
             logger.error(f"Failed to refresh table list for source {source.name}: {e}")
@@ -767,59 +837,66 @@ class SourceService:
             New Source entity
         """
         original_source = self.get_source(source_id)
-        
+
         # 1. Generate new name
         base_name = original_source.name
         new_name = f"{base_name}-1"
         counter = 1
-        
+
         while self.get_source_by_name(new_name):
             counter += 1
             new_name = f"{base_name}-{counter}"
-            
+
         # 2. Generate new replication_name
         base_rep_name = original_source.replication_name
         # If original name ends with _1, _2 etc, strip it? Or just append?
         # Let's keep it simple: append -1, -2 like name
         new_rep_name = f"{base_rep_name}_1"
         rep_counter = 1
-        
-        # We need a way to check if replication_name exists. 
+
+        # We need a way to check if replication_name exists.
         # Since it's unique in DB, we can use repository.
         # But SourceRepository might not have get_by_replication_name.
         # However, checking uniqueness is good practice.
         # For now, let's assume we can try catch insert or query.
         # Better to add get_by_replication_name in repository if needed, or just query.
-        # Since I can't easily see repo interface right now without reading, I'll assume I can inspect DB or rely on the fact that if 'name' is unique, replication_name likely follows similar pattern if derived from name, 
-        # BUT here replication_name is independent. 
-        # Let's assume we can query `self.repository.get_by_replication_name(new_rep_name)` if I add it, 
-        # or crudely loop like name. 
-        # Actually, let's look at get_by_name usage above. 
-        
+        # Since I can't easily see repo interface right now without reading, I'll assume I can inspect DB or rely on the fact that if 'name' is unique, replication_name likely follows similar pattern if derived from name,
+        # BUT here replication_name is independent.
+        # Let's assume we can query `self.repository.get_by_replication_name(new_rep_name)` if I add it,
+        # or crudely loop like name.
+        # Actually, let's look at get_by_name usage above.
+
         # I'll rely on an loop similar to name, assuming I can query it.
         # I will need to add `get_by_replication_name` to repository or use a custom query provided by repo.
         # For now, let's optimistically set it, and if it fails, user has to retry? No, that's bad UX.
         # I will create a loop but I need a check function.
         # Let's use `self.db.query(Source).filter(Source.replication_name == new_rep_name).first()`
-        
-        while self.db.query(Source).filter(Source.replication_name == new_rep_name).first():
+
+        while (
+            self.db.query(Source)
+            .filter(Source.replication_name == new_rep_name)
+            .first()
+        ):
             rep_counter += 1
             new_rep_name = f"{base_rep_name}_{rep_counter}"
-        
+
         # 3. Create new source configuration
         # Copy connection details, referencing original source attributes
         # Note: We do NOT enable publication/replication by default for safety
-        
+
         source_data = SourceCreate(
             name=new_name,
             pg_host=original_source.pg_host,
             pg_port=original_source.pg_port,
             pg_database=original_source.pg_database,
             pg_username=original_source.pg_username,
-            pg_password=decrypt_value(original_source.pg_password) if original_source.pg_password else None,
-            publication_name=original_source.publication_name, 
-            replication_name=new_rep_name, 
+            pg_password=(
+                decrypt_value(original_source.pg_password)
+                if original_source.pg_password
+                else None
+            ),
+            publication_name=original_source.publication_name,
+            replication_name=new_rep_name,
         )
-        
-        return self.create_source(source_data)
 
+        return self.create_source(source_data)

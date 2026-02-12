@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { formatDistanceToNow, format } from 'date-fns'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { backfillApi, BackfillFilter } from '@/repo/backfill'
+import { Pipeline } from '@/repo/pipelines'
 import { sourcesRepo } from '@/repo/sources'
 import {
   Plus,
@@ -12,6 +13,7 @@ import {
   Clock,
   Trash2,
   Square,
+  RefreshCw,
 } from 'lucide-react'
 import { Check, ChevronsUpDown } from 'lucide-react'
 import { toast } from 'sonner'
@@ -68,6 +70,7 @@ import { DatePicker } from '@/components/date-picker'
 interface BackfillDataTabProps {
   pipelineId: number
   sourceId: number
+  pipeline?: Pipeline
 }
 
 const OPERATORS = [
@@ -479,6 +482,7 @@ function CreateBackfillDialog({ pipelineId, sourceId }: BackfillDataTabProps) {
 export function BackfillDataTab({
   pipelineId,
   sourceId,
+  pipeline,
 }: BackfillDataTabProps) {
   const queryClient = useQueryClient()
   const [tableFilter, setTableFilter] = useState<string>('')
@@ -527,6 +531,24 @@ export function BackfillDataTab({
 
   return (
     <div className='space-y-4'>
+      {/* Pipeline Refresh Info */}
+      {pipeline?.last_refresh_at && (
+        <div className='rounded-lg border bg-muted/40 p-3'>
+          <div className='flex items-center gap-2 text-sm'>
+            <RefreshCw className='h-4 w-4 text-muted-foreground' />
+            <span className='font-medium'>Last Refresh:</span>
+            <span className='text-muted-foreground'>
+              {formatDistanceToNow(new Date(pipeline.last_refresh_at), {
+                addSuffix: true,
+              })}
+            </span>
+            <span className='text-xs text-muted-foreground'>
+              ({format(new Date(pipeline.last_refresh_at), 'PPpp')})
+            </span>
+          </div>
+        </div>
+      )}
+
       <div className='flex items-center justify-between'>
         <div>
           <h3 className='text-lg font-semibold'>Backfill Jobs</h3>
