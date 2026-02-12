@@ -38,7 +38,9 @@ class BackfillManager:
     """
 
     # Configuration constants
-    STALE_JOB_THRESHOLD_MINUTES = 0  # Recover all EXECUTING jobs on startup (0 = immediate)
+    STALE_JOB_THRESHOLD_MINUTES = (
+        0  # Recover all EXECUTING jobs on startup (0 = immediate)
+    )
     MAX_RESUME_ATTEMPTS = 3  # Fail job after 3 resume attempts
 
     def __init__(self, check_interval: int = 5, batch_size: int = 10000):
@@ -333,6 +335,8 @@ class BackfillManager:
 
         # Initialize DuckDB connection (in-memory)
         conn = duckdb.connect(":memory:")
+        conn.execute("SET memory_limit='2GB'")
+        conn.execute("SET threads=4")
 
         total_processed = start_offset  # Start from checkpoint
 
