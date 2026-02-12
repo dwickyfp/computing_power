@@ -26,16 +26,43 @@ interface FilterClause {
     value2?: string
 }
 
-const OPERATORS = [
-    { value: '=', label: '= (Equals)' },
-    { value: '!=', label: '!= (Not Equals)' },
-    { value: '>', label: '> (Greater Than)' },
-    { value: '<', label: '< (Less Than)' },
-    { value: '>=', label: '>= (Greater or Equal)' },
-    { value: '<=', label: '<= (Less or Equal)' },
-    { value: 'LIKE', label: 'LIKE (Contains)' },
-    { value: 'BETWEEN', label: 'BETWEEN' },
-]
+// Operators grouped by data type
+const OPERATORS_BY_TYPE = {
+    boolean: [
+        { value: '=', label: 'Equals (=)' },
+        { value: '!=', label: 'Not Equals (!=)' },
+        { value: 'IS NULL', label: 'Is Null' },
+        { value: 'IS NOT NULL', label: 'Is Not Null' },
+    ],
+    string: [
+        { value: '=', label: 'Equals (=)' },
+        { value: '!=', label: 'Not Equals (!=)' },
+        { value: 'LIKE', label: 'Like (LIKE)' },
+        { value: 'ILIKE', label: 'Case Insensitive Like (ILIKE)' },
+        { value: 'IS NULL', label: 'Is Null' },
+        { value: 'IS NOT NULL', label: 'Is Not Null' },
+    ],
+    number: [
+        { value: '=', label: 'Equals (=)' },
+        { value: '!=', label: 'Not Equals (!=)' },
+        { value: '>', label: 'Greater Than (>)' },
+        { value: '<', label: 'Less Than (<)' },
+        { value: '>=', label: 'Greater or Equal (>=)' },
+        { value: '<=', label: 'Less or Equal (<=)' },
+        { value: 'IS NULL', label: 'Is Null' },
+        { value: 'IS NOT NULL', label: 'Is Not Null' },
+    ],
+    date: [
+        { value: '=', label: 'Equals (=)' },
+        { value: '!=', label: 'Not Equals (!=)' },
+        { value: '>', label: 'Greater Than (>)' },
+        { value: '<', label: 'Less Than (<)' },
+        { value: '>=', label: 'Greater or Equal (>=)' },
+        { value: '<=', label: 'Less or Equal (<=)' },
+        { value: 'IS NULL', label: 'Is Null' },
+        { value: 'IS NOT NULL', label: 'Is Not Null' },
+    ],
+}
 
 export function TableFilterCard({
     table,
@@ -54,11 +81,12 @@ export function TableFilterCard({
 
         // Use matchAll to find all filter patterns in the string
         // Patterns:
-        // 1. BETWEEN: (\w+) BETWEEN '([^']*)' AND '([^']*)'
-        // 2. LIKE: (\w+) LIKE '%([^%]*)%'
-        // 3. Standard: (\w+) (=|!=|>|>=|<=|<) ('([^']*)'|(\d+(?:\.\d+)?))
+        // 1. IS NULL / IS NOT NULL: (\w+)\s+(IS\s+(?:NOT\s+)?NULL)
+        // 2. BETWEEN: (\w+) BETWEEN '([^']*)' AND '([^']*)'
+        // 3. LIKE/ILIKE: (\w+) (LIKE|ILIKE) '%([^%]*)%'
+        // 4. Standard: (\w+) (=|!=|>|>=|<=|<) ('([^']*)'|(\d+(?:\.\d+)?)|(?:true|false))
 
-        const pattern = /(?:(\w+)\s+BETWEEN\s+'([^']*)'\s+AND\s+'([^']*)')|(?:(\w+)\s+LIKE\s+'%([^%]*)%')|(?:(\w+)\s*(=|!=|>|>=|<=|<)\s*(?:'([^']*)'|(\d+(?:\.\d+)?)))/gi
+        const pattern = /(?:(\w+)\s+(IS\s+(?:NOT\s+)?NULL))|(?:(\w+)\s+BETWEEN\s+'([^']*)'\s+AND\s+'([^']*)')|(?:(\w+)\s+(LIKE|ILIKE)\s+'%([^%]*)%')|(?:(\w+)\s*(=|!=|>|>=|<=|<)\s*(?:'([^']*)'|(\d+(?:\.\d+)?)|(?:true|false)))/gi
 
         const matches = sql.matchAll(pattern)
 
@@ -68,28 +96,35 @@ export function TableFilterCard({
                 : Math.random().toString(36).substring(2) + Date.now().toString(36)
 
             // Check which group matched
-            if (match[1]) { // BETWEEN
+            if (match[1]) { // IS NULL / IS NOT NULL
                 clauses.push({
                     id,
                     column: match[1],
-                    operator: 'BETWEEN',
-                    value: match[2],
-                    value2: match[3]
+                    operator: match[2],
+                    value: ''
                 })
-            } else if (match[4]) { // LIKE
+            } else if (match[3]) { // BETWEEN
                 clauses.push({
                     id,
-                    column: match[4],
-                    operator: 'LIKE',
-                    value: match[5]
+                    column: match[3],
+                    operator: 'BETWEEN',
+                    value: match[4],
+                    value2: match[5]
                 })
-            } else if (match[6]) { // Standard
+            } else if (match[6]) { // LIKE/ILIKE
                 clauses.push({
                     id,
                     column: match[6],
                     operator: match[7],
-                    // Use the quoted string match (match[8]) or the numeric match (match[9])
-                    value: match[8] !== undefined ? match[8] : match[9]
+                    value: match[8]
+                })
+            } else if (match[9]) { // Standard
+                clauses.push({
+                    id,
+                    column: match[9],
+                    operator: match[10],
+                    // Use the quoted string match (match[11]) or the numeric match (match[12])
+                    value: match[11] !== undefined ? match[11] : match[12]
                 })
             }
         }
@@ -146,6 +181,54 @@ export function TableFilterCard({
         return 'text'
     }
 
+    // Helper to determine column type category for operator selection
+    const getColumnTypeCategory = (columnName: string): 'boolean' | 'string' | 'number' | 'date' => {
+        const col = columns.find(c => c.column_name === columnName)
+        if (!col) return 'string'
+        const type = (col.real_data_type || col.data_type || '').toLowerCase()
+        
+        // Boolean types
+        if (type.includes('bool')) {
+            return 'boolean'
+        }
+        
+        // Date/datetime types
+        if (type.includes('date') || type.includes('time')) {
+            return 'date'
+        }
+        
+        // Numeric types
+        if (
+            type.includes('int') ||
+            type.includes('numeric') ||
+            type.includes('decimal') ||
+            type.includes('float') ||
+            type.includes('double') ||
+            type.includes('real') ||
+            type.includes('money')
+        ) {
+            return 'number'
+        }
+        
+        // Default to string
+        return 'string'
+    }
+
+    // Helper to get operators for a column
+    const getOperatorsForColumn = (columnName: string) => {
+        if (!columnName) return OPERATORS_BY_TYPE.string
+        const category = getColumnTypeCategory(columnName)
+        return OPERATORS_BY_TYPE[category]
+    }
+
+    // Helper to determine if column is boolean
+    const isBooleanColumn = (columnName: string): boolean => {
+        const col = columns.find(c => c.column_name === columnName)
+        if (!col) return false
+        const type = (col.real_data_type || col.data_type || '').toLowerCase()
+        return type.includes('bool')
+    }
+
     const handleAddFilter = (e: React.MouseEvent) => {
         e.preventDefault()
         e.stopPropagation()
@@ -178,7 +261,16 @@ export function TableFilterCard({
         setFilters(prev => prev.map(f => {
             if (f.id === id) {
                 if (field === 'column' && val !== f.column) {
-                    return { ...f, [field]: val, value: '', value2: undefined }
+                    // Reset operator and value when column changes
+                    const validOperators = getOperatorsForColumn(val)
+                    const isOperatorValid = validOperators.some(op => op.value === f.operator)
+                    return { 
+                        ...f, 
+                        [field]: val, 
+                        operator: isOperatorValid ? f.operator : '=',
+                        value: '', 
+                        value2: undefined 
+                    }
                 }
                 if (field === 'operator' && val !== 'BETWEEN') {
                     return { ...f, [field]: val, value2: undefined }
@@ -194,7 +286,15 @@ export function TableFilterCard({
         e.stopPropagation()
 
         const clauses = filters.map(f => {
-            if (!f.column || !f.value) return null
+            if (!f.column) return null
+
+            // Handle IS NULL / IS NOT NULL operators
+            if (f.operator === 'IS NULL' || f.operator === 'IS NOT NULL') {
+                return `${f.column} ${f.operator}`
+            }
+
+            // Value is required for other operators
+            if (!f.value) return null
 
             const colType = getColumnType(f.column)
             const quote = (val: string) =>
@@ -204,8 +304,8 @@ export function TableFilterCard({
                 return `${f.column} BETWEEN ${quote(f.value)} AND ${quote(f.value2)}`
             }
 
-            if (f.operator === 'LIKE') {
-                return `${f.column} LIKE '%${f.value}%'`
+            if (f.operator === 'LIKE' || f.operator === 'ILIKE') {
+                return `${f.column} ${f.operator} '%${f.value}%'`
             }
 
             return `${f.column} ${f.operator} ${quote(f.value)}`
@@ -314,7 +414,7 @@ export function TableFilterCard({
                                                 <SelectValue />
                                             </SelectTrigger>
                                             <SelectContent style={{ zIndex: 1000 }}>
-                                                {OPERATORS.map(op => (
+                                                {getOperatorsForColumn(filter.column).map(op => (
                                                     <SelectItem key={op.value} value={op.value}>
                                                         <span className="text-xs">{op.label}</span>
                                                     </SelectItem>
@@ -326,7 +426,26 @@ export function TableFilterCard({
                                     {/* Value Input */}
                                     <div>
                                         <label className="text-[10px] font-medium text-muted-foreground uppercase mb-1 block">Value</label>
-                                        {colType === 'date' ? (
+                                        {filter.operator === 'IS NULL' || filter.operator === 'IS NOT NULL' ? (
+                                            <Input
+                                                className="h-9 text-xs"
+                                                placeholder="N/A"
+                                                disabled
+                                            />
+                                        ) : isBooleanColumn(filter.column) ? (
+                                            <Select
+                                                value={filter.value}
+                                                onValueChange={(val) => updateFilter(filter.id, 'value', val)}
+                                            >
+                                                <SelectTrigger className="h-9 text-xs">
+                                                    <SelectValue placeholder="Select value" />
+                                                </SelectTrigger>
+                                                <SelectContent style={{ zIndex: 1000 }}>
+                                                    <SelectItem value="true">True</SelectItem>
+                                                    <SelectItem value="false">False</SelectItem>
+                                                </SelectContent>
+                                            </Select>
+                                        ) : colType === 'date' ? (
                                             <DatePicker
                                                 value={filter.value}
                                                 onChange={(v) => updateFilter(filter.id, 'value', v)}
@@ -336,24 +455,30 @@ export function TableFilterCard({
                                                 value={filter.value}
                                                 onChange={(v) => updateFilter(filter.id, 'value', v)}
                                             />
-                                        ) : (
+                                        ) : colType === 'numeric' ? (
                                             <Input
                                                 value={filter.value}
                                                 onChange={(e) => {
                                                     let val = e.target.value;
-                                                    if (colType === 'numeric') {
-                                                        val = val.replace(/[^0-9.-]/g, '');
-                                                        const parts = val.split('.');
-                                                        if (parts.length > 2) val = parts[0] + '.' + parts.slice(1).join('');
-                                                        if (val.indexOf('-') > 0) val = val.slice(0, 1) + val.slice(1).replace(/-/g, '');
-                                                    }
+                                                    val = val.replace(/[^0-9.-]/g, '');
+                                                    const parts = val.split('.');
+                                                    if (parts.length > 2) val = parts[0] + '.' + parts.slice(1).join('');
+                                                    if (val.indexOf('-') > 0) val = val.slice(0, 1) + val.slice(1).replace(/-/g, '');
                                                     updateFilter(filter.id, 'value', val);
                                                 }}
                                                 onClick={(e) => e.stopPropagation()}
                                                 className="h-9 text-xs"
+                                                type="number"
+                                                placeholder="Enter number"
+                                            />
+                                        ) : (
+                                            <Input
+                                                value={filter.value}
+                                                onChange={(e) => updateFilter(filter.id, 'value', e.target.value)}
+                                                onClick={(e) => e.stopPropagation()}
+                                                className="h-9 text-xs"
                                                 type="text"
-                                                inputMode={colType === 'numeric' ? 'decimal' : 'text'}
-                                                placeholder={colType === 'numeric' ? '0' : 'Value'}
+                                                placeholder="Enter value"
                                             />
                                         )}
                                     </div>
@@ -372,24 +497,30 @@ export function TableFilterCard({
                                                     value={filter.value2 || ''}
                                                     onChange={(v) => updateFilter(filter.id, 'value2', v)}
                                                 />
-                                            ) : (
+                                            ) : colType === 'numeric' ? (
                                                 <Input
                                                     value={filter.value2 || ''}
                                                     onChange={(e) => {
                                                         let val = e.target.value;
-                                                        if (colType === 'numeric') {
-                                                            val = val.replace(/[^0-9.-]/g, '');
-                                                            const parts = val.split('.');
-                                                            if (parts.length > 2) val = parts[0] + '.' + parts.slice(1).join('');
-                                                            if (val.indexOf('-') > 0) val = val.slice(0, 1) + val.slice(1).replace(/-/g, '');
-                                                        }
+                                                        val = val.replace(/[^0-9.-]/g, '');
+                                                        const parts = val.split('.');
+                                                        if (parts.length > 2) val = parts[0] + '.' + parts.slice(1).join('');
+                                                        if (val.indexOf('-') > 0) val = val.slice(0, 1) + val.slice(1).replace(/-/g, '');
                                                         updateFilter(filter.id, 'value2', val);
                                                     }}
                                                     onClick={(e) => e.stopPropagation()}
                                                     className="h-9 text-xs"
+                                                    type="number"
+                                                    placeholder="Enter number"
+                                                />
+                                            ) : (
+                                                <Input
+                                                    value={filter.value2 || ''}
+                                                    onChange={(e) => updateFilter(filter.id, 'value2', e.target.value)}
+                                                    onClick={(e) => e.stopPropagation()}
+                                                    className="h-9 text-xs"
                                                     type="text"
-                                                    inputMode={colType === 'numeric' ? 'decimal' : 'text'}
-                                                    placeholder={colType === 'numeric' ? '0' : 'Value'}
+                                                    placeholder="Enter value"
                                                 />
                                             )}
                                         </div>
