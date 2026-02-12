@@ -436,7 +436,10 @@ class SnowflakeDestination(BaseDestination):
             timestamp_pattern = r"^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(\.\d+)?([+-]\d{2}:?\d{0,2}|Z)?$"
             if re.match(timestamp_pattern, value_stripped):
                 # If it has a timezone offset or Z, convert to target timezone
-                if any(c in value_stripped for c in ('+', 'Z')) or value_stripped.count('-') > 2:
+                if (
+                    any(c in value_stripped for c in ("+", "Z"))
+                    or value_stripped.count("-") > 2
+                ):
                     return convert_iso_timestamp_to_target_tz(value_stripped)
                 # No timezone → return as-is for TIMESTAMP_NTZ
                 return value_stripped
