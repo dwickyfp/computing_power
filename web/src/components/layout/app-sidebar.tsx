@@ -32,7 +32,7 @@ export function AppSidebar() {
         {sidebarData.navGroups.map((props, index) => (
           <React.Fragment key={props.title}>
             {index > 0 && state === 'collapsed' && (
-              <SidebarSeparator className='mx-auto w-6' />
+              <SidebarSeparator className='mx-3' />
             )}
             <NavGroup {...props} />
           </React.Fragment>
