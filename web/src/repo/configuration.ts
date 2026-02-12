@@ -3,6 +3,7 @@ import { api } from './client'
 export interface WALThresholdsConfig {
     warning: number  // in MB
     error: number    // in MB
+    enable_webhook: boolean
     webhook_url: string
     notification_iteration: number
 }

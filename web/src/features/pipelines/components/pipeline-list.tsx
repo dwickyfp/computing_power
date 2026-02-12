@@ -4,7 +4,6 @@ import { pipelineColumns } from './pipeline-columns'
 import { PipelinesTable } from './pipeline-table'
 import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
-import { ConfigDrawer } from '@/components/config-drawer'
 import { Search } from '@/components/search'
 import { ThemeSwitch } from '@/components/theme-switch'
 import { Button } from '@/components/ui/button'
@@ -16,17 +15,7 @@ export default function PipelineList() {
     const { data: pipelines } = useQuery({
         queryKey: ['pipelines'],
         queryFn: pipelinesRepo.getAll,
-        refetchInterval: (query) => {
-            const data = query.state.data
-            if (!data) return false
-
-            const hasActiveInitialization = data.pipelines.some(p =>
-                p.pipeline_progress?.status === 'PENDING' ||
-                p.pipeline_progress?.status === 'IN_PROGRESS'
-            )
-
-            return hasActiveInitialization ? 2000 : false
-        }
+        refetchInterval: 5000, // Refetch every 5 seconds
     })
 
     useEffect(() => {
@@ -48,7 +37,7 @@ export default function PipelineList() {
                 <Search />
                 <div className='ml-auto flex items-center space-x-4'>
                     <ThemeSwitch />
-                    <ConfigDrawer />
+                    
                 </div>
             </Header>
             <Main>

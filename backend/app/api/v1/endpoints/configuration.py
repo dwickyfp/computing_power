@@ -46,6 +46,7 @@ async def get_wal_thresholds(
         return WALThresholds(
             warning=thresholds.warning // (1024 * 1024),
             error=thresholds.error // (1024 * 1024),
+            enable_webhook=thresholds.enable_webhook,
             webhook_url=thresholds.webhook_url,
             notification_iteration=thresholds.notification_iteration
         )
@@ -84,6 +85,10 @@ async def update_wal_thresholds(
         # Update each configuration value
         service.set_value("WAL_MONITORING_THRESHOLD_WARNING", str(thresholds.warning))
         service.set_value("WAL_MONITORING_THRESHOLD_ERROR", str(thresholds.error))
+        service.set_value(
+            "ENABLE_ALERT_NOTIFICATION_WEBHOOK",
+            "TRUE" if thresholds.enable_webhook else "FALSE"
+        )
         service.set_value("ALERT_NOTIFICATION_WEBHOOK_URL", thresholds.webhook_url)
         service.set_value("NOTIFICATION_ITERATION_DEFAULT", str(thresholds.notification_iteration))
         
@@ -92,6 +97,7 @@ async def update_wal_thresholds(
             extra={
                 "warning": thresholds.warning,
                 "error": thresholds.error,
+                "enable_webhook": thresholds.enable_webhook,
                 "webhook_url": thresholds.webhook_url,
                 "notification_iteration": thresholds.notification_iteration
             }

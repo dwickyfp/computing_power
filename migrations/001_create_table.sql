@@ -234,6 +234,7 @@ CREATE TABLE IF NOT EXISTS rosetta_setting_configuration(
 
 INSERT INTO rosetta_setting_configuration(config_key, config_value) VALUES('WAL_MONITORING_THRESHOLD_WARNING', '3000') ON CONFLICT(config_key) DO NOTHING;
 INSERT INTO rosetta_setting_configuration(config_key, config_value) VALUES('WAL_MONITORING_THRESHOLD_ERROR', '6000') ON CONFLICT(config_key) DO NOTHING;
+INSERT INTO rosetta_setting_configuration(config_key, config_value) VALUES('ENABLE_ALERT_NOTIFICATION_WEBHOOK', 'FALSE') ON CONFLICT(config_key) DO NOTHING;
 INSERT INTO rosetta_setting_configuration(config_key, config_value) VALUES('ALERT_NOTIFICATION_WEBHOOK_URL', '') ON CONFLICT(config_key) DO NOTHING;
 INSERT INTO rosetta_setting_configuration(config_key, config_value) VALUES('NOTIFICATION_ITERATION_DEFAULT', '3') ON CONFLICT(config_key) DO NOTHING;
 

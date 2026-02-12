@@ -1,10 +1,8 @@
-import { useState } from 'react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import { useParams, Link } from '@tanstack/react-router'
-import { pipelinesRepo, Pipeline } from '@/repo/pipelines'
+import { pipelinesRepo } from '@/repo/pipelines'
 import { sourcesRepo } from '@/repo/sources'
 import {
-  RefreshCcw,
   GitBranch,
   Table2,
   Database,
@@ -12,7 +10,6 @@ import {
   RotateCcw,
 } from 'lucide-react'
 import { toast } from 'sonner'
-import { cn } from '@/lib/utils'
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -21,7 +18,6 @@ import {
   BreadcrumbPage,
   BreadcrumbSeparator,
 } from '@/components/ui/breadcrumb'
-import { Button } from '@/components/ui/button'
 // import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs' // Replaced with CustomTabs
 import {
   CustomTabs,
@@ -30,8 +26,6 @@ import {
   CustomTabsTrigger,
 } from '@/components/ui/custom-tabs'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Switch } from '@/components/ui/switch'
-import { ConfigDrawer } from '@/components/config-drawer'
 import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
 import { Search } from '@/components/search'
@@ -39,49 +33,14 @@ import { ThemeSwitch } from '@/components/theme-switch'
 import { BackfillDataTab } from '@/features/pipelines/components/backfill-data-tab'
 import { PipelineDataFlow } from '@/features/pipelines/components/pipeline-data-flow'
 import { PipelineFlowTab } from '@/features/pipelines/components/pipeline-flow-tab'
-
-function PipelineStatusSwitch({ pipeline }: { pipeline: Pipeline }) {
-  const queryClient = useQueryClient()
-  const isRunning = pipeline.status === 'START' || pipeline.status === 'REFRESH'
-
-  const { mutate, isPending } = useMutation({
-    mutationFn: async (checked: boolean) => {
-      if (checked) {
-        return pipelinesRepo.start(pipeline.id)
-      } else {
-        return pipelinesRepo.pause(pipeline.id)
-      }
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['pipelines'] })
-      queryClient.invalidateQueries({ queryKey: ['pipeline', pipeline.id] })
-      toast.success('Pipeline status updated')
-    },
-    onError: (error) => {
-      toast.error(`Failed to update status: ${error}`)
-    },
-  })
-
-  return (
-    <div className='flex items-center space-x-2'>
-      <span className='text-sm font-medium'>
-        {isRunning ? 'Running' : 'Paused'}
-      </span>
-      <Switch
-        checked={isRunning}
-        onCheckedChange={(checked) => mutate(checked)}
-        disabled={isPending}
-      />
-    </div>
-  )
-}
+import { PipelineStatusSwitch } from '@/features/pipelines/components/pipeline-status-switch'
+import { RestartButton } from '@/features/pipelines/components/restart-button'
 
 export default function PipelineDetailsPage() {
   const { pipelineId } = useParams({
     from: '/_authenticated/pipelines/$pipelineId',
   })
   const id = parseInt(pipelineId)
-  const [isRefreshing, setIsRefreshing] = useState(false)
 
   // 1. Fetch Pipeline
   const {
@@ -94,6 +53,7 @@ export default function PipelineDetailsPage() {
       return await pipelinesRepo.get(id)
     },
     retry: false,
+    refetchInterval: 5000, // Refetch every 5 seconds
   })
 
   // 2. Fetch Source Details using pipeline.source_id
@@ -105,17 +65,9 @@ export default function PipelineDetailsPage() {
 
   const handleRefresh = async () => {
     if (!pipeline) return
-    setIsRefreshing(true)
-    try {
-      await pipelinesRepo.refresh(id)
-      await sourcesRepo.refreshSource(pipeline.source_id)
-      toast.success('Pipeline and Source refreshed')
-    } catch (e) {
-      console.error(e)
-      toast.error('Failed to refresh')
-    } finally {
-      setIsRefreshing(false)
-    }
+    await pipelinesRepo.refresh(id)
+    await sourcesRepo.refreshSource(pipeline.source_id)
+    toast.success('Pipeline and Source restarted successfully')
   }
 
   if (pipelineError) {
@@ -145,7 +97,7 @@ export default function PipelineDetailsPage() {
         <Search />
         <div className='ms-auto flex items-center space-x-4'>
           <ThemeSwitch />
-          <ConfigDrawer />
+          
         </div>
       </Header>
 
@@ -197,18 +149,10 @@ export default function PipelineDetailsPage() {
             </div>
             <div className='flex items-center gap-3 pt-1'>
               {pipeline && <PipelineStatusSwitch pipeline={pipeline} />}
-              <Button
-                variant='outline'
-                size='sm'
-                onClick={handleRefresh}
-                disabled={isRefreshing || isLoading}
-                className='h-9'
-              >
-                <RefreshCcw
-                  className={cn('mr-2 h-4 w-4', isRefreshing && 'animate-spin')}
-                />
-                Refresh
-              </Button>
+              <RestartButton
+                onRestart={handleRefresh}
+                disabled={isLoading}
+              />
             </div>
           </div>
         </div>

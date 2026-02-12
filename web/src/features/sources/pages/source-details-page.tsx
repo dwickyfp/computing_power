@@ -6,14 +6,12 @@ import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
 import { Search } from '@/components/search'
 import { ThemeSwitch } from '@/components/theme-switch'
-import { ConfigDrawer } from '@/components/config-drawer'
 import { SourceDetailsMetrics } from '../components/source-details-metrics'
 import { SourceReplicationTable } from '../components/source-replication-table'
 import { SourceDetailsCreatePublicationDialog } from '../components/source-details-create-publication-dialog'
 import { SourceDetailsListTable } from '../components/source-details-list-table'
 import { SourceDetailsPresets } from '../components/source-details-presets'
 import { Skeleton } from '@/components/ui/skeleton'
-// import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { CustomTabs, CustomTabsContent, CustomTabsList, CustomTabsTrigger } from '@/components/ui/custom-tabs'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -153,7 +151,7 @@ export default function SourceDetailsPage() {
                 <Search />
                 <div className='ms-auto flex items-center space-x-4'>
                     <ThemeSwitch />
-                    <ConfigDrawer />
+                    
                 </div>
             </Header>
 
