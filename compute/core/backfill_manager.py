@@ -261,7 +261,7 @@ class BackfillManager:
                     base_query += f" WHERE {where_clause}"
 
             # Count total rows first
-            count_query = f"SELECT COUNT(*) as total FROM ({base_query}) t"
+            count_query = f"SELECT COUNT(1) as total FROM ({base_query}) t"
             total_rows = conn.execute(count_query).fetchone()[0]
             logger.info(f"Job {job_id}: Total rows to process: {total_rows}")
 
