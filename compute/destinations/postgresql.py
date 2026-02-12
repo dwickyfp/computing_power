@@ -278,6 +278,15 @@ class PostgreSQLDestination(BaseDestination):
                     ).time()
                 return value
 
+            elif pg_type in ("time with time zone", "timetz"):
+                # Debezium sends TIME WITH TIME ZONE as microseconds since midnight
+                # The timezone offset is preserved in the PostgreSQL column metadata
+                if isinstance(value, int):
+                    return (
+                        datetime.datetime.min + datetime.timedelta(microseconds=value)
+                    ).time()
+                return value
+
             elif pg_type in ("numeric", "decimal"):
                 # Debezium sends NUMERIC/DECIMAL as Base64-encoded big-endian byte array
                 if (
@@ -789,6 +798,14 @@ class PostgreSQLDestination(BaseDestination):
                         raw_value, c, col_info
                     )
 
+                    # Special handling for TIME WITH TIME ZONE: normalize 'Z' to '+00:00'
+                    # PostgreSQL doesn't accept 'Z' suffix for timetz, only explicit offsets
+                    if pg_type in ("time with time zone", "timetz") and isinstance(
+                        converted_value, str
+                    ):
+                        if converted_value.endswith("Z"):
+                            converted_value = converted_value[:-1] + "+00:00"
+
                     if log_first:
                         self._logger.info(
                             f"    Converted: {repr(converted_value)} (type={type(converted_value).__name__})"
@@ -808,6 +825,8 @@ class PostgreSQLDestination(BaseDestination):
                     return "TIMESTAMP"
                 if pg_type in ("time", "time without time zone"):
                     return "TIME"
+                if pg_type in ("time with time zone", "timetz"):
+                    return "VARCHAR"  # Store as string to avoid DuckDB cast errors
                 if pg_type in ("integer", "int", "serial"):
                     return "INTEGER"
                 if pg_type in ("bigint", "bigserial"):
@@ -892,6 +911,10 @@ class PostgreSQLDestination(BaseDestination):
                 # Handle JSONB/JSON
                 if pg_type in ("json", "jsonb"):
                     return "JSON"
+
+                # Handle TIME WITH TIME ZONE (use VARCHAR to avoid cast errors)
+                if pg_type in ("time with time zone", "timetz"):
+                    return "VARCHAR"
 
                 # Handle Geospatial types (map to VARCHAR for DuckDB compatibility)
                 if pg_type in (

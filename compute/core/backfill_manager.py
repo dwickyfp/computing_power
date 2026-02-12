@@ -691,6 +691,8 @@ class BackfillManager:
                 # TIME → ISO format string with or without TZ
                 if value.tzinfo is not None:
                     # TIME WITH TIME ZONE → convert to target timezone offset
+                    # Output format: "HH:MM:SS.ffffff+HH:MM" (ISO-8601 with offset)
+                    # PostgreSQL can parse this format directly
                     converted = convert_time_to_target_tz(value)
                     serialized[key] = converted.isoformat()
                 else:
