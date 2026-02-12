@@ -89,18 +89,18 @@ export function NotificationPopover() {
                                 {getIcon(notification.type)}
                             </div>
                             <div className="flex-1 space-y-1 overflow-hidden min-w-0">
-                                <div className="flex items-center justify-between gap-2">
-                                    <p className={`text-sm font-medium leading-none ${!notification.is_read ? 'text-foreground' : 'text-muted-foreground'}`}>
+                                <div className="flex items-start justify-between gap-2">
+                                    <p className={`text-sm font-medium leading-tight break-words ${!notification.is_read ? 'text-foreground' : 'text-muted-foreground'}`}>
                                         {notification.title}
                                     </p>
-                                    <span className="text-xs text-muted-foreground shrink-0 tabular-nums">
+                                    <span className="text-xs text-muted-foreground shrink-0 tabular-nums whitespace-nowrap">
                                         {formatDistanceToNow(new Date(notification.created_at), { addSuffix: true })}
                                     </span>
                                 </div>
 
                                 <HoverCard openDelay={200}>
                                     <HoverCardTrigger asChild>
-                                        <p className={`text-sm ${!notification.is_read ? 'text-foreground/90' : 'text-muted-foreground'} line-clamp-2 cursor-default`}>
+                                        <p className={`text-sm ${!notification.is_read ? 'text-foreground/90' : 'text-muted-foreground'} line-clamp-2 break-words cursor-default`}>
                                             {notification.message}
                                         </p>
                                     </HoverCardTrigger>
