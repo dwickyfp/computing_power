@@ -17,8 +17,10 @@ import {
   FormMessage,
 } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
+import { Switch } from '@/components/ui/switch'
 
 const notificationsFormSchema = z.object({
+  enable_webhook: z.boolean(),
   webhook_url: z.string().url('Please enter a valid URL').or(z.literal('')),
   notification_iteration: z
     .number()
@@ -39,6 +41,7 @@ export function NotificationsForm() {
   const form = useForm<NotificationsFormValues>({
     resolver: zodResolver(notificationsFormSchema),
     defaultValues: {
+      enable_webhook: false,
       webhook_url: '',
       notification_iteration: 3,
     },
@@ -48,6 +51,7 @@ export function NotificationsForm() {
   useEffect(() => {
     if (config) {
       form.reset({
+        enable_webhook: config.enable_webhook,
         webhook_url: config.webhook_url,
         notification_iteration: config.notification_iteration,
       })
@@ -57,13 +61,34 @@ export function NotificationsForm() {
   const updateMutation = useMutation({
     mutationFn: configurationRepo.updateWALThresholds,
     onSuccess: () => {
-      queryClient.invalidateQueries({
-        queryKey: ['configuration', 'wal-thresholds'],
-      })
+      setTimeout(() => {
+        queryClient.invalidateQueries({
+          queryKey: ['configuration', 'wal-thresholds'],
+        })
+      }, 300)
       toast.success('Notification settings updated successfully')
     },
     onError: (error: any) => {
       toast.error(error?.message || 'Failed to update notification settings')
+    },
+  })
+
+  const toggleWebhookMutation = useMutation({
+    mutationFn: configurationRepo.updateWALThresholds,
+    onSuccess: () => {
+      setTimeout(() => {
+        queryClient.invalidateQueries({
+          queryKey: ['configuration', 'wal-thresholds'],
+        })
+      }, 300)
+      toast.success('Webhook notification status updated')
+    },
+    onError: (error: any) => {
+      toast.error(error?.message || 'Failed to update webhook status')
+      // Revert the toggle on error
+      if (config) {
+        form.setValue('enable_webhook', config.enable_webhook)
+      }
     },
   })
 
@@ -78,6 +103,24 @@ export function NotificationsForm() {
     }
     updateMutation.mutate(payload)
   }
+
+  const handleToggleWebhook = (checked: boolean) => {
+    if (!config) return
+
+    // Update form value
+    form.setValue('enable_webhook', checked)
+
+    // Immediately update backend
+    const payload = {
+      ...config,
+      enable_webhook: checked,
+      webhook_url: form.getValues('webhook_url') || config.webhook_url,
+      notification_iteration: form.getValues('notification_iteration') || config.notification_iteration,
+    }
+    toggleWebhookMutation.mutate(payload)
+  }
+
+  const isWebhookEnabled = form.watch('enable_webhook')
 
   if (isLoading) {
     return (
@@ -94,6 +137,30 @@ export function NotificationsForm() {
           <div className='space-y-6'>
             <FormField
               control={form.control}
+              name='enable_webhook'
+              render={({ field }) => (
+                <FormItem className='flex flex-row items-center justify-between rounded-lg border p-4'>
+                  <div className='space-y-0.5'>
+                    <FormLabel className='text-base'>
+                      Enable Webhook Notifications
+                    </FormLabel>
+                    <FormDescription>
+                      Enable or disable sending notifications to webhook URL
+                    </FormDescription>
+                  </div>
+                  <FormControl>
+                    <Switch
+                      checked={field.value}
+                      onCheckedChange={handleToggleWebhook}
+                      disabled={toggleWebhookMutation.isPending}
+                    />
+                  </FormControl>
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
               name='webhook_url'
               render={({ field }) => (
                 <FormItem>
@@ -103,12 +170,14 @@ export function NotificationsForm() {
                       <Input
                         type='url'
                         placeholder='https://your-webhook-endpoint.com/webhook'
+                        disabled={!isWebhookEnabled}
                         {...field}
                       />
                     </FormControl>
                     <Button
                       type='button'
                       variant='secondary'
+                      disabled={!isWebhookEnabled}
                       onClick={async () => {
                         const currentWebhookUrl = form.getValues('webhook_url')
                         if (!currentWebhookUrl) {
@@ -127,7 +196,7 @@ export function NotificationsForm() {
                     </Button>
                   </div>
                   <FormDescription>
-                    Webhook URL for alert notifications. Leave empty to disable.
+                    Webhook URL for alert notifications. Will only be used if enabled above.
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
@@ -144,6 +213,7 @@ export function NotificationsForm() {
                     <Input
                       type='number'
                       placeholder='3'
+                      disabled={!isWebhookEnabled}
                       {...field}
                       onChange={(e) => field.onChange(e.target.valueAsNumber)}
                       className='max-w-50'
@@ -164,6 +234,9 @@ export function NotificationsForm() {
                 )}
                 Save Changes
               </Button>
+              <p className='mt-2 text-xs text-muted-foreground'>
+                Webhook toggle updates immediately. This button saves URL and iteration changes.
+              </p>
             </div>
           </div>
 

@@ -32,6 +32,9 @@ class ConfigurationService:
             self.repo.get_value("WAL_MONITORING_THRESHOLD_WARNING", "3000")
         )
         error_mb = int(self.repo.get_value("WAL_MONITORING_THRESHOLD_ERROR", "6000"))
+        enable_webhook = self.repo.get_value(
+            "ENABLE_ALERT_NOTIFICATION_WEBHOOK", "FALSE"
+        ).upper() == "TRUE"
         webhook_url = self.repo.get_value("ALERT_NOTIFICATION_WEBHOOK_URL", "")
         notification_iteration = int(
             self.repo.get_value("NOTIFICATION_ITERATION_DEFAULT", "3")
@@ -44,6 +47,7 @@ class ConfigurationService:
         return WALThresholds(
             warning=warning_bytes,
             error=error_bytes,
+            enable_webhook=enable_webhook,
             webhook_url=webhook_url,
             notification_iteration=notification_iteration,
         )
