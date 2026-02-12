@@ -610,17 +610,19 @@ class SnowflakeDestination(BaseDestination):
             self._write_batch_async(records, table_sync), self._loop
         )
 
-        # Timeout scales with batch size: base 60s + 1s per 100 records, max 300s
-        # This handles large CDC batches that may take longer to process
-        timeout_seconds = min(60 + (len(records) // 100), 300)
+        # Timeout: base 120s (matches HTTP read timeout) + 1s per 100 records, max 300s
+        # Must be >= HTTP timeout to let HTTP complete before future times out
+        timeout_seconds = min(120 + (len(records) // 100), 300)
 
         try:
             return future.result(timeout=timeout_seconds)
         except TimeoutError:
             self._logger.error(
                 f"[Snowflake] write_batch timed out after {timeout_seconds}s for {len(records)} records. "
-                f"Snowflake may be slow or overloaded."
+                f"Snowflake may be slow or overloaded. Check network connectivity."
             )
+            # Cancel the pending future to avoid resource leak
+            future.cancel()
             raise
         except Exception as e:
             self._logger.error(f"[Snowflake] write_batch failed: {e}", exc_info=True)
