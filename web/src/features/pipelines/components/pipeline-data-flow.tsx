@@ -388,7 +388,7 @@ export function PipelineDataFlow({ pipeline }: PipelineDataFlowProps) {
   }, [pipeline, stats])
 
   return (
-    <div className='relative h-175 rounded-lg border bg-background [&_.react-flow__controls]:border-border [&_.react-flow__controls]:bg-background [&_.react-flow__controls]:shadow-md [&_.react-flow__controls-button]:border-border [&_.react-flow__controls-button]:bg-background [&_.react-flow__controls-button]:fill-foreground [&_.react-flow__controls-button:hover]:bg-muted'>
+    <div className='relative h-[600px] rounded-lg border bg-background [&_.react-flow__controls]:border-border [&_.react-flow__controls]:bg-background [&_.react-flow__controls]:shadow-md [&_.react-flow__controls-button]:border-border [&_.react-flow__controls-button]:bg-background [&_.react-flow__controls-button]:fill-foreground [&_.react-flow__controls-button:hover]:bg-muted'>
       <ReactFlow
         nodes={nodes}
         edges={edges}
