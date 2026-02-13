@@ -238,9 +238,7 @@ def get_config() -> Config:
     Get singleton configuration instance.
 
     Uses lru_cache to ensure only one Config instance exists.
-    Loads batch configuration from database.
+    Uses environment variables or defaults - no database dependency.
     """
     config = Config.from_env()
-    # Load batch configuration from database
-    config.pipeline.load_from_database()
     return config
