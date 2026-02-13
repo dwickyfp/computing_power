@@ -126,6 +126,7 @@ COPY migrations ./migrations
 ENV MODE=worker
 ENV PYTHONPATH=/app/compute
 ENV TZ=Asia/Jakarta
+ENV SNOWFLAKE_HOME=/tmp/.snowflake
 
 # Create directories with proper permissions
 RUN mkdir -p /app/tmp/offsets && \
@@ -184,15 +185,13 @@ COPY docker/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 COPY docker/entrypoint.sh /app/entrypoint.sh
 RUN chmod +x /app/entrypoint.sh
 
-# Create Snowflake connector directory with proper permissions
-RUN mkdir -p /root/.snowflake && chmod 755 /root/.snowflake
-
 # Set environment variables
 ENV MODE=web
 ENV HOST=0.0.0.0
 ENV PORT=8000
 ENV TZ=Asia/Jakarta
 ENV PYTHONPATH=/app/backend
+ENV SNOWFLAKE_HOME=/tmp/.snowflake
 
 # Expose ports
 EXPOSE 80 8000
