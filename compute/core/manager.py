@@ -64,12 +64,15 @@ def _run_pipeline_process(pipeline_id: int, stop_event: EventClass) -> None:
     subprocess_logger = logging.getLogger(f"Pipeline_{pipeline_id}")
 
     # Initialize database connection pool for this process with configurable size
-    # Default to 2 connections: reduced to prevent connection pool exhaustion
-    # Each pipeline needs: 1 for main engine + 1 for backfill/DLQ workers
+    # Default to 10 connections to support concurrent operations:
+    # - Main engine repository queries (2-3 connections)
+    # - Backfill manager operations (3-4 connections)
+    # - DLQ recovery worker (1-2 connections)
+    # - Buffer for concurrent spikes (2 connections)
     import os
 
-    pipeline_pool_max_conn = int(os.getenv("PIPELINE_POOL_MAX_CONN", "2"))
-    init_connection_pool(min_conn=1, max_conn=pipeline_pool_max_conn)
+    pipeline_pool_max_conn = int(os.getenv("PIPELINE_POOL_MAX_CONN", "10"))
+    init_connection_pool(min_conn=2, max_conn=pipeline_pool_max_conn)
 
     engine = None
     try:

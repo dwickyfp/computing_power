@@ -243,7 +243,7 @@ class PostgreSQLSource(BaseSource):
             # Snapshot behavior
             # "recovery" = take snapshot when stored offset is no longer available (WAL recycled)
             # "no_data" = skip initial snapshot, but fail if offset is lost
-            "snapshot.mode": "recovery",
+            "snapshot.mode": "no_data",
             # Table filtering
             "schema.include.list": self.DEFAULT_SCHEMA,
             "table.include.list": ",".join(tables_with_schema),
