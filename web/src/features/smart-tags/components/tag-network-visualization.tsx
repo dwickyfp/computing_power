@@ -337,8 +337,8 @@ export function TagNetworkVisualization() {
                                 to="/pipelines/$pipelineId"
                                 params={{ pipelineId: String(pipeline.pipeline_id) }}
                                 state={{
-                                  highlightDestination: dest.destination_id,
                                   openDrawer: true,
+                                  openDrawerDestinationId: dest.destination_id,
                                   highlightTable: table,
                                 } as HistoryState}
                                 className="flex items-center gap-2 text-xs text-indigo-400/60 py-0.5 hover:text-blue-400 transition-colors cursor-pointer w-fit"

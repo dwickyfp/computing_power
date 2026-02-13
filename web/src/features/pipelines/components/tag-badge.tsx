@@ -139,8 +139,8 @@ export function TagBadge({
                               to="/pipelines/$pipelineId"
                               params={{ pipelineId: String(pipeline.pipeline_id) }}
                               state={{
-                                highlightDestination: dest.destination_id,
                                 openDrawer: true,
+                                openDrawerDestinationId: dest.destination_id,
                                 highlightTable: table,
                               } as HistoryState}
                               className="flex items-center gap-2 text-xs text-muted-foreground/80 py-0.5 hover:text-blue-500 transition-colors cursor-pointer w-fit"

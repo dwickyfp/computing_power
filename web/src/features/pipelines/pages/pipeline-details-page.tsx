@@ -40,6 +40,7 @@ import { RestartButton } from '@/features/pipelines/components/restart-button'
 interface PipelineNavigationState {
   highlightDestination?: number
   openDrawer?: boolean
+  openDrawerDestinationId?: number
   highlightTable?: string
 }
 
@@ -58,7 +59,7 @@ export default function PipelineDetailsPage() {
   useEffect(() => {
     if (consumedRef.current) return
     const state = location.state as PipelineNavigationState | undefined
-    if (state?.highlightDestination) {
+    if (state?.highlightDestination || state?.openDrawer) {
       consumedRef.current = true
       setNavState({ ...state })
       // Replace current history entry to wipe state — refresh will have clean state
@@ -214,6 +215,7 @@ export default function PipelineDetailsPage() {
                 pipeline={pipeline}
                 highlightDestination={navState.highlightDestination}
                 openDrawer={navState.openDrawer}
+                openDrawerDestinationId={navState.openDrawerDestinationId}
                 highlightTable={navState.highlightTable}
                 onClearHighlight={() => setNavState({})}
               />

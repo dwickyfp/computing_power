@@ -14,6 +14,7 @@ interface PipelineFlowTabProps {
   highlightDestination?: number
   openDrawer?: boolean
   highlightTable?: string
+  openDrawerDestinationId?: number
   onClearHighlight?: () => void
 }
 
@@ -27,6 +28,7 @@ export function PipelineFlowTab({
   highlightDestination,
   openDrawer,
   highlightTable,
+  openDrawerDestinationId,
   onClearHighlight,
 }: PipelineFlowTabProps) {
   const { theme } = useTheme()
@@ -44,7 +46,7 @@ export function PipelineFlowTab({
     }
   }, [highlightDestination, highlightTable])
 
-  // Handle auto-open drawer from navigation state
+  // Handle auto-open drawer from navigation state (with highlight)
   useEffect(() => {
     if (openDrawer && highlightDestination && pipeline?.destinations) {
       const dest = pipeline.destinations.find(
@@ -56,6 +58,20 @@ export function PipelineFlowTab({
       }
     }
   }, [openDrawer, highlightDestination, pipeline])
+
+  // Handle drawer-only open (no node highlight animation)
+  useEffect(() => {
+    if (openDrawer && openDrawerDestinationId && !highlightDestination && pipeline?.destinations) {
+      const dest = pipeline.destinations.find(
+        (d) => d.destination.id === openDrawerDestinationId
+      )
+      if (dest) {
+        setSelectedDestId(dest.id)
+        setActiveHighlightTable(highlightTable)
+        setDrawerOpen(true)
+      }
+    }
+  }, [openDrawer, openDrawerDestinationId, highlightDestination, highlightTable, pipeline])
 
   // Determine existing destination IDs to exclude from add modal
   const existingDestinationIds = useMemo(() => {
