@@ -1288,11 +1288,15 @@ class PostgreSQLDestination(BaseDestination):
             # Force send notification
             try:
                 notification_repo = NotificationLogRepository()
+                
+                # Sanitize error message before sending to notification
+                sanitized_error = sanitize_for_db(e, self._config.name, "POSTGRES")
+                
                 notification_repo.upsert_notification_by_key(
                     NotificationLogCreate(
                         key_notification=f"destination_connection_error_{self.destination_id}",
                         title=f"PostgreSQL Connection Error",
-                        message=f"Failed to connect to PostgreSQL destination {self._config.name}: {error_msg}",
+                        message=f"Failed to connect to PostgreSQL destination {self._config.name}: {sanitized_error}",
                         type="ERROR",
                         is_force_sent=True,
                     )
@@ -1320,11 +1324,14 @@ class PostgreSQLDestination(BaseDestination):
                     or "operationalerror" in error_msg
                 )
 
+                # Sanitize error message before sending to notification
+                sanitized_error = sanitize_for_db(e, self._config.name, "POSTGRES")
+
                 notification_repo.upsert_notification_by_key(
                     NotificationLogCreate(
                         key_notification=f"destination_error_{self.destination_id}_{source_table}",
                         title=f"PostgreSQL Sync Error: {target_table}",
-                        message=f"Failed to sync table {source_table} to {target_table}: {str(e)}",
+                        message=f"Failed to sync table {source_table} to {target_table}: {sanitized_error}",
                         type="ERROR",
                         is_force_sent=is_force_sent,
                     )

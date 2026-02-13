@@ -588,6 +588,10 @@ class SnowflakeDestination(BaseDestination):
             # Notify on error
             try:
                 notification_repo = NotificationLogRepository()
+                
+                # Sanitize error message before sending to notification
+                sanitized_error = sanitize_for_db(e, self._config.name, "SNOWFLAKE")
+                
                 is_force_sent = (
                     "connection" in str(e).lower() or "authentication" in str(e).lower()
                 )
@@ -596,7 +600,7 @@ class SnowflakeDestination(BaseDestination):
                     NotificationLogCreate(
                         key_notification=f"destination_error_{self.destination_id}_{landing_table}",
                         title=f"Snowflake Sync Error: {landing_table}",
-                        message=f"Failed to sync to {landing_table}: {str(e)}",
+                        message=f"Failed to sync to {landing_table}: {sanitized_error}",
                         type="ERROR",
                         is_force_sent=is_force_sent,
                     )
