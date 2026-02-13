@@ -61,6 +61,21 @@ export interface SmartTagsFilterParams {
   source_id?: number
 }
 
+export interface DestinationUsage {
+  destination_name: string
+  tables: string[]
+}
+
+export interface PipelineUsage {
+  pipeline_name: string
+  destinations: DestinationUsage[]
+}
+
+export interface TagUsageResponse {
+  tag: string
+  usage: PipelineUsage[]
+}
+
 export const tagsRepo = {
   // Tag CRUD operations
   getAll: async (skip: number = 0, limit: number = 100): Promise<TagListResponse> => {
@@ -95,6 +110,11 @@ export const tagsRepo = {
     const response: AxiosResponse<SmartTagsResponse> = await api.get('/tags/smart-tags', {
       params,
     })
+    return response.data
+  },
+
+  getUsage: async (id: number): Promise<TagUsageResponse> => {
+    const response: AxiosResponse<TagUsageResponse> = await api.get(`/tags/${id}/usage`)
     return response.data
   },
 

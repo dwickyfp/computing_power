@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.core.exceptions import DatabaseError, DuplicateEntityError, EntityNotFoundError
 from app.core.logging import get_logger
+from app.domain.models.destination import Destination
 from app.domain.models.pipeline import Pipeline, PipelineDestination, PipelineDestinationTableSync
 from app.domain.models.tag import PipelineDestinationTableSyncTag, TagList
 from app.domain.repositories.base import BaseRepository
@@ -133,6 +134,45 @@ class TagRepository(BaseRepository[TagList]):
                 extra={"tag_name": tag_name, "error": str(e)},
             )
             raise DatabaseError("Failed to get or create tag") from e
+
+    def get_tag_usage_details(self, tag_id: int):
+        """
+        Get detailed usage of a tag.
+        
+        Args:
+            tag_id: Tag identifier
+            
+        Returns:
+            List of rows with pipeline_name, destination_name, table_name
+        """
+        try:
+            return self.db.execute(
+                select(
+                    Pipeline.name.label("pipeline_name"),
+                    Destination.name.label("destination_name"),
+                    PipelineDestinationTableSync.table_name.label("table_name")
+                )
+                .join(PipelineDestination, PipelineDestination.pipeline_id == Pipeline.id)
+                .join(
+                    PipelineDestinationTableSync, 
+                    PipelineDestinationTableSync.pipeline_destination_id == PipelineDestination.id
+                )
+                .join(
+                    PipelineDestinationTableSyncTag,
+                    PipelineDestinationTableSyncTag.pipelines_destination_table_sync_id == PipelineDestinationTableSync.id
+                )
+                .join(
+                    Destination,
+                    Destination.id == PipelineDestination.destination_id
+                )
+                .where(PipelineDestinationTableSyncTag.tag_id == tag_id)
+            ).all()
+
+        except SQLAlchemyError as e:
+            logger.error(
+                "Failed to get tag usage details", extra={"tag_id": tag_id, "error": str(e)}
+            )
+            raise DatabaseError("Failed to get tag usage details") from e
 
     def get_all_ordered(self, skip: int = 0, limit: int = 100) -> List[TagList]:
         """

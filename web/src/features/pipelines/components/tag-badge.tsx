@@ -1,16 +1,47 @@
 import { Badge } from '@/components/ui/badge'
-import { Hash, X } from 'lucide-react'
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover'
+import { ScrollArea } from '@/components/ui/scroll-area'
 import { cn } from '@/lib/utils'
+import { tagsRepo } from '@/repo/tags'
+import { useQuery } from '@tanstack/react-query'
+import {
+  Database,
+  Hash,
+  Loader2,
+  Network,
+  Table2,
+  X,
+} from 'lucide-react'
+import { useState } from 'react'
 
 interface TagBadgeProps {
   tag: string
+  tagId?: number // Optional for opening popover
   onRemove?: () => void
   variant?: 'default' | 'outline'
   className?: string
 }
 
-export function TagBadge({ tag, onRemove, variant = 'default', className }: TagBadgeProps) {
-  return (
+export function TagBadge({
+  tag,
+  tagId,
+  onRemove,
+  variant = 'default',
+  className,
+}: TagBadgeProps) {
+  const [isOpen, setIsOpen] = useState(false)
+
+  const { data: usageData, isLoading } = useQuery({
+    queryKey: ['tag-usage', tagId],
+    queryFn: () => tagsRepo.getUsage(tagId!),
+    enabled: !!tagId && isOpen,
+  })
+
+  const badgeContent = (
     <Badge
       variant={variant}
       className={cn(
@@ -19,6 +50,7 @@ export function TagBadge({ tag, onRemove, variant = 'default', className }: TagB
         'dark:from-blue-950/30 dark:to-indigo-950/30 dark:text-blue-300 dark:border-blue-800/50',
         'hover:from-blue-100 hover:to-indigo-100 dark:hover:from-blue-950/50 dark:hover:to-indigo-950/50',
         'transition-all',
+        tagId && !onRemove && 'cursor-pointer',
         className
       )}
     >
@@ -39,5 +71,70 @@ export function TagBadge({ tag, onRemove, variant = 'default', className }: TagB
         </button>
       )}
     </Badge>
+  )
+
+  if (!tagId || onRemove) {
+    return badgeContent
+  }
+
+  return (
+    <Popover open={isOpen} onOpenChange={setIsOpen}>
+      <PopoverTrigger asChild>{badgeContent}</PopoverTrigger>
+      <PopoverContent className="w-80 p-0" align="start">
+        <div className="border-b px-4 py-3 bg-muted/50">
+          <h4 className="font-semibold flex items-center gap-2">
+            <Hash className="h-4 w-4 text-muted-foreground" />
+            {tag}
+          </h4>
+          <p className="text-xs text-muted-foreground mt-1">
+            Usage details across pipelines
+          </p>
+        </div>
+        <ScrollArea className="h-[300px]">
+          <div className="p-4 space-y-4">
+            {isLoading ? (
+              <div className="flex h-20 items-center justify-center text-muted-foreground">
+                <Loader2 className="h-5 w-5 animate-spin mr-2" />
+                Loading usage...
+              </div>
+            ) : usageData?.usage.length === 0 ? (
+              <div className="text-sm text-muted-foreground text-center py-4">
+                No active usage found for this tag.
+              </div>
+            ) : (
+              usageData?.usage.map((pipeline, i) => (
+                <div key={i} className="space-y-3">
+                  <div className="flex items-center gap-2 font-medium text-sm text-foreground">
+                    <Network className="h-4 w-4 text-primary" />
+                    {pipeline.pipeline_name}
+                  </div>
+                  <div className="ml-2 pl-4 border-l-2 border-muted space-y-3">
+                    {pipeline.destinations.map((dest, j) => (
+                      <div key={j} className="space-y-2">
+                        <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+                          <Database className="h-3 w-3" />
+                          {dest.destination_name}
+                        </div>
+                        <div className="space-y-1 ml-1 pl-3 border-l border-muted/50">
+                          {dest.tables.map((table, k) => (
+                            <div
+                              key={k}
+                              className="flex items-center gap-2 text-xs text-muted-foreground/80 py-0.5"
+                            >
+                              <Table2 className="h-3 w-3 opacity-70" />
+                              {table}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </ScrollArea>
+      </PopoverContent>
+    </Popover>
   )
 }

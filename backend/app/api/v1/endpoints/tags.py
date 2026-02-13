@@ -19,6 +19,7 @@ from app.domain.schemas.tag import (
     TagListResponse,
     TagResponse,
     TagSuggestionResponse,
+    TagUsageResponse,
     TagWithUsageCount,
 )
 from app.domain.services.tag import TagService
@@ -145,6 +146,29 @@ async def get_tag(
         Tag details
     """
     return service.get_tag(tag_id)
+
+
+@router.get(
+    "/{tag_id}/usage",
+    response_model=TagUsageResponse,
+    summary="Get tag usage",
+    description="Get detailed usage information for a tag",
+)
+async def get_tag_usage(
+    tag_id: int = Path(..., ge=1, description="Tag ID"),
+    service: TagService = Depends(get_tag_service),
+) -> TagUsageResponse:
+    """
+    Get detailed usage information for a tag.
+
+    Args:
+        tag_id: Tag identifier
+        service: Tag service instance
+
+    Returns:
+        Structured usage details
+    """
+    return service.get_tag_usage(tag_id)
 
 
 @router.delete(

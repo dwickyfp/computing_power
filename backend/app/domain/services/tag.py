@@ -23,6 +23,9 @@ from app.domain.schemas.tag import (
     TagResponse,
     TagSuggestionResponse,
     TagWithUsageCount,
+    TagUsageResponse,
+    PipelineUsage,
+    DestinationUsage,
 )
 
 logger = get_logger(__name__)
@@ -83,6 +86,56 @@ class TagService:
         """
         tag = self.tag_repository.get_by_id(tag_id)
         return TagResponse.from_orm(tag)
+
+    def get_tag_usage(self, tag_id: int) -> TagUsageResponse:
+        """
+        Get tag usage details.
+
+        Args:
+            tag_id: Tag identifier
+
+        Returns:
+            Tag usage details
+
+        Raises:
+            EntityNotFoundError: If tag not found
+        """
+        tag = self.tag_repository.get_by_id(tag_id)
+        if not tag:
+            raise EntityNotFoundError(f"Tag with id {tag_id} not found")
+
+        rows = self.tag_repository.get_tag_usage_details(tag_id)
+
+        # Group by pipeline -> destination -> tables
+        structure = {}
+        
+        for row in rows:
+            p_name = row.pipeline_name
+            d_name = row.destination_name
+            t_name = row.table_name
+            
+            if p_name not in structure:
+                structure[p_name] = {}
+            
+            if d_name not in structure[p_name]:
+                structure[p_name][d_name] = []
+                
+            structure[p_name][d_name].append(t_name)
+            
+        # Convert to response schema
+        usage_list = []
+        for p_name, dests in structure.items():
+            dest_list = []
+            for d_name, tables in dests.items():
+                dest_list.append(
+                    DestinationUsage(destination_name=d_name, tables=tables)
+                )
+            
+            usage_list.append(
+                PipelineUsage(pipeline_name=p_name, destinations=dest_list)
+            )
+            
+        return TagUsageResponse(tag=tag.tag, usage=usage_list)
 
     def get_all_tags(self, skip: int = 0, limit: int = 100) -> TagListResponse:
         """

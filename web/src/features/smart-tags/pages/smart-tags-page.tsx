@@ -233,7 +233,12 @@ export function SmartTagsPage() {
                 {/* Tags Grid */}
                 <div className="flex flex-wrap gap-2">
                   {group.tags.map((tag) => (
-                    <TagBadge key={tag.id} tag={tag.tag} variant="outline" />
+                    <TagBadge
+                      key={tag.id}
+                      tag={tag.tag}
+                      tagId={tag.id}
+                      variant="outline"
+                    />
                   ))}
                 </div>
               </div>

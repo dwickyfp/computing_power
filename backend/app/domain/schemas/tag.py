@@ -303,3 +303,24 @@ class SmartTagsResponse(BaseSchema):
                 "total_tags": 10,
             }
         }
+
+
+class DestinationUsage(BaseSchema):
+    """Schema for destination usage details."""
+    
+    destination_name: str
+    tables: List[str]
+
+
+class PipelineUsage(BaseSchema):
+    """Schema for pipeline usage details."""
+    
+    pipeline_name: str
+    destinations: List[DestinationUsage]
+
+
+class TagUsageResponse(BaseSchema):
+    """Schema for detailed tag usage response."""
+    
+    tag: str
+    usage: List[PipelineUsage]
