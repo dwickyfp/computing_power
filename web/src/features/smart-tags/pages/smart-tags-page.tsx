@@ -1,8 +1,9 @@
 import { useQuery } from '@tanstack/react-query'
 import { tagsRepo } from '@/repo/tags'
-import { Filter, Hash } from 'lucide-react'
-import { useState } from 'react'
+import { Filter, Hash, Search as SearchIcon } from 'lucide-react'
+import { useState, useMemo } from 'react'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { TagBadge } from '@/features/pipelines/components/tag-badge'
 import { AnimatedSeparator } from '../components/animated-separator'
 import { FloatingViewToggle, type SmartTagView } from '../components/floating-view-toggle'
@@ -34,6 +35,7 @@ export function SmartTagsPage() {
   const [selectedPipelineId, setSelectedPipelineId] = useState<string>('all')
   const [selectedDestinationId, setSelectedDestinationId] = useState<string>('all')
   const [selectedSourceId, setSelectedSourceId] = useState<string>('all')
+  const [searchQuery, setSearchQuery] = useState('')
 
   const { data: pipelinesData } = useQuery({
     queryKey: ['pipelines'],
@@ -67,6 +69,26 @@ export function SmartTagsPage() {
     queryFn: () => tagsRepo.getSmartTags(smartTagFilterParams),
   })
 
+  // Filter tags based on search query
+  const filteredGroups = useMemo(() => {
+    if (!data?.groups || !searchQuery.trim()) {
+      return data?.groups ?? []
+    }
+
+    const lowerQuery = searchQuery.toLowerCase()
+    return data.groups
+      .map((group) => ({
+        ...group,
+        tags: group.tags.filter((tag) =>
+          tag.tag.toLowerCase().includes(lowerQuery)
+        ),
+        count: group.tags.filter((tag) =>
+          tag.tag.toLowerCase().includes(lowerQuery)
+        ).length,
+      }))
+      .filter((group) => group.count > 0)
+  }, [data?.groups, searchQuery])
+
   if (isLoading) {
     return (
       <div className="flex h-[calc(100vh-4rem)] items-center justify-center">
@@ -97,6 +119,16 @@ export function SmartTagsPage() {
               </div>
 
               <div className="flex flex-wrap items-center gap-2">
+                <div className="relative w-64">
+                  <SearchIcon className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    type="text"
+                    placeholder="Search tags..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="h-9 pl-9 text-sm"
+                  />
+                </div>
                 <Popover>
                   <PopoverTrigger asChild>
                     <Button variant="outline" size="sm" className="h-9 gap-2">
@@ -224,7 +256,7 @@ export function SmartTagsPage() {
 
             {/* Tags Content */}
             <div className="space-y-6 pb-20">
-              {data?.groups.map((group, index) => (
+              {filteredGroups.map((group, index) => (
                 <div key={group.letter}>
                   <div className="space-y-3">
                     {/* Letter Header */}
@@ -249,13 +281,13 @@ export function SmartTagsPage() {
                   </div>
 
                   {/* Separator between sections */}
-                  {index < (data?.groups.length ?? 0) - 1 && (
+                  {index < filteredGroups.length - 1 && (
                     <AnimatedSeparator className="mt-6" />
                   )}
                 </div>
               ))}
 
-              {data?.groups.length === 0 && (
+              {filteredGroups.length === 0 && (
                 <div className="flex h-64 items-center justify-center">
                   <div className="text-center">
                     <Hash className="mx-auto h-12 w-12 text-muted-foreground/50" />
