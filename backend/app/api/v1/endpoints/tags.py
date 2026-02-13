@@ -10,6 +10,8 @@ from fastapi import APIRouter, Depends, Path, Query, status
 
 from app.api.deps import get_tag_service
 from app.domain.schemas.tag import (
+    AlphabetGroupedTags,
+    SmartTagsResponse,
     TableSyncTagAssociationCreate,
     TableSyncTagAssociationResponse,
     TableSyncTagsResponse,
@@ -17,6 +19,7 @@ from app.domain.schemas.tag import (
     TagListResponse,
     TagResponse,
     TagSuggestionResponse,
+    TagWithUsageCount,
 )
 from app.domain.services.tag import TagService
 
@@ -94,6 +97,31 @@ async def search_tags(
         List of suggested tags
     """
     return service.search_tags(query=q, limit=limit)
+
+
+@router.get(
+    "/smart-tags",
+    response_model=SmartTagsResponse,
+    summary="Get smart tags",
+    description="Get all tags grouped by alphabet with usage counts",
+)
+async def get_smart_tags(
+    pipeline_id: int | None = Query(None, ge=1, description="Filter by pipeline ID"),
+    destination_id: int | None = Query(None, ge=1, description="Filter by destination ID"),
+    source_id: int | None = Query(None, ge=1, description="Filter by source ID"),
+    service: TagService = Depends(get_tag_service),
+) -> SmartTagsResponse:
+    """
+    Get all tags grouped by alphabet with usage counts.
+
+    Returns:
+        Tags grouped by first letter with usage statistics
+    """
+    return service.get_smart_tags(
+        pipeline_id=pipeline_id,
+        destination_id=destination_id,
+        source_id=source_id,
+    )
 
 
 @router.get(

@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.core.exceptions import DatabaseError, DuplicateEntityError, EntityNotFoundError
 from app.core.logging import get_logger
+from app.domain.models.pipeline import Pipeline, PipelineDestination, PipelineDestinationTableSync
 from app.domain.models.tag import PipelineDestinationTableSyncTag, TagList
 from app.domain.repositories.base import BaseRepository
 
@@ -156,6 +157,74 @@ class TagRepository(BaseRepository[TagList]):
         except SQLAlchemyError as e:
             logger.error("Failed to get all tags", extra={"error": str(e)})
             raise DatabaseError("Failed to get all tags") from e
+
+    def get_all_with_usage_count(
+        self,
+        pipeline_id: Optional[int] = None,
+        destination_id: Optional[int] = None,
+        source_id: Optional[int] = None,
+    ) -> List[tuple]:
+        """
+        Get all tags with their usage count.
+
+        Returns:
+            List of tuples (TagList, usage_count)
+
+        Raises:
+            DatabaseError: If database operation fails
+        """
+        try:
+            query = select(
+                TagList,
+                func.count(PipelineDestinationTableSyncTag.id).label("usage_count"),
+            )
+
+            has_filter = (
+                pipeline_id is not None
+                or destination_id is not None
+                or source_id is not None
+            )
+
+            if has_filter:
+                query = (
+                    query.join(
+                        PipelineDestinationTableSyncTag,
+                        PipelineDestinationTableSyncTag.tag_id == TagList.id,
+                    )
+                    .join(
+                        PipelineDestinationTableSync,
+                        PipelineDestinationTableSync.id
+                        == PipelineDestinationTableSyncTag.pipelines_destination_table_sync_id,
+                    )
+                    .join(
+                        PipelineDestination,
+                        PipelineDestination.id
+                        == PipelineDestinationTableSync.pipeline_destination_id,
+                    )
+                    .join(Pipeline, Pipeline.id == PipelineDestination.pipeline_id)
+                )
+
+                if pipeline_id is not None:
+                    query = query.where(Pipeline.id == pipeline_id)
+
+                if destination_id is not None:
+                    query = query.where(PipelineDestination.destination_id == destination_id)
+
+                if source_id is not None:
+                    query = query.where(Pipeline.source_id == source_id)
+            else:
+                query = query.outerjoin(
+                    PipelineDestinationTableSyncTag,
+                    PipelineDestinationTableSyncTag.tag_id == TagList.id,
+                )
+
+            query = query.group_by(TagList.id).order_by(TagList.tag)
+            result = self.db.execute(query)
+            return list(result.all())
+
+        except SQLAlchemyError as e:
+            logger.error("Failed to get tags with usage count", extra={"error": str(e)})
+            raise DatabaseError("Failed to get tags with usage count") from e
 
 
 class TableSyncTagRepository:

@@ -40,6 +40,27 @@ export interface AddTagToTableSyncRequest {
   tag: string
 }
 
+export interface TagWithUsageCount extends Tag {
+  usage_count: number
+}
+
+export interface AlphabetGroupedTags {
+  letter: string
+  tags: TagWithUsageCount[]
+  count: number
+}
+
+export interface SmartTagsResponse {
+  groups: AlphabetGroupedTags[]
+  total_tags: number
+}
+
+export interface SmartTagsFilterParams {
+  pipeline_id?: number
+  destination_id?: number
+  source_id?: number
+}
+
 export const tagsRepo = {
   // Tag CRUD operations
   getAll: async (skip: number = 0, limit: number = 100): Promise<TagListResponse> => {
@@ -66,6 +87,13 @@ export const tagsRepo = {
   search: async (query: string, limit: number = 10): Promise<TagSuggestionResponse> => {
     const response: AxiosResponse<TagSuggestionResponse> = await api.get('/tags/search', {
       params: { q: query, limit },
+    })
+    return response.data
+  },
+
+  getSmartTags: async (params?: SmartTagsFilterParams): Promise<SmartTagsResponse> => {
+    const response: AxiosResponse<SmartTagsResponse> = await api.get('/tags/smart-tags', {
+      params,
     })
     return response.data
   },

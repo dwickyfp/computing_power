@@ -13,6 +13,8 @@ from app.core.logging import get_logger
 from app.domain.models.tag import PipelineDestinationTableSyncTag, TagList
 from app.domain.repositories.tag import TableSyncTagRepository, TagRepository
 from app.domain.schemas.tag import (
+    AlphabetGroupedTags,
+    SmartTagsResponse,
     TableSyncTagAssociationCreate,
     TableSyncTagAssociationResponse,
     TableSyncTagsResponse,
@@ -20,6 +22,7 @@ from app.domain.schemas.tag import (
     TagListResponse,
     TagResponse,
     TagSuggestionResponse,
+    TagWithUsageCount,
 )
 
 logger = get_logger(__name__)
@@ -119,6 +122,62 @@ class TagService:
         return TagSuggestionResponse(
             suggestions=[TagResponse.from_orm(tag) for tag in tags]
         )
+
+    def get_smart_tags(
+        self,
+        pipeline_id: int | None = None,
+        destination_id: int | None = None,
+        source_id: int | None = None,
+    ) -> SmartTagsResponse:
+        """
+        Get all tags grouped by alphabet with usage counts.
+
+        Returns:
+            Tags grouped by first letter with usage statistics
+        """
+        # Get all tags with usage counts
+        tags_with_counts = self.tag_repository.get_all_with_usage_count(
+            pipeline_id=pipeline_id,
+            destination_id=destination_id,
+            source_id=source_id,
+        )
+
+        # Group by first letter
+        groups_dict = {}
+        total_tags = 0
+
+        for tag, usage_count in tags_with_counts:
+            first_letter = tag.tag[0].upper() if tag.tag else "#"
+            
+            # Only use letters A-Z, put others in #
+            if not first_letter.isalpha():
+                first_letter = "#"
+
+            if first_letter not in groups_dict:
+                groups_dict[first_letter] = []
+
+            tag_with_usage = TagWithUsageCount(
+                id=tag.id,
+                tag=tag.tag,
+                usage_count=usage_count,
+                created_at=tag.created_at,
+                updated_at=tag.updated_at,
+            )
+            groups_dict[first_letter].append(tag_with_usage)
+            total_tags += 1
+
+        # Convert to list and sort by letter
+        groups = []
+        for letter in sorted(groups_dict.keys()):
+            groups.append(
+                AlphabetGroupedTags(
+                    letter=letter,
+                    tags=groups_dict[letter],
+                    count=len(groups_dict[letter]),
+                )
+            )
+
+        return SmartTagsResponse(groups=groups, total_tags=total_tags)
 
     def delete_tag(self, tag_id: int) -> None:
         """

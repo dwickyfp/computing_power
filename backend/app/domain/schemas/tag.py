@@ -219,3 +219,87 @@ class TagSuggestionResponse(BaseSchema):
                 ],
             }
         }
+
+
+class TagWithUsageCount(TagResponse):
+    """
+    Schema for tag with usage count.
+    """
+
+    usage_count: int = Field(
+        ..., description="Number of times this tag is used", ge=0
+    )
+
+    class Config:
+        orm_mode = True
+        schema_extra = {
+            "example": {
+                "id": 1,
+                "tag": "high-priority",
+                "usage_count": 5,
+                "created_at": "2024-01-01T00:00:00Z",
+                "updated_at": "2024-01-01T00:00:00Z",
+            }
+        }
+
+
+class AlphabetGroupedTags(BaseSchema):
+    """
+    Schema for tags grouped by alphabet letter.
+    """
+
+    letter: str = Field(..., description="Alphabet letter", max_length=1)
+    tags: List[TagWithUsageCount] = Field(
+        default_factory=list, description="Tags starting with this letter"
+    )
+    count: int = Field(..., description="Number of tags in this group", ge=0)
+
+    class Config:
+        schema_extra = {
+            "example": {
+                "letter": "A",
+                "count": 3,
+                "tags": [
+                    {
+                        "id": 1,
+                        "tag": "analytics",
+                        "usage_count": 5,
+                        "created_at": "2024-01-01T00:00:00Z",
+                        "updated_at": "2024-01-01T00:00:00Z",
+                    }
+                ],
+            }
+        }
+
+
+class SmartTagsResponse(BaseSchema):
+    """
+    Schema for smart tags page response.
+    """
+
+    groups: List[AlphabetGroupedTags] = Field(
+        default_factory=list, description="Tags grouped by alphabet"
+    )
+    total_tags: int = Field(..., description="Total number of unique tags", ge=0)
+
+    class Config:
+        schema_extra = {
+            "example": {
+                "groups": [
+                    {
+                        "letter": "A",
+                        "count": 3,
+                        "tags": [
+                            {
+                                "id": 1,
+                                "tag": "analytics",
+                                "usage_count": 5,
+                                "created_at": "2024-01-01T00:00:00Z",
+                                "updated_at": "2024-01-01T00:00:00Z",
+                            }
+                        ],
+                    }
+                ],
+                "total_tags": 10,
+            }
+        }
