@@ -10,6 +10,7 @@ import {
   Position,
   useNodesState,
   useEdgesState,
+  useReactFlow,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import { Link, type HistoryState } from '@tanstack/react-router'
@@ -68,7 +69,29 @@ function computeCircularLayout(
   return nodes
 }
 
-export function TagNetworkVisualization() {
+/**
+ * Component to automatically fit view when the network becomes visible.
+ * Must be inside ReactFlow to access the fitView function.
+ */
+function FitViewOnMount({ isVisible }: { isVisible: boolean }) {
+  const { fitView } = useReactFlow()
+  const [hasFitted, setHasFitted] = useState(false)
+
+  useEffect(() => {
+    if (isVisible && !hasFitted) {
+      // Small delay to ensure DOM is ready
+      const timer = setTimeout(() => {
+        fitView({ padding: 0.4, duration: 400 })
+        setHasFitted(true)
+      }, 100)
+      return () => clearTimeout(timer)
+    }
+  }, [isVisible, hasFitted, fitView])
+
+  return null
+}
+
+export function TagNetworkVisualization({ isVisible = true }: { isVisible?: boolean }) {
   const { theme } = useTheme()
   const isDark = theme === 'dark'
 
@@ -256,6 +279,7 @@ export function TagNetworkVisualization() {
         minZoom={0.3}
         maxZoom={2}
       >
+        <FitViewOnMount isVisible={isVisible} />
         <Background color={isDark ? "rgba(99, 102, 241, 0.08)" : "rgba(148, 163, 184, 0.15)"} gap={24} />
         <Controls
           showInteractive={false}
