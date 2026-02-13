@@ -11,6 +11,7 @@ import { useQuery } from '@tanstack/react-query'
 import { Link, type HistoryState } from '@tanstack/react-router'
 import {
   Database,
+  ExternalLink,
   Hash,
   Loader2,
   Network,
@@ -113,11 +114,12 @@ export function TagBadge({
                   <Link
                     to="/pipelines/$pipelineId"
                     params={{ pipelineId: String(pipeline.pipeline_id) }}
-                    className="flex items-center gap-2 font-medium text-sm text-foreground hover:text-blue-600 transition-colors"
+                    className="group/link flex items-center gap-2 font-medium text-sm text-foreground hover:text-blue-600 transition-colors"
                     onClick={handleLinkClick}
                   >
                     <Network className="h-4 w-4 text-primary" />
                     {pipeline.pipeline_name}
+                    <ExternalLink className="h-3 w-3 opacity-50 shrink-0" />
                   </Link>
                   <div className="ml-2 pl-4 border-l-2 border-muted space-y-3">
                     {pipeline.destinations.map((dest, j) => (
@@ -126,11 +128,12 @@ export function TagBadge({
                           to="/pipelines/$pipelineId"
                           params={{ pipelineId: String(pipeline.pipeline_id) }}
                           state={{ highlightDestination: dest.destination_id } as HistoryState}
-                          className="flex items-center gap-2 text-xs font-medium text-muted-foreground hover:text-blue-500 transition-colors cursor-pointer w-fit"
+                          className="group/link flex items-center gap-2 text-xs font-medium text-muted-foreground hover:text-blue-500 transition-colors cursor-pointer w-fit"
                           onClick={handleLinkClick}
                         >
                           <Database className="h-3 w-3" />
                           {dest.destination_name}
+                          <ExternalLink className="h-2.5 w-2.5 opacity-50 shrink-0" />
                         </Link>
                         <div className="space-y-1 ml-1 pl-3 border-l border-muted/50">
                           {dest.tables.map((table, k) => (
@@ -143,11 +146,12 @@ export function TagBadge({
                                 openDrawerDestinationId: dest.destination_id,
                                 highlightTable: table,
                               } as HistoryState}
-                              className="flex items-center gap-2 text-xs text-muted-foreground/80 py-0.5 hover:text-blue-500 transition-colors cursor-pointer w-fit"
+                              className="group/link flex items-center gap-2 text-xs text-muted-foreground/80 py-0.5 hover:text-blue-500 transition-colors cursor-pointer w-fit"
                               onClick={handleLinkClick}
                             >
                               <Table2 className="h-3 w-3 opacity-70" />
                               {table}
+                              <ExternalLink className="h-2.5 w-2.5 opacity-50 shrink-0" />
                             </Link>
                           ))}
                         </div>

@@ -13,7 +13,7 @@ import {
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import { Link, type HistoryState } from '@tanstack/react-router'
-import { Database, Hash, Loader2, Network, Table2, X } from 'lucide-react'
+import { Database, ExternalLink, Hash, Loader2, Network, Table2, X } from 'lucide-react'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { useTheme } from '@/context/theme-provider'
 import { tagsRepo } from '@/repo/tags'
@@ -329,10 +329,11 @@ export function TagNetworkVisualization() {
                     <Link
                       to="/pipelines/$pipelineId"
                       params={{ pipelineId: String(pipeline.pipeline_id) }}
-                      className={isDark ? "flex items-center gap-2 text-sm font-medium text-indigo-200 hover:text-blue-400 transition-colors" : "flex items-center gap-2 text-sm font-medium text-slate-900 hover:text-blue-600 transition-colors"}
+                      className={isDark ? "group/link flex items-center gap-2 text-sm font-medium text-indigo-200 hover:text-blue-400 transition-colors" : "group/link flex items-center gap-2 text-sm font-medium text-slate-900 hover:text-blue-600 transition-colors"}
                     >
                       <Network className={isDark ? "h-4 w-4 text-indigo-400" : "h-4 w-4 text-blue-600"} />
                       {pipeline.pipeline_name}
+                      <ExternalLink className="h-3 w-3 opacity-50 shrink-0" />
                     </Link>
                     <div className={isDark ? "ml-2 pl-4 border-l-2 border-indigo-800/40 space-y-2" : "ml-2 pl-4 border-l-2 border-slate-300 space-y-2"}>
                       {pipeline.destinations.map((dest, j) => (
@@ -341,10 +342,11 @@ export function TagNetworkVisualization() {
                             to="/pipelines/$pipelineId"
                             params={{ pipelineId: String(pipeline.pipeline_id) }}
                             state={{ highlightDestination: dest.destination_id } as HistoryState}
-                            className={isDark ? "flex items-center gap-2 text-xs font-medium text-indigo-300/80 hover:text-blue-400 transition-colors cursor-pointer w-fit" : "flex items-center gap-2 text-xs font-medium text-slate-700 hover:text-blue-600 transition-colors cursor-pointer w-fit"}
+                            className={isDark ? "group/link flex items-center gap-2 text-xs font-medium text-indigo-300/80 hover:text-blue-400 transition-colors cursor-pointer w-fit" : "group/link flex items-center gap-2 text-xs font-medium text-slate-700 hover:text-blue-600 transition-colors cursor-pointer w-fit"}
                           >
                             <Database className="h-3 w-3" />
                             {dest.destination_name}
+                            <ExternalLink className="h-2.5 w-2.5 opacity-50 shrink-0" />
                           </Link>
                           <div className={isDark ? "space-y-0.5 ml-1 pl-3 border-l border-indigo-800/20" : "space-y-0.5 ml-1 pl-3 border-l border-slate-200"}>
                             {dest.tables.map((table, k) => (
@@ -357,10 +359,11 @@ export function TagNetworkVisualization() {
                                   openDrawerDestinationId: dest.destination_id,
                                   highlightTable: table,
                                 } as HistoryState}
-                                className={isDark ? "flex items-center gap-2 text-xs text-indigo-400/60 py-0.5 hover:text-blue-400 transition-colors cursor-pointer w-fit" : "flex items-center gap-2 text-xs text-slate-600 py-0.5 hover:text-blue-600 transition-colors cursor-pointer w-fit"}
+                                className={isDark ? "group/link flex items-center gap-2 text-xs text-indigo-400/60 py-0.5 hover:text-blue-400 transition-colors cursor-pointer w-fit" : "group/link flex items-center gap-2 text-xs text-slate-600 py-0.5 hover:text-blue-600 transition-colors cursor-pointer w-fit"}
                               >
                                 <Table2 className="h-3 w-3 opacity-70" />
                                 {table}
+                                <ExternalLink className="h-2.5 w-2.5 opacity-50 shrink-0" />
                               </Link>
                             ))}
                           </div>
