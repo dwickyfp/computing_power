@@ -44,19 +44,19 @@ class SchemaMonitorService:
         Iterate through all sources and check their schema status.
         """
         logger.info("Starting schema monitoring cycle")
-        
+
         try:
             with get_session_context() as db:
                 repository = SourceRepository(db)
                 sources = repository.get_all()
-                
+
                 # Process sources
                 for source in sources:
                     if not source.is_publication_enabled:
                         continue
 
                     try:
-                       await self.check_source_schema(source, db)
+                        await self.check_source_schema(source, db)
                     except Exception as e:
                         logger.error(
                             f"Error checking schema for source {source.name}",
@@ -81,14 +81,14 @@ class SchemaMonitorService:
                 except Exception:
                     logger.warning(
                         f"Failed to decrypt password for source {source.name}, attempting raw value",
-                        extra={"source_id": source.id}
+                        extra={"source_id": source.id},
                     )
                     # Use raw value as fallback
                     password = source.pg_password
 
             logger.info(
                 f"Connecting to source {source.name} ({source.pg_host}:{source.pg_port}/{source.pg_database})",
-                extra={"source_id": source.id}
+                extra={"source_id": source.id},
             )
 
             conn = psycopg2.connect(
@@ -99,21 +99,25 @@ class SchemaMonitorService:
                 password=password,
                 connect_timeout=settings.wal_monitor_timeout_seconds,
             )
-            
+
             # 1. Sync table list from publication
             await self.sync_table_list(source, conn, db)
-            
+
             # 2. Check schema for each table in metadata list
             # We refresh the source object or query tables directly to get the updated list
-            updated_tables = db.query(TableMetadata).filter(TableMetadata.source_id == source.id).all()
-            
+            updated_tables = (
+                db.query(TableMetadata)
+                .filter(TableMetadata.source_id == source.id)
+                .all()
+            )
+
             for table in updated_tables:
                 await self.fetch_and_compare_schema(source, table, conn, db)
 
         except Exception as e:
             logger.error(
                 f"Failed to connect to source {source.name}",
-                extra={"error": str(e), "source_id": source.id}
+                extra={"error": str(e), "source_id": source.id},
             )
         finally:
             if conn:
@@ -133,19 +137,28 @@ class SchemaMonitorService:
                     WHERE pubname = %s;
                 """
                 cur.execute(query, (source.publication_name,))
-                pub_tables = {f"{row[0]}.{row[1]}" if row[0] != 'public' else row[1]: row for row in cur.fetchall()}
+                pub_tables = {
+                    f"{row[0]}.{row[1]}" if row[0] != "public" else row[1]: row
+                    for row in cur.fetchall()
+                }
                 # Simplify: we assume just table name if public, or explicit schema.table
                 # For this logic, let's stick to the user request "table_name" which implies simple name or consistent format.
-                # The user query example used `c.table_name`. 
+                # The user query example used `c.table_name`.
                 # Let's assume public schema for now as per user query "WHERE c.table_schema = 'public'"
-                
+
                 # Re-reading user query: "WHERE c.table_schema = 'public'"
                 # So we only care about public tables for now.
-                
-                pub_table_names = set(row[1] for row in pub_tables.values() if row[0] == 'public')
+
+                pub_table_names = set(
+                    row[1] for row in pub_tables.values() if row[0] == "public"
+                )
 
                 # Get existing tracked tables
-                existing_tables = db.query(TableMetadata).filter(TableMetadata.source_id == source.id).all()
+                existing_tables = (
+                    db.query(TableMetadata)
+                    .filter(TableMetadata.source_id == source.id)
+                    .all()
+                )
                 existing_table_names = {t.table_name for t in existing_tables}
 
                 # Add new tables
@@ -153,7 +166,7 @@ class SchemaMonitorService:
                     new_metadata = TableMetadata(
                         source_id=source.id,
                         table_name=new_table,
-                        is_exists_table_landing=False # Default
+                        is_exists_table_landing=False,  # Default
                     )
                     db.add(new_metadata)
                     logger.info(f"Added new table tracking: {new_table}")
@@ -161,86 +174,96 @@ class SchemaMonitorService:
                 # Delete removed tables
                 for removed_table in existing_table_names - pub_table_names:
                     # User said: "if table not exist in list publication but exist in table then delete"
-                    table_to_delete = next(t for t in existing_tables if t.table_name == removed_table)
+                    table_to_delete = next(
+                        t for t in existing_tables if t.table_name == removed_table
+                    )
                     db.delete(table_to_delete)
                     logger.info(f"Removed table tracking: {removed_table}")
-                
+
                 db.commit()
 
         except Exception as e:
             db.rollback()
             raise e
 
-    async def fetch_and_compare_schema(self, source: Source, table: TableMetadata, conn, db: Session) -> None:
+    async def fetch_and_compare_schema(
+        self, source: Source, table: TableMetadata, conn, db: Session
+    ) -> None:
         """
         Fetch current schema and compare with stored schema.
         """
         new_schema_list = self.fetch_table_schema(conn, table.table_name)
-        logger.info(f"Fetched schema for {table.table_name}: {len(new_schema_list)} columns")
-        
+        logger.info(
+            f"Fetched schema for {table.table_name}: {len(new_schema_list)} columns"
+        )
+
         # Convert list to a comparable dictionary/JSON structure
         # Assuming list of dicts: [{'column_name': 'id', 'data_type': 'BIGINT', ...}]
         # We can key by column name for easier comparison
         # Important: Convert RealDictRow to standard dict for DeepDiff
-        new_schema_dict = {col['column_name']: dict(col) for col in new_schema_list}
-        
+        new_schema_dict = {col["column_name"]: dict(col) for col in new_schema_list}
+
         old_schema_dict = table.schema_table or {}
-        
+
         # If first run (old is None/Empty), just update
         # If first run (old is None/Empty), record as Version 1
         if not old_schema_dict:
             # Create History Record for Initial Load
             history = HistorySchemaEvolution(
                 table_metadata_list_id=table.id,
-                schema_table_old={}, # Nothing before
+                schema_table_old={},  # Nothing before
                 schema_table_new=new_schema_dict,
                 changes_type="INITIAL_LOAD",
-                version_schema=1
+                version_schema=1,
             )
             db.add(history)
-            
+
             table.schema_table = new_schema_dict
-            table.is_changes_schema = False 
+            table.is_changes_schema = False
             db.commit()
-            logger.info(f"Initial schema loaded and history recorded for {table.table_name}")
+            logger.info(
+                f"Initial schema loaded and history recorded for {table.table_name}"
+            )
             return
 
         # Compare
         # 1. Detect Changes
         ddiff = DeepDiff(old_schema_dict, new_schema_dict, ignore_order=True)
-        
+
         if not ddiff:
             logger.info(f"No schema changes for {table.table_name}")
-            return # No changes
+            return  # No changes
 
         # Identify change types
         change_type = "UNKNOWN"
-        if 'dictionary_item_added' in ddiff:
+        if "dictionary_item_added" in ddiff:
             change_type = "NEW COLUMN"
-        elif 'dictionary_item_removed' in ddiff:
+        elif "dictionary_item_removed" in ddiff:
             change_type = "DROP COLUMN"
-        elif 'values_changed' in ddiff:
+        elif "values_changed" in ddiff:
             change_type = "CHANGES TYPE"
-        
+
         # Create History Record
         # Calculate version
-        version = (db.query(HistorySchemaEvolution)
-                   .filter(HistorySchemaEvolution.table_metadata_list_id == table.id)
-                   .count()) + 1
+        version = (
+            db.query(HistorySchemaEvolution)
+            .filter(HistorySchemaEvolution.table_metadata_list_id == table.id)
+            .count()
+        ) + 1
 
         history = HistorySchemaEvolution(
             table_metadata_list_id=table.id,
             schema_table_old=old_schema_dict,
             schema_table_new=new_schema_dict,
             changes_type=change_type,
-            version_schema=version
+            version_schema=version,
         )
         db.add(history)
-        
+
         # Update Table Metadata
         table.schema_table = new_schema_dict
         table.is_changes_schema = True
-        
+
         db.commit()
         logger.info(f"Schema change detected for {table.table_name}: {change_type}")
 
@@ -248,7 +271,6 @@ class SchemaMonitorService:
         await self._apply_schema_evolution(
             source, table, old_schema_dict, new_schema_dict, change_type, db
         )
-
 
     def fetch_table_schema(self, conn, table_name: str) -> List[Dict]:
         """
@@ -313,21 +335,23 @@ class SchemaMonitorService:
                     c.table_name, 
                     c.ordinal_position;
             """
-            
+
             try:
                 # First check if geometry_columns exists to avoid throwing error inside the query execution if possible,
                 # or just try-catch the execution.
                 # User suggested: check "select * from geometry_columns;" first.
-                cur.execute("SELECT 1 FROM information_schema.tables WHERE table_name = 'geometry_columns'")
+                cur.execute(
+                    "SELECT 1 FROM information_schema.tables WHERE table_name = 'geometry_columns'"
+                )
                 has_postgis = cur.fetchone() is not None
-                
+
                 if has_postgis:
-                     cur.execute(complex_query)
-                     return cur.fetchall()
+                    cur.execute(complex_query)
+                    return cur.fetchall()
             except Exception:
                 # Fallback or if just check fails
-                 conn.rollback() # Reset transaction from error
-                 pass
+                conn.rollback()  # Reset transaction from error
+                pass
 
             # Fallback Query
             fallback_query = f"""
@@ -382,81 +406,91 @@ class SchemaMonitorService:
         old_schema: dict,
         new_schema: dict,
         change_type: str,
-        db: Session
+        db: Session,
     ) -> None:
         """
         Mark pipelines for refresh when schema changes are detected.
-        
+
         When a schema change is detected, this method:
         1. Finds pipelines connected to the source
         2. Marks each pipeline with ready_refresh = True
         3. Does NOT change the pipeline status
-        
+
         The actual schema evolution will be applied when the pipeline is refreshed.
         """
         from app.domain.repositories.pipeline import PipelineRepository
-        
+
         pipeline_repo = PipelineRepository(db)
         pipelines = pipeline_repo.get_by_source_id(source.id)
-        
+
         if not pipelines:
             logger.info(
                 f"No pipelines connected to source {source.name}, skipping ready_refresh marking",
-                extra={"source_id": source.id, "table_name": table.table_name}
+                extra={"source_id": source.id, "table_name": table.table_name},
             )
             return
-        
+
         logger.info(
             f"Found {len(pipelines)} pipeline(s) connected to source {source.name}",
-            extra={"source_id": source.id, "table_name": table.table_name}
+            extra={"source_id": source.id, "table_name": table.table_name},
         )
-        
+
         # Mark all connected pipelines as ready for refresh
         for pipeline in pipelines:
             try:
-                logger.info(
-                    f"Marking pipeline {pipeline.name} as ready_refresh due to schema change",
-                    extra={
-                        "pipeline_id": pipeline.id,
-                        "table_name": table.table_name,
-                        "change_type": change_type
-                    }
-                )
-                
-                # Set ready_refresh flag without changing pipeline status
-                pipeline.ready_refresh = True
-                
-                logger.info(
-                    f"Pipeline {pipeline.name} marked for refresh (status unchanged)",
-                    extra={
-                        "pipeline_id": pipeline.id,
-                        "current_status": pipeline.status
-                    }
-                )
+                # Only set ready_refresh for running pipelines
+                if pipeline.status == "START":
+                    logger.info(
+                        f"Marking pipeline {pipeline.name} as ready_refresh due to schema change",
+                        extra={
+                            "pipeline_id": pipeline.id,
+                            "table_name": table.table_name,
+                            "change_type": change_type,
+                        },
+                    )
+
+                    # Set ready_refresh flag without changing pipeline status
+                    pipeline.ready_refresh = True
+
+                    logger.info(
+                        f"Pipeline {pipeline.name} marked for refresh (status unchanged)",
+                        extra={
+                            "pipeline_id": pipeline.id,
+                            "current_status": pipeline.status,
+                        },
+                    )
+                else:
+                    logger.info(
+                        f"Skipping ready_refresh for pipeline {pipeline.name} (status: {pipeline.status})",
+                        extra={
+                            "pipeline_id": pipeline.id,
+                            "current_status": pipeline.status,
+                        },
+                    )
             except Exception as e:
                 logger.error(
                     f"Failed to mark pipeline {pipeline.name} for refresh: {e}",
                     extra={
                         "pipeline_id": pipeline.id,
                         "table_name": table.table_name,
-                        "error": str(e)
+                        "error": str(e),
                     },
-                    exc_info=True
+                    exc_info=True,
                 )
                 # Continue with other pipelines even if one fails
-        
+
         # Commit all changes at once
         try:
             db.commit()
             logger.info(
                 f"Successfully marked {len(pipelines)} pipeline(s) as ready_refresh",
-                extra={"source_id": source.id, "table_name": table.table_name}
+                extra={"source_id": source.id, "table_name": table.table_name},
             )
         except Exception as e:
             db.rollback()
             logger.error(
                 f"Failed to commit ready_refresh changes: {e}",
-                extra={"source_id": source.id, "table_name": table.table_name}
+                extra={"source_id": source.id, "table_name": table.table_name},
             )
             raise
 

@@ -678,8 +678,9 @@ class SourceService:
                     if table_meta:
                         pipeline_service = PipelineService(self.db)
                         for pipeline in pipelines:
-                            # Set ready_refresh=True for pipelines connected to this source
-                            pipeline.ready_refresh = True
+                            # Set ready_refresh=True only if pipeline is running
+                            if pipeline.status == "START":
+                                pipeline.ready_refresh = True
 
                             for pd in pipeline.destinations:
                                 if pd.destination.type == "SNOWFLAKE":

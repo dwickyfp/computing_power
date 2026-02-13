@@ -54,15 +54,21 @@ class PipelineService:
     def mark_ready_for_refresh(self, pipeline_id: int) -> None:
         """
         Mark pipeline as ready for refresh.
+        Only sets ready_refresh for running pipelines (status='START').
 
         Args:
             pipeline_id: Pipeline identifier
         """
         try:
             pipeline = self.repository.get_by_id(pipeline_id)
-            pipeline.ready_refresh = True
-            self.db.commit()
-            logger.info(f"Marked pipeline {pipeline_id} as ready for refresh")
+            if pipeline.status == "START":
+                pipeline.ready_refresh = True
+                self.db.commit()
+                logger.info(f"Marked pipeline {pipeline_id} as ready for refresh")
+            else:
+                logger.info(
+                    f"Skipping ready_refresh for pipeline {pipeline_id} (status: {pipeline.status})"
+                )
         except Exception as e:
             logger.error(f"Failed to mark pipeline {pipeline_id} for refresh: {e}")
 
