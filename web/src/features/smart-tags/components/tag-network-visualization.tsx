@@ -17,6 +17,7 @@ import { Database, Hash, Loader2, Network, Table2, X } from 'lucide-react'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { useTheme } from '@/context/theme-provider'
 import { tagsRepo } from '@/repo/tags'
+import { ShootingStars } from './shooting-stars'
 import { TagNode, type TagNodeData } from './tag-node'
 
 const nodeTypes = { tagNode: TagNode }
@@ -238,7 +239,8 @@ export function TagNetworkVisualization() {
       </div>
 
       {/* Flow Canvas */}
-      <div className={isDark ? "relative h-[calc(100vh-14rem)] w-full rounded-lg border bg-[#0a0a1a]" : "relative h-[calc(100vh-14rem)] w-full rounded-lg border bg-slate-50"}>
+      <div className={isDark ? "relative h-[calc(100vh-14rem)] w-full rounded-lg border bg-[#0a0a1a] overflow-hidden" : "relative h-[calc(100vh-14rem)] w-full rounded-lg border bg-slate-50"}>
+      {isDark && <ShootingStars />}
       <ReactFlow
         nodes={nodes}
         edges={edges}
