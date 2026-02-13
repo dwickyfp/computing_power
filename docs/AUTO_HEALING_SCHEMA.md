@@ -55,6 +55,7 @@ Within 60 seconds (or immediately if you click "Refresh Source"):
 ### Quick Test
 
 1. Add a table to your publication:
+
    ```sql
    ALTER PUBLICATION rosetta_publication ADD TABLE test_table;
    ```
@@ -62,11 +63,13 @@ Within 60 seconds (or immediately if you click "Refresh Source"):
 2. Wait 60 seconds or click "Refresh Source" in UI
 
 3. Check the logs:
+
    ```bash
    tail -f backend/logs/app.log | grep "test_table"
    ```
 
    You should see:
+
    ```
    Added new table tracking with schema: test_table (5 columns)
    ```
@@ -79,7 +82,7 @@ Within 60 seconds (or immediately if you click "Refresh Source"):
 ### Database Verification
 
 ```sql
-SELECT 
+SELECT
     t.table_name,
     t.schema_table IS NOT NULL as has_schema,
     h.version_schema,
@@ -90,6 +93,7 @@ WHERE t.table_name = 'test_table';
 ```
 
 Expected result:
+
 - `has_schema`: `true`
 - `version_schema`: `1`
 - `changes_type`: `INITIAL_LOAD`
@@ -132,12 +136,14 @@ Failed to fetch schema for existing table [table_name]: [error message]
 ### Issue: Table still shows empty schema after 60 seconds
 
 **Check:**
+
 1. Is the schema monitor running? Check logs for "Starting schema monitoring cycle"
 2. Is the source publication enabled? Check `sources.is_publication_enabled = true`
 3. Does the table exist in the source database? Check `SELECT * FROM pg_tables WHERE tablename = 'your_table';`
 4. Can the system access the table? Check permissions with `SELECT has_table_privilege('your_table', 'SELECT');`
 
 **Solution:**
+
 - Try clicking "Refresh Source" in UI to force immediate healing
 - Check backend logs for error messages
 - Run manual cleanup script: `uv run python backend/scripts/fix_schema_version_issues.py`
@@ -147,6 +153,7 @@ Failed to fetch schema for existing table [table_name]: [error message]
 **Reason:** User doesn't have SELECT permission on the table
 
 **Solution:**
+
 ```sql
 GRANT SELECT ON TABLE your_table TO rosetta_user;
 ```
@@ -156,6 +163,7 @@ GRANT SELECT ON TABLE your_table TO rosetta_user;
 **Reason:** Table might be a view or has no accessible columns
 
 **Solution:**
+
 - Verify table structure: `\d your_table` in psql
 - Check if it's a materialized view or special table type
 - Ensure table has at least one column

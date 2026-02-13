@@ -154,7 +154,6 @@ After applying the code fixes, the system will **automatically detect and fix** 
    - Scans all sources with publications enabled
    - Checks each table in publication
    - Detects missing schemas and fetches them automatically
-   
 2. **Manual Source Refresh** (User-triggered in UI)
    - Click "Refresh" button on source details page
    - System syncs publication tables
@@ -176,6 +175,7 @@ When a table without schema is detected:
 ### Example Scenario
 
 **Problem:**
+
 ```sql
 -- You manually add a table to publication
 ALTER PUBLICATION rosetta_publication ADD TABLE new_orders;
@@ -184,6 +184,7 @@ ALTER PUBLICATION rosetta_publication ADD TABLE new_orders;
 **Before Fix:** Table shows in UI with version 9 but empty schema
 
 **After Fix (Automatic):**
+
 1. Schema monitor detects table in publication
 2. Schema monitor sees empty schema
 3. Fetches schema: `SELECT column_name, data_type... FROM information_schema.columns...`
@@ -251,6 +252,7 @@ Should return: 0 rows (all tables have schemas)
 **Test Case 1: New Table Added via SQL**
 
 1. Add a table to publication manually:
+
 ```sql
 ALTER PUBLICATION rosetta_publication ADD TABLE test_auto_heal;
 ```
@@ -258,18 +260,21 @@ ALTER PUBLICATION rosetta_publication ADD TABLE test_auto_heal;
 2. Wait 60 seconds for schema monitor cycle (or click "Refresh Source" in UI)
 
 3. Check backend logs for auto-healing:
+
 ```bash
 tail -f backend/logs/app.log | grep "test_auto_heal"
 ```
 
-Should see: 
+Should see:
+
 ```
 Added new table tracking with schema: test_auto_heal (5 columns)
 ```
 
 4. Verify in database:
+
 ```sql
-SELECT 
+SELECT
     t.table_name,
     jsonb_array_length(jsonb_agg(jsonb_object_keys(t.schema_table))) as column_count,
     h.changes_type,
@@ -285,6 +290,7 @@ Should return: `test_auto_heal`, column_count > 0, `INITIAL_LOAD`, version 1
 **Test Case 2: Existing Table Without Schema**
 
 1. Simulate a table with missing schema:
+
 ```sql
 -- Create a table entry without schema
 INSERT INTO table_metadata_list (source_id, table_name, schema_table, is_changes_schema)
@@ -292,6 +298,7 @@ VALUES (1, 'test_broken_schema', NULL, false);
 ```
 
 2. Add table to publication:
+
 ```sql
 ALTER PUBLICATION rosetta_publication ADD TABLE test_broken_schema;
 ```
@@ -299,21 +306,24 @@ ALTER PUBLICATION rosetta_publication ADD TABLE test_broken_schema;
 3. Wait 60 seconds or click "Refresh Source" in UI
 
 4. Check logs for healing:
+
 ```bash
 tail -f backend/logs/app.log | grep "test_broken_schema"
 ```
 
 Should see:
+
 ```
 Found table test_broken_schema without schema, fetching now...
 Fixed table test_broken_schema: Added schema and INITIAL_LOAD history (4 columns)
 ```
 
 5. Verify schema was populated:
+
 ```sql
-SELECT 
+SELECT
     table_name,
-    CASE 
+    CASE
         WHEN schema_table IS NOT NULL AND schema_table != '{}'::jsonb THEN 'FIXED'
         ELSE 'STILL BROKEN'
     END as status,
