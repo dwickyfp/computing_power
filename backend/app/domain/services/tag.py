@@ -147,14 +147,18 @@ class TagService:
         total_tags = 0
 
         for tag, usage_count in tags_with_counts:
-            first_letter = tag.tag[0].upper() if tag.tag else "#"
+            first_char = tag.tag[0].upper() if tag.tag else "#"
             
-            # Only use letters A-Z, put others in #
-            if not first_letter.isalpha():
-                first_letter = "#"
+            # Group by number if digit, letter if alpha, else #
+            if first_char.isdigit():
+                group_key = first_char
+            elif first_char.isalpha():
+                group_key = first_char
+            else:
+                group_key = "#"
 
-            if first_letter not in groups_dict:
-                groups_dict[first_letter] = []
+            if group_key not in groups_dict:
+                groups_dict[group_key] = []
 
             tag_with_usage = TagWithUsageCount(
                 id=tag.id,
@@ -163,12 +167,21 @@ class TagService:
                 created_at=tag.created_at,
                 updated_at=tag.updated_at,
             )
-            groups_dict[first_letter].append(tag_with_usage)
+            groups_dict[group_key].append(tag_with_usage)
             total_tags += 1
 
         # Convert to list and sort by letter
+        # Sort keys: digits first (0-9), then letters (A-Z), then #
+        def sort_key(k):
+            if k.isdigit():
+                return (0, k)
+            elif k.isalpha():
+                return (1, k)
+            else:
+                return (2, k)
+
         groups = []
-        for letter in sorted(groups_dict.keys()):
+        for letter in sorted(groups_dict.keys(), key=sort_key):
             groups.append(
                 AlphabetGroupedTags(
                     letter=letter,
