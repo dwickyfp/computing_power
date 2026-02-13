@@ -52,6 +52,8 @@ def init_connection_pool(
                 "keepalives_idle": 30,
                 "keepalives_interval": 10,
                 "keepalives_count": 5,
+                # Reduce statement timeout to prevent long-running queries from holding connections
+                "options": "-c statement_timeout=30000",  # 30 seconds
             }
         )
 

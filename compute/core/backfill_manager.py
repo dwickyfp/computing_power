@@ -237,6 +237,13 @@ class BackfillManager:
                 logger.error(
                     f"Error fetching pending jobs (attempt {attempt + 1}/{max_retries}): {e}"
                 )
+                # Close stale connection to force pool to create a fresh one
+                if conn and pool:
+                    try:
+                        pool.putconn(conn, close=True)
+                        conn = None
+                    except Exception:
+                        pass
                 if attempt < max_retries - 1:
                     time.sleep(retry_delay)
                     retry_delay *= 2
