@@ -159,6 +159,9 @@ WHERE a.id > b.id
   AND a.table_metadata_list_id = b.table_metadata_list_id
   AND a.version_schema = b.version_schema;
 
+-- Drop Constraint if exists
+DROP CONSTRAINT IF EXISTS uq_history_schema_table_version ON history_schema_evolution;
+
 ALTER TABLE history_schema_evolution
 ADD CONSTRAINT uq_history_schema_table_version 
 UNIQUE (table_metadata_list_id, version_schema);
