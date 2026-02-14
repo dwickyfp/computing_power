@@ -43,3 +43,5 @@ faker==22.0.0
 deepdiff==8.6.1
 snowflake-connector-python==4.0.0
 redis==5.0.1
+duckdb>=0.9.2
+pyarrow>=14.0.1

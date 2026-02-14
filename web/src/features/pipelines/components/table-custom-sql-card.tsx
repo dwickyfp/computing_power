@@ -6,11 +6,26 @@ import 'ace-builds/src-noconflict/ext-language_tools'
 import 'ace-builds/src-noconflict/mode-mysql'
 import 'ace-builds/src-noconflict/theme-tomorrow'
 import 'ace-builds/src-noconflict/theme-tomorrow_night'
-import { Loader2, Save, X } from 'lucide-react'
+import { Loader2, Save, X, Eye, AlertCircle } from 'lucide-react'
 import AceEditor from 'react-ace'
+import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { createSqlCompleter } from '@/features/pipelines/utils/sql-completer'
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
+import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area'
 
 interface TableCustomSqlCardProps {
   table: (TableWithSyncInfo & { sync_config?: TableSyncConfig }) | null
@@ -22,6 +37,13 @@ interface TableCustomSqlCardProps {
   destinationId?: number | null
   sourceName?: string
   sourceId?: number | null
+  pipelineId: number
+}
+
+interface PreviewData {
+  columns: string[]
+  data: Record<string, any>[]
+  error?: string
 }
 
 export function TableCustomSqlCard({
@@ -34,6 +56,7 @@ export function TableCustomSqlCard({
   destinationId,
   sourceName,
   sourceId,
+  pipelineId,
 }: TableCustomSqlCardProps) {
   const [sql, setSql] = useState('')
   const [editorInstance, setEditorInstance] = useState<any>(null)
@@ -42,6 +65,11 @@ export function TableCustomSqlCard({
   const [isDarkMode, setIsDarkMode] = useState(
     document.documentElement.classList.contains('dark')
   )
+
+  // Preview State
+  const [isPreviewLoading, setIsPreviewLoading] = useState(false)
+  const [previewData, setPreviewData] = useState<PreviewData | null>(null)
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false)
 
   // Watch for theme changes
   useEffect(() => {
@@ -180,11 +208,62 @@ export function TableCustomSqlCard({
     e.preventDefault()
     e.stopPropagation()
 
+    if (!validateSql(sql)) return
+
     setIsSaving(true)
     try {
       await onSave(sql)
     } finally {
       setIsSaving(false)
+    }
+  }
+
+  // Validate SQL for forbidden operations
+  const validateSql = (sqlText: string): boolean => {
+    if (!sqlText) return true
+
+    // List of forbidden keywords for custom SQL
+    // We strictly block destructive operations
+    const forbiddenKeywords = [
+      'UPDATE', 'DELETE', 'TRUNCATE', 'DROP', 'ALTER', 'GRANT', 'REVOKE',
+      'INSERT', 'CREATE', 'REPLACE', 'MERGE'
+    ]
+
+    for (const keyword of forbiddenKeywords) {
+      // Check for whole word match, case insensitive
+      const regex = new RegExp(`\\b${keyword}\\b`, 'i')
+      if (regex.test(sqlText)) {
+        toast.error(`Operation '${keyword}' is not allowed. Only SELECT statements are permitted.`)
+        return false
+      }
+    }
+    return true
+  }
+
+  const handlePreview = async () => {
+    if (!pipelineId || !sourceId || !destinationId || !table) return
+    if (!validateSql(sql)) return
+
+    setIsPreviewLoading(true)
+    setPreviewData(null)
+    setIsPreviewOpen(true) // Open popover immediately to show loading state
+
+    try {
+      const res = await api.post(`/pipelines/${pipelineId}/preview`, {
+        sql,
+        source_id: sourceId,
+        destination_id: destinationId,
+        table_name: table.table_name,
+      })
+      setPreviewData(res.data)
+    } catch (e: any) {
+      setPreviewData({
+        columns: [],
+        data: [],
+        error: e.response?.data?.detail || e.message || 'Failed to preview data',
+      })
+    } finally {
+      setIsPreviewLoading(false)
     }
   }
 
@@ -348,6 +427,94 @@ export function TableCustomSqlCard({
           )}
         </div>
         <div className='flex gap-2'>
+          <Popover open={isPreviewOpen} onOpenChange={setIsPreviewOpen}>
+            <PopoverTrigger asChild>
+              <Button
+                variant='outline'
+                size='sm'
+                onClick={handlePreview}
+                disabled={isPreviewLoading || isSaving}
+              >
+                {isPreviewLoading ? (
+                  <Loader2 className='mr-2 h-4 w-4 animate-spin' />
+                ) : (
+                  <Eye className='mr-2 h-4 w-4' />
+                )}
+                Preview Data
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent
+              className='w-[800px] border-none p-0 shadow-2xl z-[200]'
+              side='top'
+              align='end'
+            >
+              <div className='flex flex-col overflow-hidden rounded-lg border bg-popover'>
+                <div className='border-b bg-muted/30 px-4 py-3'>
+                  <h3 className='font-semibold'>Preview Results</h3>
+                  <p className='text-xs text-muted-foreground'>
+                    Showing first 10 rows
+                  </p>
+                </div>
+                <div className='max-h-[400px] overflow-auto p-0'>
+                  {isPreviewLoading ? (
+                    <div className='flex h-[200px] items-center justify-center'>
+                      <div className='flex flex-col items-center gap-2'>
+                        <Loader2 className='h-8 w-8 animate-spin text-primary' />
+                        <span className='text-sm text-muted-foreground'>
+                          Executing query...
+                        </span>
+                      </div>
+                    </div>
+                  ) : previewData?.error ? (
+                    <div className='flex h-[200px] flex-col items-center justify-center p-6 text-center'>
+                      <AlertCircle className='mb-2 h-8 w-8 text-destructive' />
+                      <p className='font-medium text-destructive'> Preview Failed</p>
+                      <p className='mt-1 text-sm text-muted-foreground'>
+                        {previewData.error}
+                      </p>
+                    </div>
+                  ) : previewData && previewData.columns.length > 0 ? (
+                    <ScrollArea className='w-full'>
+                      <div className='w-full'>
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              {previewData.columns.map((col) => (
+                                <TableHead key={col} className='whitespace-nowrap'>
+                                  {col}
+                                </TableHead>
+                              ))}
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {previewData.data.map((row, i) => (
+                              <TableRow key={i}>
+                                {previewData.columns.map((col) => (
+                                  <TableCell key={col} className='whitespace-nowrap'>
+                                    {row[col]?.toString() ?? (
+                                      <span className='italic text-muted-foreground'>
+                                        null
+                                      </span>
+                                    )}
+                                  </TableCell>
+                                ))}
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </div>
+                      <ScrollBar orientation='horizontal' />
+                    </ScrollArea>
+                  ) : (
+                    <div className='flex h-[100px] items-center justify-center text-sm text-muted-foreground'>
+                      No data returned
+                    </div>
+                  )}
+                </div>
+              </div>
+            </PopoverContent>
+          </Popover>
+
           <Button variant='outline' size='sm' onClick={handleClose}>
             Cancel
           </Button>

@@ -15,6 +15,10 @@ from app.domain.schemas.pipeline import (
     PipelineStatusUpdate,
     PipelineUpdate,
 )
+from app.domain.schemas.pipeline_preview import (
+    PipelinePreviewRequest,
+    PipelinePreviewResponse,
+)
 from app.domain.services.pipeline import PipelineService
 
 router = APIRouter()
@@ -295,3 +299,28 @@ async def get_pipeline_stats(
         List of statistics per table
     """
     return service.get_pipeline_data_flow_stats(pipeline_id, days)
+
+
+@router.post(
+    "/{pipeline_id}/preview",
+    response_model=PipelinePreviewResponse,
+    summary="Preview custom SQL",
+    description="Preview result of custom SQL query with live data",
+)
+async def preview_pipeline_sql(
+    pipeline_id: int,
+    request: PipelinePreviewRequest,
+    service: PipelineService = Depends(get_pipeline_service),
+) -> PipelinePreviewResponse:
+    """
+    Preview custom SQL.
+    
+    Args:
+        pipeline_id: Pipeline identifier (for context/auth, though request has specific IDs)
+        request: Preview request
+        service: Pipeline service instance
+        
+    Returns:
+        Preview data
+    """
+    return service.preview_custom_sql(request)

@@ -30,11 +30,18 @@ from app.domain.services.source import SourceService
 from app.domain.models.data_flow_monitoring import DataFlowRecordMonitoring
 from app.core.security import decrypt_value
 from sqlalchemy import func, desc, and_
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, date, timedelta, timezone
 from zoneinfo import ZoneInfo
 import snowflake.connector
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
+import duckdb
+import hashlib
+import json
+import re
+import base64
+from app.infrastructure.redis import get_redis
+from app.domain.schemas.pipeline_preview import PipelinePreviewRequest, PipelinePreviewResponse
 
 logger = get_logger(__name__)
 
@@ -1628,6 +1635,9 @@ class PipelineService:
                 # Should we allow changing source table? Probably not for a sync object.
                 pass
 
+            if table_sync_data.custom_sql:
+                self._validate_custom_sql(table_sync_data.custom_sql)
+
             existing.custom_sql = table_sync_data.custom_sql
             existing.filter_sql = table_sync_data.filter_sql
             if table_sync_data.table_name_target:
@@ -1650,6 +1660,9 @@ class PipelineService:
 
             # Optional: Check uniqueness of target for this source
             # ...
+            
+            if table_sync_data.custom_sql:
+                self._validate_custom_sql(table_sync_data.custom_sql)
 
             new_sync = PipelineDestinationTableSync(
                 pipeline_destination_id=pipeline_destination_id,
@@ -1866,3 +1879,196 @@ class PipelineService:
         except Exception as e:
             logger.error(f"Failed to initialize Snowflake table: {e}", exc_info=True)
             return {"status": "error", "message": str(e)}
+
+    def _validate_custom_sql(self, sql: str) -> None:
+        """
+        Validate custom SQL for forbidden keywords.
+        
+        Args:
+            sql: SQL string to validate
+            
+        Raises:
+            ValueError: If SQL contains forbidden keywords
+        """
+        if not sql:
+            return
+
+        # List of forbidden keywords for custom SQL
+        # We only allow SELECT statements basically
+        forbidden_keywords = [
+            "UPDATE", "DELETE", "TRUNCATE", "DROP", "ALTER", "GRANT", "REVOKE", 
+            "INSERT", "CREATE", "REPLACE", "MERGE"
+        ]
+        
+        # Simple regex check - word boundary to avoid partial matches
+        # We check case-insensitive
+        for keyword in forbidden_keywords:
+            # Look for keyword as a whole word
+            if re.search(rf"\b{keyword}\b", sql, re.IGNORECASE):
+                raise ValueError(
+                    f"SQL validation failed: Operation '{keyword}' is not allowed. "
+                    "Only SELECT statements are permitted."
+                )
+
+    def preview_custom_sql(self, request: PipelinePreviewRequest) -> PipelinePreviewResponse:
+        """
+        Preview custom SQL execution using DuckDB with attached Postgres databases.
+        
+        Args:
+            request: Preview request containing SQL and context
+            
+        Returns:
+            Preview response with data and columns
+        """
+        try:
+            # 0. Validate SQL
+            self._validate_custom_sql(request.sql)
+
+            # 1. Calculate Hash for Caching
+            # Include source/dest IDs in hash to prevent cross-context collisions
+            input_string = f"{request.sql}{request.source_id}{request.destination_id}{request.table_name}"
+            query_hash = hashlib.sha256(input_string.encode()).hexdigest()
+            cache_key = f"preview:{query_hash}"
+            
+            # 2. Check Redis Cache
+            redis_client = None
+            try:
+                redis_client = get_redis()
+                if redis_client:
+                    cached = redis_client.get(cache_key)
+                    if cached:
+                        try:
+                            data = json.loads(cached)
+                            logger.info(f"Returning cached preview for key {cache_key}")
+                            return PipelinePreviewResponse(**data)
+                        except Exception as e:
+                            logger.warning(f"Failed to parse cached preview: {e}")
+            except Exception as e:
+                logger.warning(f"Redis error during preview cache check: {e}")
+                
+            # 3. Get Source and Destination Configuration
+            try:
+                # Source Details
+                # Use repository directly to get Source model with password (SourceService.get_source_details returns schema without password)
+                # Actually PipelineRepository.get_by_source_id returns list of pipelines. We want SourceRepository.
+                from app.domain.repositories.source import SourceRepository
+                source_repo = SourceRepository(self.db)
+                source_details = source_repo.get_by_id(request.source_id)
+                if not source_details:
+                    raise ValueError(f"Source {request.source_id} not found")
+                
+                # Destination Details
+                from app.domain.models.destination import Destination
+                dest = self.db.query(Destination).filter(Destination.id == request.destination_id).first()
+                if not dest:
+                    raise ValueError(f"Destination {request.destination_id} not found")
+                
+                # Decrypt passwords
+                src_pass = decrypt_value(source_details.pg_password)
+                src_conn_str = f"postgresql://{source_details.pg_username}:{src_pass}@{source_details.pg_host}:{source_details.pg_port}/{source_details.pg_database}"
+                
+                dest_config = dest.config
+                dest_pass = decrypt_value(dest_config.get("password", ""))
+                dest_conn_str = f"postgresql://{dest_config.get('user')}:{dest_pass}@{dest_config.get('host')}:{dest_config.get('port')}/{dest_config.get('database')}"
+                
+            except Exception as e:
+                logger.error(f"Failed to retrieve connection details: {e}")
+                return PipelinePreviewResponse(columns=[], data=[], error=f"Failed to retrieve connection details: {str(e)}")
+
+            # 4. Rewrite SQL
+            # Create regex pattern for table name to replace with source_alias.table_name
+            # We need to qualify the table name if it's not already qualified
+            
+            # Sanitized alias names (must match what we us in ATTACH below)
+            # Standard pattern: pg_src_<source_name> and pg_<dest_name>
+            sanitized_source_name = re.sub(r"[^a-zA-Z0-9_]", "_", source_details.name.lower())
+            source_prefix = f"pg_src_{sanitized_source_name}"
+            
+            sanitized_dest_name = re.sub(r"[^a-zA-Z0-9_]", "_", dest.name.lower())
+            dest_prefix = f"pg_{sanitized_dest_name}"
+            
+            # Replace table_name with source_prefix.table_name
+            # Only if it's the raw table name (not already qualified)
+            # Simple regex for now - can be improved for complex queries
+            rewritten_sql = request.sql
+            
+            # Regex to find table_name as a whole word, not preceded by a dot
+            # escape table name for regex
+            table_pattern = re.compile(rf'(?<![\.\w"]){re.escape(request.table_name)}(?![\.\w"])', re.IGNORECASE)
+            
+            # Replace with qualified name
+            rewritten_sql = table_pattern.sub(f"{source_prefix}.{request.table_name}", rewritten_sql)
+            
+            # Remove trailing semicolon if present
+            rewritten_sql = rewritten_sql.strip().rstrip(';')
+            
+            # Add LIMIT if not present? Or wrap in CTE and LIMIT.
+            # Wrapping in CTE is safer to ensure we only get N rows without parsing the whole query
+            final_query = f"WITH result_sql AS ({rewritten_sql}) SELECT * FROM result_sql LIMIT 10"
+            
+            logger.info(f"Executing preview query: {final_query}")
+            
+            # 5. Execute in DuckDB
+            con = duckdb.connect(":memory:")
+            # Set memory limit to avoid OOM
+            con.execute("SET memory_limit='1GB'")
+            
+            # Install & Load Postgres Extension
+            con.execute("INSTALL postgres;")
+            con.execute("LOAD postgres;")
+            
+            # Attach databases
+            try:
+                con.execute(f"ATTACH '{src_conn_str}' AS {source_prefix} (TYPE postgres, READ_ONLY);")
+            except Exception as e:
+                logger.error(f"Failed to attach source DB: {e}")
+                raise ValueError(f"Could not connect to source database: {e}")
+                
+            try:
+                con.execute(f"ATTACH '{dest_conn_str}' AS {dest_prefix} (TYPE postgres, READ_ONLY);")
+            except Exception as e:
+                logger.warning(f"Failed to attach destination DB: {e}")
+                # We continue even if dest fails, as query might only need source
+            
+            # Execute Query
+            result = con.execute(final_query).fetch_arrow_table()
+            
+            # Process Results
+            columns = result.column_names
+            data = result.to_pylist()
+            
+            # Serialize special types
+            serialized_data = []
+            for row in data:
+                new_row = {}
+                for k, v in row.items():
+                    if isinstance(v, (datetime, date)):
+                        new_row[k] = v.isoformat()
+                    elif isinstance(v, (bytes, bytearray)):
+                         new_row[k] = base64.b64encode(v).decode('utf-8')
+                    else:
+                        new_row[k] = v
+                serialized_data.append(new_row)
+            
+            response = PipelinePreviewResponse(columns=columns, data=serialized_data)
+            
+            # 6. Cache Result
+            try:
+                if redis_client:
+                    # Cache for 5 minutes
+                    redis_client.setex(cache_key, 300, response.json())
+            except Exception as e:
+                logger.warning(f"Failed to cache preview result: {e}")
+                
+            return response
+            
+        except Exception as e:
+            logger.error(f"Preview execution failed: {e}", exc_info=True)
+            # Return error in response rather than 500
+            return PipelinePreviewResponse(columns=[], data=[], error=str(e))
+        finally:
+            if 'con' in locals():
+                try:
+                    con.close()
+                except:
+                    pass

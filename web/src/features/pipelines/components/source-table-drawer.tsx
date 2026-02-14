@@ -340,6 +340,7 @@ export function SourceTableDrawer({
           destinationId={currentDestination?.destination.id}
           sourceName={pipeline.source?.name}
           sourceId={pipeline.source_id}
+          pipelineId={pipeline.id}
         />
       )}
 
