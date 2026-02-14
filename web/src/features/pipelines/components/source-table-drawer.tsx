@@ -64,6 +64,7 @@ export function SourceTableDrawer({
       setActiveTable(null)
       setActiveMode(null)
       setActiveSyncConfigId(null)
+      setSearchQuery('')
     }
   }, [open])
 
