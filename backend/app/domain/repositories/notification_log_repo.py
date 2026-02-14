@@ -2,7 +2,7 @@
 Notification Log repository.
 """
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 from typing import List, Optional
 
