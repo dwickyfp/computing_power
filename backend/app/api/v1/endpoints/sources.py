@@ -46,7 +46,7 @@ async def create_source(
     Returns:
         Created source
     """
-    source = service.create_source(source_data)
+    source = await service.create_source(source_data)
     return SourceResponse.from_orm(source)
 
 
@@ -427,7 +427,7 @@ async def duplicate_source(
     Returns:
         New source
     """
-    source = service.duplicate_source(source_id)
+    source = await service.duplicate_source(source_id)
     return SourceResponse.from_orm(source)
 
 

@@ -6,6 +6,7 @@ Implements business rules and orchestrates repository operations for sources.
 
 from typing import List
 from datetime import datetime, timezone, timedelta
+import asyncio
 
 from sqlalchemy.orm import Session
 import psycopg2
@@ -22,6 +23,7 @@ from app.domain.repositories.history_schema_evolution_repo import (
     HistorySchemaEvolutionRepository,
 )
 from app.domain.repositories.pipeline import PipelineRepository
+from app.domain.services.wal_monitor import WALMonitorService
 from app.domain.schemas.source import (
     SourceConnectionTest,
     SourceCreate,
@@ -56,7 +58,7 @@ class SourceService:
         self.db = db
         self.repository = SourceRepository(db)
 
-    def create_source(self, source_data: SourceCreate) -> Source:
+    async def create_source(self, source_data: SourceCreate) -> Source:
         """
         Create a new source.
 
@@ -82,6 +84,25 @@ class SourceService:
             self.db.refresh(source)
         except Exception as e:
             logger.error(f"Failed to fetch table list: {e}")
+
+        # Initialize WAL monitor status immediately
+        try:
+            logger.info(
+                "Initializing WAL monitor status for new source",
+                extra={"source_id": source.id, "name": source.name}
+            )
+            wal_monitor_service = WALMonitorService()
+            await wal_monitor_service.monitor_source(source, self.db)
+            logger.info(
+                "WAL monitor status initialized successfully",
+                extra={"source_id": source.id}
+            )
+        except Exception as e:
+            # Don't fail source creation if WAL monitoring fails
+            logger.warning(
+                "Failed to initialize WAL monitor status",
+                extra={"source_id": source.id, "error": str(e)}
+            )
 
         logger.info(
             "Source created successfully",
@@ -1243,7 +1264,7 @@ class SourceService:
             logger.error(f"Failed to fetch source schema: {e}")
             raise ValueError(f"Failed to fetch source schema: {str(e)}")
 
-    def duplicate_source(self, source_id: int) -> Source:
+    async def duplicate_source(self, source_id: int) -> Source:
         """
         Duplicate an existing source.
 
@@ -1303,7 +1324,7 @@ class SourceService:
                     replication_name=attempt_rep_name,
                 )
 
-                created_source = self.create_source(source_data)
+                created_source = await self.create_source(source_data)
 
             except DuplicateEntityError as e:
                 # Name or replication_name already exists, try with next counter
