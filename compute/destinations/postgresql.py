@@ -634,20 +634,251 @@ class PostgreSQLDestination(BaseDestination):
         except (ValueError, TypeError):
             return f"'{value}'"
 
+    def _parse_debezium_field_types(
+        self, schema: Optional[dict]
+    ) -> dict[str, dict]:
+        """
+        Parse the Debezium envelope schema to extract column type metadata.
+
+        Debezium wraps each CDC event in an envelope with a ``schema`` field
+        that describes column types (``after.fields``).  This method extracts
+        that info so we can coerce raw values to proper Python types before
+        building a PyArrow table — ensuring DuckDB sees correct column types
+        for custom SQL aggregations (SUM, AVG, etc.).
+
+        Debezium schema structure::
+
+            {
+                "type": "struct",
+                "fields": [
+                    {"field": "before", ...},
+                    {"field": "after", "fields": [
+                        {"field": "amount", "type": "bytes",
+                         "name": "org.apache.kafka.connect.data.Decimal",
+                         "parameters": {"scale": "2", ...}},
+                        {"field": "employee_id", "type": "int32"},
+                        ...
+                    ]},
+                    {"field": "op", ...},
+                    ...
+                ]
+            }
+
+        Args:
+            schema: Debezium envelope schema dict (from CDCRecord.schema)
+
+        Returns:
+            dict mapping column_name → {type, name, parameters}
+        """
+        if not schema or not isinstance(schema, dict):
+            return {}
+
+        try:
+            fields = schema.get("fields", [])
+            for field in fields:
+                if field.get("field") == "after":
+                    result = {}
+                    for col_field in field.get("fields", []):
+                        col_name = col_field.get("field")
+                        if col_name:
+                            result[col_name] = {
+                                "type": col_field.get("type", ""),
+                                "name": col_field.get("name", ""),
+                                "parameters": col_field.get("parameters", {}),
+                            }
+                    return result
+        except Exception:
+            pass
+        return {}
+
+    def _coerce_values_for_duckdb(
+        self,
+        values: list,
+        dbz_info: dict,
+        col_name: str,
+    ) -> list:
+        """
+        Convert raw Debezium-encoded values to proper Python types so that
+        PyArrow infers correct DuckDB column types.
+
+        Handles all major Debezium logical types:
+
+        - ``org.apache.kafka.connect.data.Decimal``  (base64 or string → float)
+        - ``io.debezium.time.Date``                  (int days → datetime.date)
+        - ``io.debezium.time.MicroTimestamp``         (int μs → datetime)
+        - ``io.debezium.time.NanoTimestamp``          (int ns → datetime)
+        - ``io.debezium.time.Timestamp``              (int ms → datetime)
+        - ``io.debezium.time.MicroTime``              (int μs → time)
+        - ``io.debezium.time.Time``                   (int ms → time)
+        - Primitive types: int16/int32/int64, float/double, boolean
+
+        Args:
+            values: Raw column values from Debezium
+            dbz_info: Field type metadata from ``_parse_debezium_field_types``
+            col_name: Column name (for logging)
+
+        Returns:
+            Coerced column values with proper Python types
+        """
+        import base64
+        import datetime
+        from decimal import Decimal
+
+        dbz_type = dbz_info.get("type", "")
+        dbz_name = dbz_info.get("name", "")
+        params = dbz_info.get("parameters", {})
+
+        # ── DECIMAL / NUMERIC ──
+        if dbz_name == "org.apache.kafka.connect.data.Decimal":
+            scale = int(params.get("scale", 0))
+            result = []
+            for v in values:
+                if v is None:
+                    result.append(None)
+                elif isinstance(v, (int, float)):
+                    result.append(float(v))
+                elif isinstance(v, str):
+                    # Try plain numeric string first
+                    try:
+                        result.append(float(v))
+                    except ValueError:
+                        # Base64-encoded big-endian byte array
+                        try:
+                            decoded = base64.b64decode(v)
+                            int_val = int.from_bytes(
+                                decoded, byteorder="big", signed=True
+                            )
+                            result.append(
+                                float(Decimal(int_val) / Decimal(10**scale))
+                            )
+                        except Exception:
+                            result.append(None)
+                else:
+                    result.append(v)
+            return result
+
+        # ── DATE (days since epoch) ──
+        if dbz_name == "io.debezium.time.Date":
+            epoch = datetime.date(1970, 1, 1)
+            return [
+                (epoch + datetime.timedelta(days=v))
+                if isinstance(v, int) else v
+                for v in values
+            ]
+
+        # ── TIMESTAMP (microseconds since epoch) ──
+        if dbz_name in (
+            "io.debezium.time.MicroTimestamp",
+            "io.debezium.time.NanoTimestamp",
+        ):
+            epoch = datetime.datetime(1970, 1, 1)
+            result = []
+            for v in values:
+                if v is None:
+                    result.append(None)
+                elif isinstance(v, int):
+                    if "Nano" in dbz_name:
+                        result.append(
+                            epoch + datetime.timedelta(microseconds=v // 1000)
+                        )
+                    else:
+                        result.append(
+                            epoch + datetime.timedelta(microseconds=v)
+                        )
+                else:
+                    result.append(v)
+            return result
+
+        # ── TIMESTAMP (milliseconds since epoch) ──
+        if dbz_name == "io.debezium.time.Timestamp":
+            epoch = datetime.datetime(1970, 1, 1)
+            return [
+                (epoch + datetime.timedelta(milliseconds=v))
+                if isinstance(v, int) else v
+                for v in values
+            ]
+
+        # ── TIME (microseconds/milliseconds since midnight) ──
+        if dbz_name in ("io.debezium.time.MicroTime", "io.debezium.time.Time"):
+            result = []
+            for v in values:
+                if v is None:
+                    result.append(None)
+                elif isinstance(v, int):
+                    if "Micro" in dbz_name:
+                        td = datetime.timedelta(microseconds=v)
+                    else:
+                        td = datetime.timedelta(milliseconds=v)
+                    result.append((datetime.datetime.min + td).time())
+                else:
+                    result.append(v)
+            return result
+
+        # ── Primitive int types ──
+        if dbz_type in ("int16", "int32") and not dbz_name:
+            return [int(v) if v is not None else None for v in values]
+
+        if dbz_type == "int64" and not dbz_name:
+            return [int(v) if v is not None else None for v in values]
+
+        # ── Primitive float types ──
+        if dbz_type in ("float32", "float", "float64", "double"):
+            return [float(v) if v is not None else None for v in values]
+
+        # ── Boolean ──
+        if dbz_type == "boolean":
+            return [bool(v) if v is not None else None for v in values]
+
+        # Default: return as-is (string, bytes, etc.)
+        return values
+
+    def _auto_coerce_numeric_column(self, values: list) -> list:
+        """
+        Fallback auto-detection for columns when no Debezium schema is
+        available.  Only coerces if ALL non-None values are numeric strings
+        (contain a decimal point to avoid false positives with IDs/codes).
+
+        Args:
+            values: Raw column values
+
+        Returns:
+            Coerced values (float) or originals if not numeric
+        """
+        if not values:
+            return values
+
+        samples = [v for v in values if v is not None]
+        if not samples or not all(isinstance(s, str) for s in samples):
+            return values
+
+        # Only coerce strings with a decimal point (avoids IDs, codes)
+        has_dot = any("." in s for s in samples)
+        if not has_dot:
+            return values
+
+        try:
+            for s in samples:
+                float(s)
+            return [float(v) if v is not None else None for v in values]
+        except (ValueError, TypeError):
+            return values
+
     def _insert_batch_to_duckdb(
         self,
         records: list[CDCRecord],
         table_name: str,
     ) -> None:
         """
-        Insert CDC records into DuckDB table with original table name.
+        Insert CDC records into a DuckDB table with proper column types.
 
-        Uses PyArrow for zero-copy ingestion into DuckDB, which is significantly
-        faster than pandas DataFrame conversion.
+        Uses the Debezium schema attached to CDC records to coerce raw values
+        (base64 decimals, epoch timestamps, etc.) into proper Python types
+        *before* building the PyArrow table.  This ensures DuckDB sees correct
+        column types — critical when custom SQL uses aggregations like
+        ``SUM(amount)`` or ``CAST(ts AS DATE)``.
 
-        Keeps raw Debezium-encoded values (dates as integers, etc.) to avoid
-        premature type conversion. These will be properly converted when
-        merging into PostgreSQL.
+        Falls back to auto-detection of numeric strings when Debezium schema
+        is not available.
 
         Args:
             records: CDC records to insert
@@ -662,12 +893,29 @@ class PostgreSQLDestination(BaseDestination):
         # Drop existing table if exists
         self._duckdb_conn.execute(f"DROP TABLE IF EXISTS {safe_table_name}")
 
-        # Convert records to columnar format for PyArrow
+        # Convert records to columnar format
         data = [record.value for record in records]
         columns = list(data[0].keys())
+
+        # Parse Debezium schema for type-aware ingestion
+        debezium_types = self._parse_debezium_field_types(records[0].schema)
+
         arrays = {}
         for col in columns:
-            arrays[col] = [row.get(col) for row in data]
+            raw_values = [row.get(col) for row in data]
+            dbz_info = debezium_types.get(col)
+
+            if dbz_info:
+                # Schema-aware coercion (primary path)
+                arrays[col] = self._coerce_values_for_duckdb(
+                    raw_values, dbz_info, col
+                )
+            elif not debezium_types:
+                # No schema at all — try auto-detecting numeric strings
+                arrays[col] = self._auto_coerce_numeric_column(raw_values)
+            else:
+                # Schema exists but this column isn't in it — keep raw
+                arrays[col] = raw_values
 
         # Create Arrow table — DuckDB's native format (zero-copy)
         arrow_table = pa.table(arrays)
@@ -678,7 +926,9 @@ class PostgreSQLDestination(BaseDestination):
         )
 
         self._logger.debug(
-            f"Inserted {len(records)} records into DuckDB table '{safe_table_name}' (PyArrow)"
+            f"Inserted {len(records)} records into DuckDB table "
+            f"'{safe_table_name}' (PyArrow, "
+            f"schema_aware={'yes' if debezium_types else 'auto'})"
         )
 
     def _apply_filters_in_duckdb(
@@ -965,6 +1215,48 @@ class PostgreSQLDestination(BaseDestination):
             return list(record.key.keys())
         # Default to first column if no key info
         return list(record.value.keys())[:1]
+
+    def _get_target_primary_key(self, target_table: str) -> list[str]:
+        """
+        Get primary key columns from the destination PostgreSQL table.
+
+        Queries ``pg_index`` + ``pg_attribute`` to retrieve the actual PK
+        columns of the target table.  This is essential when custom SQL
+        transforms data into a different schema (e.g., source PK is
+        ``transaction_id`` but aggregate target PK is ``report_date``).
+
+        Args:
+            target_table: Target table name on the destination database
+
+        Returns:
+            List of primary key column names, or empty list if no PK found
+        """
+        try:
+            with self._pg_conn.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT a.attname
+                    FROM pg_index i
+                    JOIN pg_attribute a
+                        ON a.attrelid = i.indrelid
+                        AND a.attnum = ANY(i.indkey)
+                    WHERE i.indrelid = %s::regclass
+                      AND i.indisprimary
+                    ORDER BY array_position(i.indkey, a.attnum)
+                    """,
+                    (f"{self.schema}.{target_table}",),
+                )
+                pk_cols = [row[0] for row in cursor.fetchall()]
+                if pk_cols:
+                    self._logger.debug(
+                        f"Detected target PK for '{target_table}': {pk_cols}"
+                    )
+                return pk_cols
+        except Exception as e:
+            self._logger.warning(
+                f"Failed to detect PK for target table '{target_table}': {e}"
+            )
+            return []
 
     def _merge_into_postgres(
         self,
@@ -1294,8 +1586,45 @@ class PostgreSQLDestination(BaseDestination):
 
             transformed = valid_rows
 
-            # Get primary key columns from first record
-            key_columns = self._get_primary_key_columns(records[0])
+            # Validate target table exists on destination before MERGE
+            target_schema = self._get_table_schema(target_table)
+            if not target_schema:
+                raise DestinationException(
+                    f"Target table '{self.schema}.{target_table}' does not exist "
+                    f"on destination '{self._config.name}'. "
+                    f"Please verify 'table_name_target' is set correctly in "
+                    f"the pipeline table sync configuration. "
+                    f"Source table: '{source_table}', "
+                    f"configured target: '{target_table}'."
+                )
+
+            # Determine primary key columns for MERGE
+            if table_sync.custom_sql:
+                # Custom SQL may transform data into a different schema
+                # (e.g., transaction rows → daily aggregates).
+                # Use the TARGET table's PK, not the source CDC record's PK.
+                key_columns = self._get_target_primary_key(target_table)
+                if not key_columns:
+                    # Fallback: try source record PK if target PK detection fails
+                    source_pk = self._get_primary_key_columns(records[0])
+                    # Only use source PK if it exists in the transformed output
+                    output_cols = set(transformed[0].keys())
+                    if all(k in output_cols for k in source_pk):
+                        key_columns = source_pk
+                        self._logger.warning(
+                            f"Could not detect target PK for '{target_table}', "
+                            f"falling back to source PK: {source_pk}"
+                        )
+                    else:
+                        # Last resort: use first column of transformed output
+                        key_columns = [list(output_cols)[0]]
+                        self._logger.warning(
+                            f"Could not detect target PK for '{target_table}' "
+                            f"and source PK {source_pk} not in output columns. "
+                            f"Using first output column as key: {key_columns}"
+                        )
+            else:
+                key_columns = self._get_primary_key_columns(records[0])
 
             # Step 4: MERGE INTO destination
             written = self._merge_into_postgres(transformed, target_table, key_columns)
