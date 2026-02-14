@@ -222,9 +222,22 @@ class PipelineService:
             )
             return self.repository.get_by_id_with_relations(pipeline_id)
 
-        # Remove destination
+        # Collect tag IDs from all table syncs before deletion
+        tag_ids = [
+            tag_assoc.tag_id
+            for table_sync in existing.table_syncs
+            for tag_assoc in table_sync.tag_associations
+        ]
+
+        # Remove destination (CASCADE will delete table_syncs and tag associations)
         self.db.delete(existing)
         self.db.commit()
+        
+        # Cleanup unused tags after deletion
+        if tag_ids:
+            logger.info(f"Checking {len(tag_ids)} tags for cleanup after removing destination from pipeline")
+            self._cleanup_unused_tags(tag_ids)
+        
         self.db.refresh(pipeline)
 
         # Mark for refresh
@@ -553,11 +566,25 @@ class PipelineService:
         """
         logger.info("Deleting pipeline", extra={"pipeline_id": pipeline_id})
 
-        # Verify pipeline exists before deletion
-        self.repository.get_by_id(pipeline_id)
-
+        # Verify pipeline exists before deletion and collect tag IDs
+        pipeline = self.repository.get_by_id(pipeline_id)
+        
+        # Collect all tag IDs from all table syncs across all destinations
+        from app.domain.models.tag import PipelineDestinationTableSyncTag
+        
+        tag_ids = set()
+        for destination in pipeline.destinations:
+            for table_sync in destination.table_syncs:
+                for tag_assoc in table_sync.tag_associations:
+                    tag_ids.add(tag_assoc.tag_id)
+        
         # Delete pipeline (metadata will cascade)
         self.repository.delete(pipeline_id)
+        
+        # Cleanup unused tags after deletion
+        if tag_ids:
+            logger.info(f"Checking {len(tag_ids)} tags for cleanup after pipeline deletion")
+            self._cleanup_unused_tags(list(tag_ids))
 
         logger.info("Pipeline deleted successfully", extra={"pipeline_id": pipeline_id})
 
