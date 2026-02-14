@@ -1,6 +1,6 @@
 import { Button } from '@/components/ui/button'
 import { Pipeline } from '@/repo/pipelines'
-import { ReactFlow, Background, Controls, Node, Edge, Position } from '@xyflow/react'
+import { ReactFlow, Background, Controls, Node, Edge, Position, ReactFlowProvider, useReactFlow } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import { Plus } from 'lucide-react'
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react'
@@ -180,7 +180,84 @@ export function PipelineFlowTab({
   }, [pipeline, activeHighlight])
 
   return (
-    <div className="flex h-[500px] flex-col rounded-lg border bg-background">
+    <ReactFlowProvider>
+      <FlowWithFitView
+        nodes={nodes}
+        edges={edges}
+        nodeTypes={nodeTypes}
+        onNodeClick={onNodeClick}
+        theme={theme}
+        pipeline={pipeline}
+        existingDestinationIds={existingDestinationIds}
+        openAddDest={openAddDest}
+        setOpenAddDest={setOpenAddDest}
+        drawerOpen={drawerOpen}
+        setDrawerOpen={setDrawerOpen}
+        selectedDestId={selectedDestId}
+        activeHighlightTable={activeHighlightTable}
+      />
+    </ReactFlowProvider>
+  )
+}
+
+interface FlowWithFitViewProps {
+  nodes: Node<PipelineNodeData>[]
+  edges: Edge[]
+  nodeTypes: any
+  onNodeClick: (event: React.MouseEvent, node: Node<PipelineNodeData>) => void
+  theme: string | undefined
+  pipeline: Pipeline
+  existingDestinationIds: Set<number>
+  openAddDest: boolean
+  setOpenAddDest: (open: boolean) => void
+  drawerOpen: boolean
+  setDrawerOpen: (open: boolean) => void
+  selectedDestId: number | null
+  activeHighlightTable: string | undefined
+}
+
+function FlowWithFitView({
+  nodes,
+  edges,
+  nodeTypes,
+  onNodeClick,
+  theme,
+  pipeline,
+  existingDestinationIds,
+  openAddDest,
+  setOpenAddDest,
+  drawerOpen,
+  setDrawerOpen,
+  selectedDestId,
+  activeHighlightTable,
+}: FlowWithFitViewProps) {
+  const { fitView } = useReactFlow()
+  const containerRef = useRef<HTMLDivElement>(null)
+
+  // Fit view when tab becomes visible
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            setTimeout(() => {
+              fitView({ padding: 0.3, duration: 400 })
+            }, 100)
+          }
+        })
+      },
+      { threshold: 0.1 }
+    )
+
+    if (containerRef.current) {
+      observer.observe(containerRef.current)
+    }
+
+    return () => observer.disconnect()
+  }, [fitView])
+
+  return (
+    <div ref={containerRef} className="flex h-[500px] flex-col rounded-lg border bg-background">
       {/* Toolbar */}
       <div className="flex items-center justify-between border-b px-4 py-3">
         <div className="text-sm text-muted-foreground">
