@@ -679,7 +679,6 @@ export function BackfillDataTab({
       ) : jobsData?.items.length === 0 ? (
         <div className='flex h-64 flex-col items-center justify-center rounded-lg border'>
           <p className='mb-4 text-muted-foreground'>No backfill jobs yet</p>
-          <CreateBackfillDialog pipelineId={pipelineId} sourceId={sourceId} />
         </div>
       ) : (
         <>

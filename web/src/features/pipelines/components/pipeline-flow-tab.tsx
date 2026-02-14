@@ -31,7 +31,7 @@ export function PipelineFlowTab({
   openDrawerDestinationId,
   onClearHighlight,
 }: PipelineFlowTabProps) {
-  const { theme } = useTheme()
+  const { resolvedTheme } = useTheme()
   const [openAddDest, setOpenAddDest] = useState(false)
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [selectedDestId, setSelectedDestId] = useState<number | null>(null)
@@ -186,7 +186,7 @@ export function PipelineFlowTab({
         edges={edges}
         nodeTypes={nodeTypes}
         onNodeClick={onNodeClick}
-        theme={theme}
+        resolvedTheme={resolvedTheme}
         pipeline={pipeline}
         existingDestinationIds={existingDestinationIds}
         openAddDest={openAddDest}
@@ -205,7 +205,7 @@ interface FlowWithFitViewProps {
   edges: Edge[]
   nodeTypes: any
   onNodeClick: (event: React.MouseEvent, node: Node<PipelineNodeData>) => void
-  theme: string | undefined
+  resolvedTheme: 'dark' | 'light'
   pipeline: Pipeline
   existingDestinationIds: Set<number>
   openAddDest: boolean
@@ -221,7 +221,7 @@ function FlowWithFitView({
   edges,
   nodeTypes,
   onNodeClick,
-  theme,
+  resolvedTheme,
   pipeline,
   existingDestinationIds,
   openAddDest,
@@ -276,7 +276,7 @@ function FlowWithFitView({
           edges={edges}
           nodeTypes={nodeTypes} // Register custom types
           onNodeClick={onNodeClick}
-          colorMode={theme}
+          colorMode={resolvedTheme}
           fitView
           fitViewOptions={{ padding: 0.3 }}
           attributionPosition="bottom-right"
