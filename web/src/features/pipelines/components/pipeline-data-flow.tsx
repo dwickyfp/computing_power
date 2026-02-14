@@ -14,7 +14,7 @@ import {
   useReactFlow,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-import { Database, Layers } from 'lucide-react'
+import { Table2, Layers } from 'lucide-react'
 import { useTheme } from '@/context/theme-provider'
 import {
   Tooltip,
@@ -44,7 +44,7 @@ const CustomNode = ({ data }: { data: any }) => {
 
           <div className='relative flex items-center gap-3 px-4 py-3.5'>
             <div className='flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-blue-500/20 bg-blue-500/10'>
-              <Database className='h-4.5 w-4.5 text-blue-600 dark:text-blue-400' />
+              <Table2 className='h-4.5 w-4.5 text-blue-600 dark:text-blue-400' />
             </div>
             <TooltipProvider delayDuration={200}>
               <Tooltip>
@@ -133,7 +133,7 @@ const CustomNode = ({ data }: { data: any }) => {
           {/* Table name */}
           <div className='flex items-center gap-3'>
             <div className='flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-emerald-500/20 bg-emerald-500/10'>
-              <Database className='h-4.5 w-4.5 text-emerald-600 dark:text-emerald-400' />
+              <Table2 className='h-4.5 w-4.5 text-emerald-600 dark:text-emerald-400' />
             </div>
             <TooltipProvider delayDuration={200}>
               <Tooltip>
