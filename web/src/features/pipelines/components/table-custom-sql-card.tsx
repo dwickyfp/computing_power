@@ -455,7 +455,7 @@ export function TableCustomSqlCard({
                     Showing first 10 rows
                   </p>
                 </div>
-                <div className='max-h-[400px] overflow-auto p-0'>
+                <div className='p-0'>
                   {isPreviewLoading ? (
                     <div className='flex h-[200px] items-center justify-center'>
                       <div className='flex flex-col items-center gap-2'>
@@ -474,8 +474,8 @@ export function TableCustomSqlCard({
                       </p>
                     </div>
                   ) : previewData && previewData.columns.length > 0 ? (
-                    <ScrollArea className='w-full'>
-                      <div className='w-full'>
+                    <ScrollArea className='h-[400px] w-full rounded-md border'>
+                      <div className='w-max min-w-full'>
                         <Table>
                           <TableHeader>
                             <TableRow>
@@ -504,6 +504,7 @@ export function TableCustomSqlCard({
                         </Table>
                       </div>
                       <ScrollBar orientation='horizontal' />
+                      <ScrollBar orientation='vertical' />
                     </ScrollArea>
                   ) : (
                     <div className='flex h-[100px] items-center justify-center text-sm text-muted-foreground'>
