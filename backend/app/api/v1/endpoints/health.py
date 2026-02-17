@@ -23,10 +23,11 @@ logger = get_logger(__name__)
 
 router = APIRouter()
 
-# Simple cache for health check results (3 second TTL)
+# No longer needed - worker health is read from DB (instant)
+# Simple cache for overall health check results (3 second TTL)
 _health_cache: Optional[HealthResponse] = None
 _health_cache_time: float = 0
-_health_cache_ttl: float = 3.0
+_health_cache_ttl: float = 2.0  # Reduced to 2s since checks are now fast
 
 
 @router.get(
@@ -85,22 +86,20 @@ async def health_check() -> HealthResponse:
             return False
 
     async def check_worker() -> tuple[bool, dict]:
+        """Check worker health via HTTP endpoint (like compute)."""
         if not settings.worker_enabled:
             return False, {}
         try:
-            from app.infrastructure.worker_client import get_worker_client
-            client = get_worker_client()
-            status = await asyncio.wait_for(
-                asyncio.to_thread(client.get_worker_health),
-                timeout=3.0  # Increased for 3 inspector calls (ping, active, reserved)
-            )
-            return status.get("healthy", False), status
-        except asyncio.TimeoutError:
-            logger.warning(f"Worker health check timed out")
-            return False, {}
+            url = f"{settings.worker_health_url}/health"
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                response = await client.get(url)
+                if response.status_code == 200:
+                    data = response.json()
+                    return data.get("healthy", False), data
+                return False, {"error": f"HTTP {response.status_code}"}
         except Exception as e:
-            logger.warning(f"Worker health check failed: {e}")
-            return False, {}
+            logger.debug(f"Worker health check failed: {e}")
+            return False, {"error": str(e)}
 
     # Run all checks in parallel
     db_healthy, redis_healthy, compute_healthy, (worker_healthy, worker_stats) = await asyncio.gather(
@@ -158,11 +157,20 @@ async def worker_status() -> Dict[str, Any]:
         }
 
     try:
-        from app.infrastructure.worker_client import get_worker_client
-
-        client = get_worker_client()
-        health = await asyncio.to_thread(client.get_worker_health)
-        return {"enabled": True, **health}
+        url = f"{settings.worker_health_url}/health"
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            response = await client.get(url)
+            if response.status_code == 200:
+                data = response.json()
+                return {"enabled": True, **data}
+            return {
+                "enabled": True,
+                "healthy": False,
+                "active_workers": 0,
+                "active_tasks": 0,
+                "reserved_tasks": 0,
+                "error": f"HTTP {response.status_code}",
+            }
     except Exception as e:
         logger.warning(f"Worker status check failed: {e}")
         return {

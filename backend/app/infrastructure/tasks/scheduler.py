@@ -181,6 +181,54 @@ class BackgroundScheduler:
                 "Error running notification sender task", extra={"error": str(e)}
             )
 
+    def _run_worker_health_check(self) -> None:
+        """
+        Check Celery worker health and save to database.
+        Runs every 10 seconds to keep status fresh.
+        """
+        try:
+            from app.core.database import db_manager
+            from app.domain.repositories.worker_health_repo import WorkerHealthRepository
+            from app.infrastructure.worker_client import get_worker_client
+
+            session_factory = db_manager.session_factory
+            db = session_factory()
+            try:
+                # Check if worker is enabled
+                if not self.settings.worker_enabled:
+                    repo = WorkerHealthRepository(db)
+                    repo.upsert_status(
+                        healthy=False,
+                        active_workers=0,
+                        active_tasks=0,
+                        reserved_tasks=0,
+                        error_message="Worker disabled in configuration"
+                    )
+                    return
+
+                # Get worker health status
+                client = get_worker_client()
+                status = client.get_worker_health()
+                
+                # Save to database
+                repo = WorkerHealthRepository(db)
+                repo.upsert_status(
+                    healthy=status.get("healthy", False),
+                    active_workers=status.get("active_workers", 0),
+                    active_tasks=status.get("active_tasks", 0),
+                    reserved_tasks=status.get("reserved_tasks", 0),
+                    error_message=status.get("error"),
+                    extra_data=status
+                )
+                
+                self._record_job_metric("worker_health_check")
+            finally:
+                db.close()
+        except Exception as e:
+            logger.error(
+                "Error running worker health check task", extra={"error": str(e)}
+            )
+
     def _run_pipeline_refresh_check(self) -> None:
         """
         Synchronous wrapper for pipeline refresh check task.
@@ -333,6 +381,19 @@ class BackgroundScheduler:
             max_instances=1,
             coalesce=True,
         )
+
+        # Schedule Worker Health Check (every 10 seconds)
+        if self.settings.worker_enabled:
+            self.scheduler.add_job(
+                self._run_worker_health_check,
+                trigger=IntervalTrigger(seconds=10),
+                id="worker_health_check",
+                name="Worker Health Check",
+                replace_existing=True,
+                max_instances=1,
+                coalesce=True,
+            )
+            logger.info("Worker health check scheduled (every 10 seconds)")
 
         logger.info(
             "Replication, Credit, Table Refresh, and System Metrics monitoring scheduled"

@@ -65,6 +65,14 @@ class WorkerSettings(BaseSettings):
         default="1GB", description="DuckDB memory limit per query"
     )
 
+    # Health API Server
+    server_host: str = Field(
+        default="0.0.0.0", description="Health API server host"
+    )
+    server_port: int = Field(
+        default=8002, ge=1024, le=65535, description="Health API server port"
+    )
+
     # Logging
     log_level: str = Field(default="INFO", description="Logging level")
     log_format: str = Field(default="json", description="Log format: json or text")

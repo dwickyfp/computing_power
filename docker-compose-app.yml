@@ -153,6 +153,8 @@ services:
     image: rosetta-etl:1.0.0-worker
     container_name: rosetta-worker
     restart: unless-stopped
+    ports:
+      - "8002:8002"
     environment:
       # Database (Config DB - same as backend)
       DATABASE_URL: ${DATABASE_URL:-postgresql://postgres:postgres@rosetta-postgres:5432/postgres}
@@ -166,6 +168,9 @@ services:
       WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-4}
       WORKER_TASK_SOFT_TIME_LIMIT: 120
       WORKER_TASK_HARD_TIME_LIMIT: 180
+      # Health Server
+      SERVER_HOST: 0.0.0.0
+      SERVER_PORT: 8002
       # Logging
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
     depends_on:
@@ -176,7 +181,7 @@ services:
     networks:
       - rosetta-network
     healthcheck:
-      test: ["CMD", "celery", "-A", "main", "inspect", "ping", "--timeout", "5"]
+      test: ["CMD", "curl", "-f", "http://localhost:8002/health"]
       interval: 30s
       timeout: 10s
       retries: 3

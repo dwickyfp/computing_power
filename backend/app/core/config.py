@@ -157,6 +157,9 @@ class Settings(BaseSettings):
     compute_node_url: str = Field(
         default="http://0.0.0.0:8001", description="URL for the compute node API"
     )
+    worker_health_url: str = Field(
+        default="http://0.0.0.0:8002", description="URL for the worker health API"
+    )
 
     @validator("app_env")
     def validate_environment(cls, v: str) -> str:
