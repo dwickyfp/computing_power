@@ -9,3 +9,6 @@ uv run main.py
 # Run Web
 
 pnpm dev
+
+# Start Worker
+./start.sh
