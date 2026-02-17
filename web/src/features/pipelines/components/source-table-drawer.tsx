@@ -107,6 +107,16 @@ export function SourceTableDrawer({
         selectedDestinationId
       )
       setTables(data)
+
+      // Keep activeTable in sync with freshly loaded data
+      if (activeTable && activeSyncConfigId) {
+        const refreshed = data.find(
+          (t) => t.table_name === activeTable.table_name
+        )
+        if (refreshed) {
+          setActiveTable(refreshed)
+        }
+      }
     } catch (error) {
       console.error('Failed to load tables:', error)
     } finally {
@@ -340,6 +350,7 @@ export function SourceTableDrawer({
           destinationId={currentDestination?.destination.id}
           sourceName={pipeline.source?.name}
           sourceId={pipeline.source_id}
+          pipelineId={pipeline.id}
         />
       )}
 

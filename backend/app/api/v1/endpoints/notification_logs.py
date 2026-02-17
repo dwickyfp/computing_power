@@ -24,7 +24,7 @@ router = APIRouter(prefix="/notifications", tags=["Notifications"])
     summary="List notifications",
     description="Get all active notifications, optionally filtered by read status.",
 )
-async def list_notifications(
+def list_notifications(
     skip: int = 0,
     limit: int = 100,
     is_read: Optional[bool] = Query(None, description="Filter by read status"),
@@ -50,7 +50,7 @@ async def list_notifications(
     status_code=status.HTTP_200_OK,
     summary="Mark notification as read",
 )
-async def mark_notification_as_read(
+def mark_notification_as_read(
     notification_id: int,
     db: Session = Depends(get_db),
 ):
@@ -81,7 +81,7 @@ async def mark_notification_as_read(
     status_code=status.HTTP_200_OK,
     summary="Mark all notifications as read",
 )
-async def mark_all_notifications_as_read(
+def mark_all_notifications_as_read(
     db: Session = Depends(get_db),
 ):
     """
@@ -104,7 +104,7 @@ async def mark_all_notifications_as_read(
     status_code=status.HTTP_200_OK,
     summary="Clear all notifications",
 )
-async def clear_all_notifications(
+def clear_all_notifications(
     db: Session = Depends(get_db),
 ):
     """
@@ -128,7 +128,7 @@ async def clear_all_notifications(
     status_code=status.HTTP_200_OK,
     summary="Delete notification",
 )
-async def delete_notification(
+def delete_notification(
     notification_id: int,
     db: Session = Depends(get_db),
 ):

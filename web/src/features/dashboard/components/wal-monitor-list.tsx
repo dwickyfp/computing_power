@@ -52,7 +52,7 @@ export function WALMonitorList() {
         <DashboardPanel
             title="WAL Replication Monitor"
             description="Real-time status of replication slots"
-            className="h-full min-h-[300px]"
+            className="h-full"
             noPadding
         >
             <ScrollArea className='h-full'>

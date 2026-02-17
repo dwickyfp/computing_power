@@ -27,7 +27,7 @@ router = APIRouter()
     summary="Create backfill job",
     description="Create a new backfill job for a pipeline to backfill historical data",
 )
-async def create_backfill_job(
+def create_backfill_job(
     pipeline_id: int = Path(..., description="Pipeline ID", gt=0),
     job_data: BackfillJobCreate = ...,
     service: BackfillService = Depends(get_backfill_service),
@@ -53,7 +53,7 @@ async def create_backfill_job(
     summary="List backfill jobs",
     description="Get all backfill jobs for a specific pipeline",
 )
-async def list_backfill_jobs(
+def list_backfill_jobs(
     pipeline_id: int = Path(..., description="Pipeline ID", gt=0),
     skip: int = Query(0, ge=0, description="Number of records to skip"),
     limit: int = Query(100, ge=1, le=1000, description="Maximum number of records"),
@@ -81,7 +81,7 @@ async def list_backfill_jobs(
     summary="Get backfill job",
     description="Get details of a specific backfill job",
 )
-async def get_backfill_job(
+def get_backfill_job(
     job_id: int = Path(..., description="Backfill job ID", gt=0),
     service: BackfillService = Depends(get_backfill_service),
 ) -> BackfillJobResponse:
@@ -105,7 +105,7 @@ async def get_backfill_job(
     summary="Cancel backfill job",
     description="Cancel a pending or executing backfill job",
 )
-async def cancel_backfill_job(
+def cancel_backfill_job(
     job_id: int = Path(..., description="Backfill job ID", gt=0),
     service: BackfillService = Depends(get_backfill_service),
 ) -> BackfillJobResponse:
@@ -128,7 +128,7 @@ async def cancel_backfill_job(
     summary="Delete backfill job",
     description="Delete a completed, failed, or cancelled backfill job",
 )
-async def delete_backfill_job(
+def delete_backfill_job(
     job_id: int = Path(..., description="Backfill job ID", gt=0),
     service: BackfillService = Depends(get_backfill_service),
 ) -> None:

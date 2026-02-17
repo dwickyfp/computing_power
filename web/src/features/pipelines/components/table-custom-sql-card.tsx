@@ -6,11 +6,19 @@ import 'ace-builds/src-noconflict/ext-language_tools'
 import 'ace-builds/src-noconflict/mode-mysql'
 import 'ace-builds/src-noconflict/theme-tomorrow'
 import 'ace-builds/src-noconflict/theme-tomorrow_night'
-import { Loader2, Save, X } from 'lucide-react'
+import { Loader2, Save, X, Eye, AlertCircle, Hash, Type, Calendar, ToggleLeft } from 'lucide-react'
 import AceEditor from 'react-ace'
+import { toast } from 'sonner'
+import { Checkbox } from '@/components/ui/checkbox'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { createSqlCompleter } from '@/features/pipelines/utils/sql-completer'
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover'
+import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area'
 
 interface TableCustomSqlCardProps {
   table: (TableWithSyncInfo & { sync_config?: TableSyncConfig }) | null
@@ -22,6 +30,14 @@ interface TableCustomSqlCardProps {
   destinationId?: number | null
   sourceName?: string
   sourceId?: number | null
+  pipelineId: number
+}
+
+interface PreviewData {
+  columns: string[]
+  column_types: string[]
+  data: Record<string, any>[]
+  error?: string
 }
 
 export function TableCustomSqlCard({
@@ -34,6 +50,7 @@ export function TableCustomSqlCard({
   destinationId,
   sourceName,
   sourceId,
+  pipelineId,
 }: TableCustomSqlCardProps) {
   const [sql, setSql] = useState('')
   const [editorInstance, setEditorInstance] = useState<any>(null)
@@ -42,6 +59,11 @@ export function TableCustomSqlCard({
   const [isDarkMode, setIsDarkMode] = useState(
     document.documentElement.classList.contains('dark')
   )
+
+  // Preview State
+  const [isPreviewLoading, setIsPreviewLoading] = useState(false)
+  const [previewData, setPreviewData] = useState<PreviewData | null>(null)
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false)
 
   // Watch for theme changes
   useEffect(() => {
@@ -67,6 +89,15 @@ export function TableCustomSqlCard({
       setSql(`SELECT * FROM ${table?.table_name || 'table_name'}`)
     }
   }, [open, table?.table_name, table?.sync_config?.custom_sql])
+
+  // Clear preview data when card opens/reopens or when filter_sql changes
+  // so stale results are never shown after a filter change
+  const currentFilterSql = (table as any)?.sync_config?.filter_sql ?? table?.sync_configs?.[0]?.filter_sql
+  useEffect(() => {
+    if (!open) return
+    setPreviewData(null)
+    setIsPreviewOpen(false)
+  }, [open, currentFilterSql])
 
   // --- Configure Completer with Lazy Fetching ---
   useEffect(() => {
@@ -180,12 +211,143 @@ export function TableCustomSqlCard({
     e.preventDefault()
     e.stopPropagation()
 
+    if (!validateSql(sql)) return
+
     setIsSaving(true)
     try {
       await onSave(sql)
     } finally {
       setIsSaving(false)
     }
+  }
+
+  // Validate SQL for forbidden operations
+  const validateSql = (sqlText: string): boolean => {
+    if (!sqlText) return true
+
+    // List of forbidden keywords for custom SQL
+    // We strictly block destructive operations
+    const forbiddenKeywords = [
+      'UPDATE', 'DELETE', 'TRUNCATE', 'DROP', 'ALTER', 'GRANT', 'REVOKE',
+      'INSERT', 'CREATE', 'REPLACE', 'MERGE'
+    ]
+
+    for (const keyword of forbiddenKeywords) {
+      // Check for whole word match, case insensitive
+      const regex = new RegExp(`\\b${keyword}\\b`, 'i')
+      if (regex.test(sqlText)) {
+        toast.error(`Operation '${keyword}' is not allowed. Only SELECT statements are permitted.`)
+        return false
+      }
+    }
+    return true
+  }
+
+  const handlePreview = async () => {
+    if (!pipelineId || !sourceId || !destinationId || !table) return
+    if (!validateSql(sql)) return
+
+    setIsPreviewLoading(true)
+    setPreviewData(null)
+    setIsPreviewOpen(true) // Open popover immediately to show loading state
+
+    // Get filter_sql from sync_config (single or first of array)
+    const syncConfig = (table as any)?.sync_config ?? table?.sync_configs?.[0]
+    const filterSql = syncConfig?.filter_sql || null
+
+    try {
+      const res = await api.post(`/pipelines/${pipelineId}/preview`, {
+        sql: sql || undefined,
+        source_id: sourceId,
+        destination_id: destinationId,
+        table_name: table.table_name,
+        filter_sql: filterSql,
+      })
+
+      // Check if async worker mode (returns task_id)
+      if (res.data?.task_id) {
+        await pollPreviewTask(res.data.task_id)
+      } else {
+        // Sync mode - result returned directly
+        setPreviewData(res.data)
+        setIsPreviewLoading(false)
+      }
+    } catch (e: any) {
+      setPreviewData({
+        columns: [],
+        column_types: [],
+        data: [],
+        error: e.response?.data?.detail || e.message || 'Failed to preview data',
+      })
+      setIsPreviewLoading(false)
+    }
+  }
+
+  /**
+   * Poll a preview task until it completes or fails.
+   * Uses exponential backoff: 500ms -> 1s -> 2s -> ... (max 5s)
+   */
+  const pollPreviewTask = async (taskId: string) => {
+    let delay = 500
+    const maxDelay = 5000
+    const maxAttempts = 60 // ~2 minutes max
+
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      try {
+        const res = await api.get(`/pipelines/${pipelineId}/preview/${taskId}`)
+        const { state, status, result, error } = res.data
+
+        if (state === 'SUCCESS' && result) {
+          setPreviewData(result)
+          setIsPreviewLoading(false)
+          return
+        }
+
+        if (state === 'FAILURE') {
+          setPreviewData({
+            columns: [],
+            column_types: [],
+            data: [],
+            error: error || 'Preview task failed',
+          })
+          setIsPreviewLoading(false)
+          return
+        }
+
+        if (state === 'REVOKED') {
+          setPreviewData({
+            columns: [],
+            column_types: [],
+            data: [],
+            error: 'Preview task was cancelled',
+          })
+          setIsPreviewLoading(false)
+          return
+        }
+
+        // Still running (PENDING, STARTED, PROGRESS) — wait and retry
+        await new Promise((resolve) => setTimeout(resolve, delay))
+        delay = Math.min(delay * 1.5, maxDelay)
+      } catch (e: any) {
+        setPreviewData({
+          columns: [],
+          column_types: [],
+          data: [],
+          error: e.response?.data?.detail || 'Failed to poll preview status',
+        })
+        setIsPreviewLoading(false)
+        return
+      }
+    }
+
+    // Timed out
+    setPreviewData({
+      columns: [],
+      column_types: [],
+      data: [],
+      error: 'Preview timed out. Please try again.',
+    })
+    setIsPreviewLoading(false)
   }
 
   const handleClose = (e: React.MouseEvent) => {
@@ -348,6 +510,122 @@ export function TableCustomSqlCard({
           )}
         </div>
         <div className='flex gap-2'>
+          <Popover open={isPreviewOpen} onOpenChange={setIsPreviewOpen}>
+            <PopoverTrigger asChild>
+              <Button
+                variant='outline'
+                size='sm'
+                onClick={handlePreview}
+                disabled={isPreviewLoading || isSaving}
+              >
+                {isPreviewLoading ? (
+                  <Loader2 className='mr-2 h-4 w-4 animate-spin' />
+                ) : (
+                  <Eye className='mr-2 h-4 w-4' />
+                )}
+                Preview Data
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent
+              className='w-[800px] border-none p-0 shadow-2xl z-[200]'
+              side='top'
+              align='end'
+            >
+              <div className='flex flex-col overflow-hidden rounded-lg border bg-popover'>
+                <div className='border-b bg-muted/30 px-4 py-3'>
+                  <h3 className='font-semibold'>Preview Results</h3>
+                  <p className='text-xs text-muted-foreground'>
+                    Showing first 10 rows
+                  </p>
+                </div>
+                <div className='p-0'>
+                  {isPreviewLoading ? (
+                    <div className='flex h-[200px] items-center justify-center'>
+                      <div className='flex flex-col items-center gap-2'>
+                        <Loader2 className='h-8 w-8 animate-spin text-primary' />
+                        <span className='text-sm text-muted-foreground'>
+                          Executing query...
+                        </span>
+                      </div>
+                    </div>
+                  ) : previewData?.error ? (
+                    <div className='flex h-[200px] flex-col items-center justify-center p-6 text-center'>
+                      <AlertCircle className='mb-2 h-8 w-8 text-destructive' />
+                      <p className='font-medium text-destructive'> Preview Failed</p>
+                      <p className='mt-1 text-sm text-muted-foreground'>
+                        {previewData.error}
+                      </p>
+                    </div>
+                  ) : previewData && previewData.columns.length > 0 ? (
+                    <ScrollArea className='h-[400px] w-full rounded-md border'>
+                      <div className='w-max min-w-full'>
+                        <table className='w-full caption-bottom text-sm'>
+                          <thead className='sticky top-0 z-10 bg-muted [&_tr]:border-b border-border/50'>
+                            <tr className='border-b border-border/50 transition-colors duration-150 hover:bg-muted/50 data-[state=selected]:bg-muted'>
+                              {previewData.columns.map((col, idx) => {
+                                const type = previewData.column_types?.[idx] || 'text'
+                                let Icon = Type
+                                if (type === 'number') Icon = Hash
+                                if (type === 'date') Icon = Calendar
+                                if (type === 'boolean') Icon = ToggleLeft
+
+                                return (
+                                  <th key={col} className='h-10 px-3 text-left align-middle font-medium text-xs uppercase tracking-wider text-muted-foreground [&>[role=checkbox]]:translate-y-[2px] whitespace-nowrap'>
+                                    <div className='flex items-center gap-1.5'>
+                                      <Icon className='h-3.5 w-3.5 text-muted-foreground/70' />
+                                      {col}
+                                    </div>
+                                  </th>
+                                )
+                              })}
+                            </tr>
+                          </thead>
+                          <tbody className='[&_tr:last-child]:border-0'>
+                            {previewData.data.map((row, i) => (
+                              <tr key={i} className='border-b border-border/50 transition-colors duration-150 hover:bg-muted/50 data-[state=selected]:bg-muted'>
+                                {previewData.columns.map((col, idx) => {
+                                  const val = row[col]
+                                  const type = previewData.column_types?.[idx] || 'text'
+                                  const isBool = type === 'boolean'
+
+                                  return (
+                                    <td key={col} className='px-3 py-2.5 align-middle whitespace-nowrap [&>[role=checkbox]]:translate-y-[2px]'>
+                                      {isBool ? (
+                                        val === null ? (
+                                          <span className='italic text-muted-foreground'>Null</span>
+                                        ) : (
+                                          <div className='flex items-center'>
+                                            <Checkbox checked={!!val} disabled className='data-[state=checked]:bg-primary data-[state=checked]:text-primary-foreground opacity-100 disabled:cursor-default disabled:opacity-100' />
+                                          </div>
+                                        )
+                                      ) : (
+                                        val?.toString() ?? (
+                                          <span className='italic text-muted-foreground'>
+                                            null
+                                          </span>
+                                        )
+                                      )}
+                                    </td>
+                                  )
+                                })}
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                      <ScrollBar orientation='horizontal' />
+                      <ScrollBar orientation='vertical' />
+                    </ScrollArea>
+                  ) : (
+                    <div className='flex h-[100px] items-center justify-center text-sm text-muted-foreground'>
+                      No data returned
+                    </div>
+                  )}
+                </div>
+              </div>
+            </PopoverContent>
+          </Popover>
+
           <Button variant='outline' size='sm' onClick={handleClose}>
             Cancel
           </Button>

@@ -450,6 +450,29 @@ COMMENT ON INDEX idx_pipelines_destination_composite IS
 'Composite index for pipeline-destination joins in source details page';
 
 
+-- Migration 008: Add worker_health_status table
+-- This table stores periodic worker health check results
+
+CREATE TABLE IF NOT EXISTS worker_health_status (
+    id SERIAL PRIMARY KEY,
+    healthy BOOLEAN NOT NULL DEFAULT FALSE,
+    active_workers INTEGER NOT NULL DEFAULT 0,
+    active_tasks INTEGER NOT NULL DEFAULT 0,
+    reserved_tasks INTEGER NOT NULL DEFAULT 0,
+    error_message TEXT,
+    extra_data JSONB,
+    last_check_at TIMESTAMP NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+-- Create index on last_check_at for quick lookups of latest status
+CREATE INDEX IF NOT EXISTS idx_worker_health_status_last_check_at ON worker_health_status(last_check_at DESC);
+
+-- Add comment
+COMMENT ON TABLE worker_health_status IS 'Stores periodic Celery worker health check results updated every 10 seconds by background task';
+
+
 
 
 

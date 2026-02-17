@@ -176,6 +176,111 @@ class WALMonitorService:
         # Run synchronous function in thread pool to not block event loop
         return await asyncio.to_thread(_check_wal_sync)
 
+    def check_wal_status_sync(self, source: Source) -> dict:
+        """
+        Synchronous version of check_wal_status.
+
+        Connects to the source database and queries current WAL status.
+        Use this from sync contexts (e.g., sync FastAPI endpoints).
+        """
+        connection = None
+        try:
+            connection = psycopg2.connect(
+                host=source.pg_host,
+                port=source.pg_port,
+                database=source.pg_database,
+                user=source.pg_username,
+                password=decrypt_value(source.pg_password) if source.pg_password else None,
+                connect_timeout=self.settings.wal_monitor_timeout_seconds,
+            )
+            with connection.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
+                cursor.execute(self.WAL_STATUS_QUERY, {"slot_name": source.publication_name})
+                result = cursor.fetchone()
+                if not result:
+                    raise WALMonitorError(source_id=source.id, message="Query returned no results")
+                return {
+                    "wal_lsn": result["wal_lsn"],
+                    "wal_position": result["wal_position"],
+                    "replication_lag": result["replication_lag"],
+                    "total_wal_size": result["total_wal_size"],
+                }
+        except WALMonitorError:
+            raise
+        except psycopg2.Error as e:
+            raise WALMonitorError(source_id=source.id, message=f"Query error: {str(e)}") from e
+        except Exception as e:
+            raise WALMonitorError(source_id=source.id, message=f"Unexpected error: {str(e)}") from e
+        finally:
+            if connection:
+                connection.close()
+
+    def monitor_source_sync(self, source: Source, db: Session) -> None:
+        """
+        Synchronous version of monitor_source.
+
+        Use this from sync contexts (e.g., sync FastAPI endpoints).
+        """
+        import time
+
+        max_retries = self.settings.wal_monitor_max_retries
+        retry_count = 0
+
+        while retry_count <= max_retries:
+            try:
+                wal_status = self.check_wal_status_sync(source)
+                now = datetime.now(timezone(timedelta(hours=7)))
+
+                wal_monitor_repo = WALMonitorRepository(db)
+                wal_monitor_repo.upsert_monitor(
+                    source_id=source.id,
+                    wal_lsn=wal_status["wal_lsn"],
+                    wal_position=wal_status["wal_position"],
+                    last_wal_received=now,
+                    last_transaction_time=now,
+                    replication_slot_name=source.publication_name,
+                    replication_lag_bytes=wal_status["replication_lag"],
+                    total_wal_size=wal_status["total_wal_size"],
+                    status="ACTIVE",
+                    error_message=None,
+                )
+                db.commit()
+
+                logger.info(
+                    "WAL monitor status updated (sync)",
+                    extra={
+                        "source_id": source.id,
+                        "wal_lsn": wal_status["wal_lsn"],
+                        "lag_bytes": wal_status["replication_lag"],
+                        "total_size": wal_status["total_wal_size"],
+                    },
+                )
+                return
+
+            except WALMonitorError as e:
+                retry_count += 1
+                if retry_count <= max_retries:
+                    logger.warning(
+                        f"WAL monitor retry {retry_count}/{max_retries}",
+                        extra={"source_id": source.id, "error": str(e)},
+                    )
+                    time.sleep(2**retry_count)
+                else:
+                    logger.error(
+                        "WAL monitor failed after all retries",
+                        extra={"source_id": source.id, "retries": retry_count},
+                    )
+                    try:
+                        wal_monitor_repo = WALMonitorRepository(db)
+                        wal_monitor_repo.upsert_monitor(
+                            source_id=source.id,
+                            status="ERROR",
+                            error_message=str(e),
+                            last_wal_received=datetime.now(timezone(timedelta(hours=7))),
+                        )
+                        db.commit()
+                    except Exception as db_error:
+                        logger.error(f"Failed to update error status: {db_error}")
+
     async def monitor_source(self, source: Source, db: Session) -> None:
         """
         Monitor WAL status for a single source with retry logic.

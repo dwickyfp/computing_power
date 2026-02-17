@@ -29,7 +29,7 @@ router = APIRouter(prefix="/configuration", tags=["Configuration"])
     summary="Get WAL monitoring thresholds",
     description="Retrieve current WAL monitoring threshold configuration",
 )
-async def get_wal_thresholds(
+def get_wal_thresholds(
     db: Session = Depends(get_db),
 ):
     """
@@ -68,7 +68,7 @@ async def get_wal_thresholds(
     summary="Update WAL monitoring thresholds",
     description="Update WAL monitoring threshold configuration",
 )
-async def update_wal_thresholds(
+def update_wal_thresholds(
     thresholds: WALThresholds,
     db: Session = Depends(get_db),
 ):
@@ -127,7 +127,7 @@ async def update_wal_thresholds(
     summary="Test notification webhook and/or Telegram",
     description="Send a test notification to the configured webhook URL and/or Telegram",
 )
-async def test_notification_webhook(
+def test_notification_webhook(
     request: TestNotificationRequest = None,
     db: Session = Depends(get_db),
 ):
@@ -153,12 +153,12 @@ async def test_notification_webhook(
         # Send to webhook if provided
         webhook_success = False
         if webhook_url:
-            webhook_success = await service.send_test_notification(webhook_url=webhook_url)
+            webhook_success = service.send_test_notification(webhook_url=webhook_url)
         
         # Send to Telegram if provided
         telegram_success = False
         if telegram_bot_token and telegram_chat_id:
-            telegram_success = await service.send_test_telegram_notification(
+            telegram_success = service.send_test_telegram_notification(
                 bot_token=telegram_bot_token,
                 chat_id=telegram_chat_id
             )
@@ -196,7 +196,7 @@ async def test_notification_webhook(
     summary="Get batch configuration",
     description="Retrieve current CDC batch processing configuration",
 )
-async def get_batch_configuration(
+def get_batch_configuration(
     db: Session = Depends(get_db),
 ):
     """
@@ -224,7 +224,7 @@ async def get_batch_configuration(
     summary="Update batch configuration",
     description="Update CDC batch processing configuration",
 )
-async def update_batch_configuration(
+def update_batch_configuration(
     config: BatchConfiguration,
     db: Session = Depends(get_db),
 ):

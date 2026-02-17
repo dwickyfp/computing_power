@@ -33,7 +33,7 @@ router = APIRouter()
     summary="Create source",
     description="Create a new PostgreSQL data source configuration",
 )
-async def create_source(
+def create_source(
     source_data: SourceCreate, service: SourceService = Depends(get_source_service)
 ) -> SourceResponse:
     """
@@ -46,7 +46,7 @@ async def create_source(
     Returns:
         Created source
     """
-    source = await service.create_source(source_data)
+    source = service.create_source(source_data)
     return SourceResponse.from_orm(source)
 
 
@@ -56,7 +56,7 @@ async def create_source(
     summary="List sources",
     description="Get a list of all configured data sources",
 )
-async def list_sources(
+def list_sources(
     skip: int = Query(0, ge=0, description="Number of items to skip"),
     limit: int = Query(
         100, ge=1, le=1000, description="Maximum number of items to return"
@@ -84,7 +84,7 @@ async def list_sources(
     summary="Get source",
     description="Get a specific source by ID",
 )
-async def get_source(
+def get_source(
     source_id: int, service: SourceService = Depends(get_source_service)
 ) -> SourceResponse:
     """
@@ -107,7 +107,7 @@ async def get_source(
     summary="Get source details",
     description="Get detailed source information including WAL monitor metrics and table metadata",
 )
-async def get_source_details(
+def get_source_details(
     source_id: int,
     force_refresh: bool = Query(
         False,
@@ -135,7 +135,7 @@ async def get_source_details(
     summary="Update source",
     description="Update an existing source configuration",
 )
-async def update_source(
+def update_source(
     source_id: int,
     source_data: SourceUpdate,
     service: SourceService = Depends(get_source_service),
@@ -161,7 +161,7 @@ async def update_source(
     summary="Delete source",
     description="Delete a source configuration",
 )
-async def delete_source(
+def delete_source(
     source_id: int, service: SourceService = Depends(get_source_service)
 ) -> None:
     """
@@ -180,7 +180,7 @@ async def delete_source(
     summary="Test connection",
     description="Test connection with provided configuration",
 )
-async def test_connection(
+def test_connection(
     config: SourceConnectionTest,
     service: SourceService = Depends(get_source_service),
 ) -> bool:
@@ -203,7 +203,7 @@ async def test_connection(
     summary="Get table schema by version",
     description="Get schema columns for a specific table version with evolution info",
 )
-async def get_table_schema(
+def get_table_schema(
     table_id: int,
     version: int = Query(..., ge=1, description="Schema version"),
     service: SourceService = Depends(get_source_service),
@@ -232,7 +232,7 @@ class TableRegisterRequest(BaseModel):
     summary="Register table to publication",
     description="Add a table to the source's publication",
 )
-async def register_table(
+def register_table(
     source_id: int,
     request: TableRegisterRequest,
     service: SourceService = Depends(get_source_service),
@@ -254,7 +254,7 @@ async def register_table(
     summary="Unregister/Drop table from publication",
     description="Remove a table from the source's publication",
 )
-async def unregister_table(
+def unregister_table(
     source_id: int,
     table_name: str,
     service: SourceService = Depends(get_source_service),
@@ -268,7 +268,7 @@ async def unregister_table(
     summary="Refresh source metadata",
     description="Manually checks and updates table list and status",
 )
-async def refresh_source(
+def refresh_source(
     source_id: int,
     service: SourceService = Depends(get_source_service),
 ) -> None:
@@ -280,7 +280,7 @@ async def refresh_source(
     status_code=status.HTTP_201_CREATED,
     summary="Create Publication",
 )
-async def create_publication(
+def create_publication(
     source_id: int,
     request: PublicationCreateRequest,
     service: SourceService = Depends(get_source_service),
@@ -293,7 +293,7 @@ async def create_publication(
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Drop Publication",
 )
-async def drop_publication(
+def drop_publication(
     source_id: int,
     service: SourceService = Depends(get_source_service),
 ) -> None:
@@ -305,7 +305,7 @@ async def drop_publication(
     status_code=status.HTTP_201_CREATED,
     summary="Create Replication Slot",
 )
-async def create_replication_slot(
+def create_replication_slot(
     source_id: int,
     service: SourceService = Depends(get_source_service),
 ) -> None:
@@ -317,7 +317,7 @@ async def create_replication_slot(
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Drop Replication Slot",
 )
-async def drop_replication_slot(
+def drop_replication_slot(
     source_id: int,
     service: SourceService = Depends(get_source_service),
 ) -> None:
@@ -329,7 +329,7 @@ async def drop_replication_slot(
     response_model=List[str],
     summary="Fetch all available tables from source",
 )
-async def fetch_available_tables(
+def fetch_available_tables(
     source_id: int,
     refresh: bool = Query(False, description="Force refresh from source database"),
     service: SourceService = Depends(get_source_service),
@@ -354,7 +354,7 @@ async def fetch_available_tables(
     status_code=status.HTTP_201_CREATED,
     summary="Create a new preset",
 )
-async def create_preset(
+def create_preset(
     source_id: int,
     preset_data: PresetCreate,
     service: PresetService = Depends(get_preset_service),
@@ -369,7 +369,7 @@ async def create_preset(
     response_model=List[PresetResponse],
     summary="Get all presets for a source",
 )
-async def get_presets(
+def get_presets(
     source_id: int,
     service: PresetService = Depends(get_preset_service),
 ) -> List[PresetResponse]:
@@ -383,7 +383,7 @@ async def get_presets(
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Delete a preset",
 )
-async def delete_preset(
+def delete_preset(
     preset_id: int,
     service: PresetService = Depends(get_preset_service),
 ) -> None:
@@ -396,7 +396,7 @@ async def delete_preset(
     response_model=PresetResponse,
     summary="Update a preset",
 )
-async def update_preset(
+def update_preset(
     preset_id: int,
     preset_data: PresetCreate,
     service: PresetService = Depends(get_preset_service),
@@ -413,7 +413,7 @@ async def update_preset(
     summary="Duplicate source",
     description="Duplicate an existing source configuration",
 )
-async def duplicate_source(
+def duplicate_source(
     source_id: int,
     service: SourceService = Depends(get_source_service),
 ) -> SourceResponse:
@@ -427,7 +427,7 @@ async def duplicate_source(
     Returns:
         New source
     """
-    source = await service.duplicate_source(source_id)
+    source = service.duplicate_source(source_id)
     return SourceResponse.from_orm(source)
 
 
@@ -437,7 +437,7 @@ async def duplicate_source(
     summary="Get source schema",
     description="Get tables and columns from the source database",
 )
-async def get_source_schema(
+def get_source_schema(
     source_id: int,
     table: str | None = Query(None, description="Optional table name to filter"),
     scope: str = Query("all", description="Scope of schema fetch (all, tables)"),

@@ -76,7 +76,7 @@ class CreditMonitorService:
         
         logger.info(f"Pruned {result.rowcount} old credit monitoring records")
 
-    async def refresh_credits_for_destination(self, session: Session, destination: Destination) -> None:
+    def refresh_credits_for_destination(self, session: Session, destination: Destination) -> None:
         """
         Fetch credits from Snowflake and save to database.
         """

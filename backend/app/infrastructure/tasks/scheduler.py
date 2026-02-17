@@ -172,14 +172,77 @@ class BackgroundScheduler:
             db = session_factory()
             try:
                 service = NotificationService(db)
-                # Run async method in sync wrapper
-                asyncio.run(service.process_pending_notifications())
+                service.process_pending_notifications()
                 self._record_job_metric("notification_sender")
             finally:
                 db.close()
         except Exception as e:
             logger.error(
                 "Error running notification sender task", extra={"error": str(e)}
+            )
+
+    def _run_worker_health_check(self) -> None:
+        """
+        Check Celery worker health via HTTP and save to database.
+        Runs every 10 seconds to keep status fresh.
+        Uses the worker's own health API endpoint (like compute node).
+        """
+        try:
+            import httpx
+            from app.core.database import db_manager
+            from app.domain.repositories.worker_health_repo import WorkerHealthRepository
+
+            session_factory = db_manager.session_factory
+            db = session_factory()
+            try:
+                # Check if worker is enabled
+                if not self.settings.worker_enabled:
+                    return
+
+                # Check worker health via HTTP (worker's FastAPI health endpoint)
+                url = f"{self.settings.worker_health_url}/health"
+                with httpx.Client(timeout=5.0) as client:
+                    response = client.get(url)
+                
+                repo = WorkerHealthRepository(db)
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    repo.upsert_status(
+                        healthy=data.get("healthy", False),
+                        active_workers=data.get("active_workers", 0),
+                        active_tasks=data.get("active_tasks", 0),
+                        reserved_tasks=data.get("reserved_tasks", 0),
+                        error_message=data.get("error"),
+                        extra_data=data,
+                    )
+                else:
+                    repo.upsert_status(
+                        healthy=False,
+                        error_message=f"HTTP {response.status_code}",
+                    )
+                
+                self._record_job_metric("worker_health_check")
+            finally:
+                db.close()
+        except Exception as e:
+            # If HTTP call fails, save unhealthy status
+            try:
+                from app.core.database import db_manager
+                from app.domain.repositories.worker_health_repo import WorkerHealthRepository
+                db2 = db_manager.session_factory()
+                try:
+                    repo = WorkerHealthRepository(db2)
+                    repo.upsert_status(
+                        healthy=False,
+                        error_message=str(e),
+                    )
+                finally:
+                    db2.close()
+            except Exception:
+                pass
+            logger.error(
+                "Error running worker health check task", extra={"error": str(e)}
             )
 
     def _run_pipeline_refresh_check(self) -> None:
@@ -334,6 +397,19 @@ class BackgroundScheduler:
             max_instances=1,
             coalesce=True,
         )
+
+        # Schedule Worker Health Check (every 10 seconds)
+        if self.settings.worker_enabled:
+            self.scheduler.add_job(
+                self._run_worker_health_check,
+                trigger=IntervalTrigger(seconds=10),
+                id="worker_health_check",
+                name="Worker Health Check",
+                replace_existing=True,
+                max_instances=1,
+                coalesce=True,
+            )
+            logger.info("Worker health check scheduled (every 10 seconds)")
 
         logger.info(
             "Replication, Credit, Table Refresh, and System Metrics monitoring scheduled"

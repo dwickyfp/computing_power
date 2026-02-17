@@ -22,8 +22,11 @@ dependencies = [
     "structlog==24.1.0",
     "deepdiff==8.6.1",
     "snowflake-connector-python>=4.0.0",
-    "redis>=7.1.0",
+    "redis>=5.0.0",
+    "celery[redis]>=5.4.0,<6.0.0",
     "psutil>=7.2.2",
+    "duckdb>=1.4.4",
+    "pyarrow>=23.0.0",
 ]
 
 [dependency-groups]

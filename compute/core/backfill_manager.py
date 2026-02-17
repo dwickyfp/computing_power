@@ -339,7 +339,7 @@ class BackfillManager:
 
         # Initialize DuckDB connection (in-memory)
         conn = duckdb.connect(":memory:")
-        conn.execute("SET memory_limit='4GB'")
+        conn.execute("SET memory_limit='8GB'")
         conn.execute("SET threads=4")
         conn.execute("SET enable_progress_bar=false")
 

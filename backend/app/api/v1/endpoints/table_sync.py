@@ -32,7 +32,7 @@ router = APIRouter()
     summary="Get tables for sync",
     description="Get list of available tables with their sync configuration",
 )
-async def get_destination_tables(
+def get_destination_tables(
     pipeline_id: int = Path(..., description="Pipeline ID"),
     pipeline_destination_id: int = Path(..., description="Pipeline Destination ID"),
     service: PipelineService = Depends(get_pipeline_service),
@@ -58,7 +58,7 @@ async def get_destination_tables(
     summary="Create or update table sync",
     description="Create or update table synchronization configuration",
 )
-async def save_table_sync(
+def save_table_sync(
     pipeline_id: int = Path(..., description="Pipeline ID"),
     pipeline_destination_id: int = Path(..., description="Pipeline Destination ID"),
     table_sync: TableSyncCreateRequest = ...,
@@ -86,7 +86,7 @@ async def save_table_sync(
     summary="Bulk save table syncs",
     description="Create or update multiple table synchronization configurations",
 )
-async def save_table_syncs_bulk(
+def save_table_syncs_bulk(
     pipeline_id: int = Path(..., description="Pipeline ID"),
     pipeline_destination_id: int = Path(..., description="Pipeline Destination ID"),
     bulk_request: TableSyncBulkRequest = ...,
@@ -113,7 +113,7 @@ async def save_table_syncs_bulk(
     summary="Remove table from sync",
     description="Remove a table from synchronization",
 )
-async def delete_table_sync(
+def delete_table_sync(
     pipeline_id: int = Path(..., description="Pipeline ID"),
     pipeline_destination_id: int = Path(..., description="Pipeline Destination ID"),
     table_name: str = Path(..., description="Table name to remove"),
@@ -137,7 +137,7 @@ async def delete_table_sync(
     summary="Remove specific table sync by ID",
     description="Remove a specific table synchronization configuration by its ID",
 )
-async def delete_table_sync_by_id(
+def delete_table_sync_by_id(
     pipeline_id: int = Path(..., description="Pipeline ID"),
     pipeline_destination_id: int = Path(..., description="Pipeline Destination ID"),
     sync_config_id: int = Path(..., description="Sync configuration ID to remove"),
@@ -164,7 +164,7 @@ async def delete_table_sync_by_id(
     summary="Initialize Snowflake objects",
     description="Create landing table, stream, task, and target table in Snowflake",
 )
-async def init_snowflake_table(
+def init_snowflake_table(
     pipeline_id: int = Path(..., description="Pipeline ID"),
     pipeline_destination_id: int = Path(..., description="Pipeline Destination ID"),
     table_name: str = Path(..., description="Table name to initialize"),
@@ -195,7 +195,7 @@ async def init_snowflake_table(
     summary="Validate target table name",
     description="Validate target table name against destination database",
 )
-async def validate_target_table(
+def validate_target_table(
     pipeline_id: int = Path(..., description="Pipeline ID"),
     pipeline_destination_id: int = Path(..., description="Pipeline Destination ID"),
     validation_request: TableValidationRequest = ...,

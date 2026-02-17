@@ -4,16 +4,21 @@ Pipeline endpoints.
 Provides REST API for managing ETL pipelines.
 """
 
-from typing import List
+from typing import List, Optional
 
 from fastapi import APIRouter, Depends, Query, status, BackgroundTasks
 
 from app.api.deps import get_pipeline_service
+from app.core.config import get_settings
 from app.domain.schemas.pipeline import (
     PipelineCreate,
     PipelineResponse,
     PipelineStatusUpdate,
     PipelineUpdate,
+)
+from app.domain.schemas.pipeline_preview import (
+    PipelinePreviewRequest,
+    PipelinePreviewResponse,
 )
 from app.domain.services.pipeline import PipelineService
 
@@ -27,7 +32,7 @@ router = APIRouter()
     summary="Create pipeline",
     description="Create a new ETL pipeline connecting a source to a destination",
 )
-async def create_pipeline(
+def create_pipeline(
     pipeline_data: PipelineCreate,
     background_tasks: BackgroundTasks,
     service: PipelineService = Depends(get_pipeline_service),
@@ -54,7 +59,7 @@ async def create_pipeline(
     summary="Add destination to pipeline",
     description="Add a destination to an existing pipeline",
 )
-async def add_pipeline_destination(
+def add_pipeline_destination(
     pipeline_id: int,
     destination_id: int = Query(..., description="Destination ID to add"),
     background_tasks: BackgroundTasks = None,
@@ -88,7 +93,7 @@ async def add_pipeline_destination(
     summary="Remove destination from pipeline",
     description="Remove a destination from an existing pipeline",
 )
-async def remove_pipeline_destination(
+def remove_pipeline_destination(
     pipeline_id: int,
     destination_id: int,
     service: PipelineService = Depends(get_pipeline_service),
@@ -113,7 +118,7 @@ async def remove_pipeline_destination(
     summary="List pipelines",
     description="Get a list of all configured pipelines",
 )
-async def list_pipelines(
+def list_pipelines(
     skip: int = Query(0, ge=0, description="Number of items to skip"),
     limit: int = Query(
         100, ge=1, le=1000, description="Maximum number of items to return"
@@ -141,7 +146,7 @@ async def list_pipelines(
     summary="Get pipeline",
     description="Get a specific pipeline by ID with full details",
 )
-async def get_pipeline(
+def get_pipeline(
     pipeline_id: int, service: PipelineService = Depends(get_pipeline_service)
 ) -> PipelineResponse:
     """
@@ -164,7 +169,7 @@ async def get_pipeline(
     summary="Update pipeline",
     description="Update an existing pipeline configuration",
 )
-async def update_pipeline(
+def update_pipeline(
     pipeline_id: int,
     pipeline_data: PipelineUpdate,
     service: PipelineService = Depends(get_pipeline_service),
@@ -190,7 +195,7 @@ async def update_pipeline(
     summary="Delete pipeline",
     description="Delete a pipeline configuration",
 )
-async def delete_pipeline(
+def delete_pipeline(
     pipeline_id: int, service: PipelineService = Depends(get_pipeline_service)
 ) -> None:
     """
@@ -209,7 +214,7 @@ async def delete_pipeline(
     summary="Start pipeline",
     description="Start a paused pipeline",
 )
-async def start_pipeline(
+def start_pipeline(
     pipeline_id: int, service: PipelineService = Depends(get_pipeline_service)
 ) -> PipelineResponse:
     """
@@ -232,7 +237,7 @@ async def start_pipeline(
     summary="Pause pipeline",
     description="Pause a running pipeline",
 )
-async def pause_pipeline(
+def pause_pipeline(
     pipeline_id: int, service: PipelineService = Depends(get_pipeline_service)
 ) -> PipelineResponse:
     """
@@ -255,7 +260,7 @@ async def pause_pipeline(
     summary="Refresh pipeline",
     description="Trigger a pipeline refresh",
 )
-async def refresh_pipeline(
+def refresh_pipeline(
     pipeline_id: int, service: PipelineService = Depends(get_pipeline_service)
 ) -> PipelineResponse:
     """
@@ -278,7 +283,7 @@ async def refresh_pipeline(
     summary="Get pipeline data flow stats",
     description="Get data flow statistics for a pipeline, including daily counts and recent activity",
 )
-async def get_pipeline_stats(
+def get_pipeline_stats(
     pipeline_id: int,
     days: int = Query(7, ge=1, le=30, description="Number of days to look back"),
     service: PipelineService = Depends(get_pipeline_service),
@@ -295,3 +300,106 @@ async def get_pipeline_stats(
         List of statistics per table
     """
     return service.get_pipeline_data_flow_stats(pipeline_id, days)
+
+
+@router.post(
+    "/{pipeline_id}/preview",
+    summary="Preview custom SQL",
+    description="Preview result of custom SQL query with live data. "
+    "When worker is enabled, returns a task_id for polling.",
+)
+def preview_pipeline_sql(
+    pipeline_id: int,
+    request: PipelinePreviewRequest,
+    service: PipelineService = Depends(get_pipeline_service),
+):
+    """
+    Preview custom SQL.
+
+    If WORKER_ENABLED=true, dispatches to Celery worker and returns
+    { task_id, state: "PENDING" } for async polling.
+    Otherwise, executes synchronously and returns preview data.
+
+    Args:
+        pipeline_id: Pipeline identifier
+        request: Preview request
+        service: Pipeline service instance
+
+    Returns:
+        PipelinePreviewResponse (sync) or { task_id, state } (async)
+    """
+    settings = get_settings()
+
+    if settings.worker_enabled:
+        from app.infrastructure.worker_client import get_worker_client
+
+        client = get_worker_client()
+        task_id = client.submit_preview_task(
+            sql=request.sql,
+            source_id=request.source_id,
+            destination_id=request.destination_id,
+            table_name=request.table_name,
+            filter_sql=request.filter_sql,
+        )
+        return {"task_id": task_id, "state": "PENDING", "status": "queued"}
+
+    # Sync mode (original behavior)
+    return service.preview_custom_sql(request)
+
+
+@router.get(
+    "/{pipeline_id}/preview/{task_id}",
+    summary="Poll preview task status",
+    description="Check the status of an async preview task.",
+)
+def poll_preview_task(
+    pipeline_id: int,
+    task_id: str,
+):
+    """
+    Poll the status of a preview task submitted to the worker.
+
+    States:
+    - PENDING: Task is queued
+    - STARTED/PROGRESS: Task is running
+    - SUCCESS: Task completed, result included
+    - FAILURE: Task failed, error included
+    - REVOKED: Task was cancelled
+
+    Args:
+        pipeline_id: Pipeline identifier
+        task_id: Celery task ID
+
+    Returns:
+        Task status dict with state and optional result/error
+    """
+    from app.infrastructure.worker_client import get_worker_client
+
+    client = get_worker_client()
+    return client.get_task_status(task_id)
+
+
+@router.delete(
+    "/{pipeline_id}/preview/{task_id}",
+    summary="Cancel preview task",
+    description="Cancel a running or pending preview task.",
+)
+def cancel_preview_task(
+    pipeline_id: int,
+    task_id: str,
+):
+    """
+    Cancel a preview task.
+
+    Args:
+        pipeline_id: Pipeline identifier
+        task_id: Celery task ID
+
+    Returns:
+        Success status
+    """
+    from app.infrastructure.worker_client import get_worker_client
+
+    client = get_worker_client()
+    cancelled = client.cancel_task(task_id)
+    return {"task_id": task_id, "cancelled": cancelled}
