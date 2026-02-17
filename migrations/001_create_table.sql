@@ -70,6 +70,7 @@ CREATE TABLE IF NOT EXISTS pipelines_destination_table_sync(
     table_name_target VARCHAR(255) NOT NULL,
     custom_sql TEXT NULL,
     filter_sql TEXT NULL,
+    primary_key_column_target TEXT NULL,
     is_exists_table_landing BOOLEAN DEFAULT FALSE, -- table landing in snowflake
     is_exists_stream BOOLEAN DEFAULT FALSE, -- stream in snowflake
     is_exists_task BOOLEAN DEFAULT FALSE, -- task in snowflake
@@ -79,6 +80,9 @@ CREATE TABLE IF NOT EXISTS pipelines_destination_table_sync(
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- Alter table pipelines_destination_table_sync add primary_key_column_target if not exists
+ALTER TABLE pipelines_destination_table_sync ADD COLUMN IF NOT EXISTS primary_key_column_target TEXT NULL; 
 
 -- Table 4: Pipeline Metadata (contains runtime information)
 CREATE TABLE IF NOT EXISTS pipeline_metadata (

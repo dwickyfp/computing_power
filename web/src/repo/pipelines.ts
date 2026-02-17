@@ -159,6 +159,7 @@ export interface TableSyncConfig {
   table_name_target: string
   custom_sql: string | null
   filter_sql: string | null
+  primary_key_column_target: string | null
 
   is_exists_table_landing: boolean
   is_exists_stream: boolean
@@ -187,6 +188,7 @@ export interface TableSyncRequest {
   table_name_target?: string | null
   custom_sql?: string | null
   filter_sql?: string | null
+  primary_key_column_target?: string | null
   enabled?: boolean
 }
 

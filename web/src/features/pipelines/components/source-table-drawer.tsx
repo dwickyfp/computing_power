@@ -16,6 +16,7 @@ import { TableCustomSqlCard } from '@/features/pipelines/components/table-custom
 import { TableFilterCard } from '@/features/pipelines/components/table-filter-card'
 import { TableTargetNameCard } from '@/features/pipelines/components/table-target-name-card'
 import { TagDrawer } from '@/features/pipelines/components/tag-drawer'
+import { PrimaryKeyDrawer } from '@/features/pipelines/components/primary-key-drawer'
 
 interface SourceTableDrawerProps {
   open: boolean
@@ -52,7 +53,7 @@ export function SourceTableDrawer({
     null
   )
   const [activeMode, setActiveMode] = useState<
-    'filter' | 'custom' | 'target' | 'tags' | null
+    'filter' | 'custom' | 'target' | 'tags' | 'primary-keys' | null
   >(null)
 
   // Get destinations
@@ -200,6 +201,28 @@ export function SourceTableDrawer({
     )
   }
 
+  const handleSavePrimaryKeys = async (keys: string) => {
+    if (!activeTable || !selectedDestinationId || !activeSyncConfigId) return
+    const currentConfig = getActiveSyncConfig()
+
+    try {
+      await tableSyncRepo.saveTableSync(pipeline.id, selectedDestinationId, {
+        id: activeSyncConfigId,
+        table_name: activeTable.table_name,
+        primary_key_column_target: keys.length > 0 ? keys : null,
+        custom_sql: currentConfig?.custom_sql,
+        filter_sql: currentConfig?.filter_sql,
+        table_name_target: currentConfig?.table_name_target,
+      })
+      // Don't close drawer here, let the component handle it
+      // Wait 300ms for DB commit before reloading
+      await new Promise(resolve => setTimeout(resolve, 300))
+      loadTables()
+    } catch (error) {
+      throw error // Re-throw so drawer can handle error display
+    }
+  }
+
   const getCurrentDestination = () => {
     return destinations.find((d) => d.id === selectedDestinationId)
   }
@@ -303,6 +326,11 @@ export function SourceTableDrawer({
                       setActiveSyncConfigId(id)
                       setActiveMode('tags')
                     }}
+                    onEditPrimaryKeys={(table, id) => {
+                      setActiveTable(table)
+                      setActiveSyncConfigId(id)
+                      setActiveMode('primary-keys')
+                    }}
                   />
                 )}
               </div>
@@ -375,6 +403,16 @@ export function SourceTableDrawer({
           tableName={activeTable.table_name}
           open={true}
           onClose={() => setActiveMode(null)}
+        />
+      )}
+
+      {open && activeMode === 'primary-keys' && activeSyncConfig && activeTable && (
+        <PrimaryKeyDrawer
+          syncConfig={activeSyncConfig}
+          columns={activeTable.columns}
+          open={true}
+          onClose={() => setActiveMode(null)}
+          onSave={handleSavePrimaryKeys}
         />
       )}
     </>

@@ -1,5 +1,5 @@
 import { Button } from '@/components/ui/button'
-import { Filter, Code2, AlertCircle, Database, Trash2, Hash } from 'lucide-react'
+import { Filter, Code2, AlertCircle, Database, Trash2, Hash, Key } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import {
     Popover,
@@ -16,6 +16,7 @@ interface TableBranchNodeProps {
     onEditCustomSql: () => void
     onEditTargetName: () => void
     onEditTags: () => void
+    onEditPrimaryKeys: () => void
     onDelete: () => void
     isDeleting: boolean
 }
@@ -26,6 +27,7 @@ export function TableBranchNode({
     onEditCustomSql,
     onEditTargetName,
     onEditTags,
+    onEditPrimaryKeys,
     onDelete,
     isDeleting
 }: TableBranchNodeProps) {
@@ -37,6 +39,7 @@ export function TableBranchNode({
     })
 
     const currentTags = tableSyncTagsData?.tags || []
+    const hasCustomKeys = syncConfig.primary_key_column_target && syncConfig.primary_key_column_target.trim().length > 0
 
     return (
         <div className={cn(
@@ -98,6 +101,22 @@ export function TableBranchNode({
                     >
                         <Code2 className="h-3 w-3" />
                         {syncConfig.custom_sql && "Active"}
+                    </Button>
+
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={(e) => { e.stopPropagation(); onEditPrimaryKeys() }}
+                        className={cn(
+                            "h-6 px-1.5 text-[10px] gap-1",
+                            hasCustomKeys
+                                ? "text-amber-600 bg-amber-50 hover:bg-amber-100 hover:text-amber-700 dark:text-amber-400 dark:bg-amber-950/50 dark:hover:bg-amber-950/70 dark:hover:text-amber-300"
+                                : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                        )}
+                        title="Primary Key Configuration"
+                    >
+                        <Key className="h-3 w-3" />
+                        {hasCustomKeys && "Custom"}
                     </Button>
 
                     <Button

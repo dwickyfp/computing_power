@@ -169,6 +169,9 @@ class PipelineDestinationTableSyncResponse(BaseSchema):
     table_name_target: str = Field(..., description="Target table name")
     custom_sql: str | None = Field(default=None, description="Custom SQL")
     filter_sql: str | None = Field(default=None, description="Filter SQL")
+    primary_key_column_target: str | None = Field(
+        default=None, description="Custom primary key columns (semicolon-separated)"
+    )
 
     # Snowflake Status Flags
     is_exists_table_landing: bool = Field(
@@ -210,6 +213,10 @@ class TableSyncCreateRequest(BaseSchema):
     filter_sql: str | None = Field(
         default=None,
         description="Filter conditions in format: column:operator:value;column2:operator:value2",
+    )
+    primary_key_column_target: str | None = Field(
+        default=None,
+        description="Custom primary key columns for PostgreSQL merge (semicolon-separated: key1;key2)",
     )
     enabled: bool = Field(default=True, description="Whether sync is enabled")
 
