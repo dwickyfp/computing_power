@@ -1910,23 +1910,101 @@ class PipelineService:
                     "Only SELECT statements are permitted."
                 )
 
+    @staticmethod
+    def _filter_sql_to_where_clause(filter_sql: str) -> str:
+        """
+        Convert a filter_sql string (v2 JSON or legacy semicolon format) to a SQL WHERE clause.
+        
+        Supports:
+        - V2 JSON: {"version": 2, "groups": [...], "interLogic": [...]}
+        - Legacy: "column operator value;column2 operator value2"
+        
+        Returns:
+            SQL WHERE clause string (without the WHERE keyword), or empty string.
+        """
+        if not filter_sql or not filter_sql.strip():
+            return ""
+
+        def condition_to_sql(c: dict) -> str:
+            column = c.get("column", "")
+            if not column:
+                return ""
+            op = c.get("operator", "").upper()
+            value = c.get("value", "")
+            value2 = c.get("value2", "")
+
+            if op in ("IS NULL", "IS NOT NULL"):
+                return f"{column} {op}"
+            if not value and op != "IN":
+                return ""
+            if op == "BETWEEN" and value2:
+                return f"{column} BETWEEN '{value}' AND '{value2}'"
+            if op in ("LIKE", "ILIKE"):
+                return f"{column} {op} '%{value}%'"
+            if op == "IN":
+                vals = [v.strip() for v in value.split(",") if v.strip()]
+                if not vals:
+                    return ""
+                quoted = ", ".join(v if re.match(r"^-?\d+(\.\d+)?$", v) else f"'{v}'" for v in vals)
+                return f"{column} IN ({quoted})"
+            is_num = bool(re.match(r"^-?\d+(\.\d+)?$", value))
+            quoted_value = value if is_num else f"'{value}'"
+            return f"{column} {c.get('operator', '=')} {quoted_value}"
+
+        # Try V2 JSON format
+        try:
+            parsed = json.loads(filter_sql)
+            if isinstance(parsed, dict) and parsed.get("version") == 2:
+                group_sqls = []
+                for g in parsed.get("groups", []):
+                    parts = [condition_to_sql(c) for c in g.get("conditions", [])]
+                    parts = [p for p in parts if p]
+                    if not parts:
+                        continue
+                    intra = g.get("intraLogic", "AND")
+                    group_sqls.append(
+                        f"({f' {intra} '.join(parts)})" if len(parts) > 1 else parts[0]
+                    )
+                if not group_sqls:
+                    return ""
+                result = group_sqls[0]
+                inter_logic = parsed.get("interLogic", [])
+                for i in range(1, len(group_sqls)):
+                    logic = inter_logic[i - 1] if i - 1 < len(inter_logic) else "AND"
+                    result += f" {logic} {group_sqls[i]}"
+                return result
+        except (json.JSONDecodeError, TypeError):
+            pass
+
+        # Legacy semicolon format
+        parts = [s.strip() for s in filter_sql.split(";") if s.strip()]
+        return " AND ".join(parts)
+
     def preview_custom_sql(self, request: PipelinePreviewRequest) -> PipelinePreviewResponse:
         """
-        Preview custom SQL execution using DuckDB with attached Postgres databases.
+        Preview table data using DuckDB with attached Postgres databases.
+        
+        When custom SQL is provided, it is rewritten to qualify table names.
+        When no custom SQL is provided, a direct query is built from the table name.
+        If filter_sql is present, it is added as a WHERE clause.
         
         Args:
-            request: Preview request containing SQL and context
+            request: Preview request containing table context and optional SQL/filter
             
         Returns:
             Preview response with data and columns
         """
         try:
-            # 0. Validate SQL
-            self._validate_custom_sql(request.sql)
+            # 0. Validate SQL (only if custom SQL is provided)
+            if request.sql:
+                self._validate_custom_sql(request.sql)
 
             # 1. Calculate Hash for Caching
-            # Include source/dest IDs in hash to prevent cross-context collisions
-            input_string = f"{request.sql}{request.source_id}{request.destination_id}{request.table_name}"
+            # Include source/dest IDs, filter_sql in hash to prevent cross-context collisions
+            # and to invalidate cache when filter changes
+            filter_str = request.filter_sql or ""
+            sql_str = request.sql or ""
+            input_string = f"{sql_str}{request.source_id}{request.destination_id}{request.table_name}{filter_str}"
             query_hash = hashlib.sha256(input_string.encode()).hexdigest()
             cache_key = f"preview:{query_hash}"
             
@@ -1948,16 +2026,12 @@ class PipelineService:
                 
             # 3. Get Source and Destination Configuration
             try:
-                # Source Details
-                # Use repository directly to get Source model with password (SourceService.get_source_details returns schema without password)
-                # Actually PipelineRepository.get_by_source_id returns list of pipelines. We want SourceRepository.
                 from app.domain.repositories.source import SourceRepository
                 source_repo = SourceRepository(self.db)
                 source_details = source_repo.get_by_id(request.source_id)
                 if not source_details:
                     raise ValueError(f"Source {request.source_id} not found")
                 
-                # Destination Details
                 from app.domain.models.destination import Destination
                 dest = self.db.query(Destination).filter(Destination.id == request.destination_id).first()
                 if not dest:
@@ -1975,36 +2049,48 @@ class PipelineService:
                 logger.error(f"Failed to retrieve connection details: {e}")
                 return PipelinePreviewResponse(columns=[], data=[], error=f"Failed to retrieve connection details: {str(e)}")
 
-            # 4. Rewrite SQL
-            # Create regex pattern for table name to replace with source_alias.table_name
-            # We need to qualify the table name if it's not already qualified
-            
-            # Sanitized alias names (must match what we us in ATTACH below)
-            # Standard pattern: pg_src_<source_name> and pg_<dest_name>
+            # 4. Build Query
+            # Sanitized alias names (must match what we use in ATTACH below)
             sanitized_source_name = re.sub(r"[^a-zA-Z0-9_]", "_", source_details.name.lower())
             source_prefix = f"pg_src_{sanitized_source_name}"
             
             sanitized_dest_name = re.sub(r"[^a-zA-Z0-9_]", "_", dest.name.lower())
             dest_prefix = f"pg_{sanitized_dest_name}"
-            
-            # Replace table_name with source_prefix.table_name
-            # Only if it's the raw table name (not already qualified)
-            # Simple regex for now - can be improved for complex queries
-            rewritten_sql = request.sql
-            
-            # Regex to find table_name as a whole word, not preceded by a dot
-            # escape table name for regex
-            table_pattern = re.compile(rf'(?<![\.\w"]){re.escape(request.table_name)}(?![\.\w"])', re.IGNORECASE)
-            
-            # Replace with qualified name
-            rewritten_sql = table_pattern.sub(f"{source_prefix}.{request.table_name}", rewritten_sql)
-            
-            # Remove trailing semicolon if present
-            rewritten_sql = rewritten_sql.strip().rstrip(';')
-            
-            # Add LIMIT if not present? Or wrap in CTE and LIMIT.
-            # Wrapping in CTE is safer to ensure we only get N rows without parsing the whole query
-            final_query = f"WITH result_sql AS ({rewritten_sql}) SELECT * FROM result_sql LIMIT 10"
+
+            # Parse filter_sql into WHERE clause
+            where_clause = ""
+            if request.filter_sql:
+                parsed_filter = self._filter_sql_to_where_clause(request.filter_sql)
+                if parsed_filter:
+                    where_clause = f" WHERE {parsed_filter}"
+
+            if request.sql:
+                # Custom SQL mode:
+                # Flow: 1) Select raw data with filter + limit  2) Apply custom SQL on that data
+                #
+                # Build a CTE "filtered_source" from the raw table with filter & limit,
+                # then rewrite the custom SQL to reference that CTE instead of the raw table.
+                filtered_source_cte = (
+                    f"SELECT * FROM {source_prefix}.{request.table_name}{where_clause} LIMIT 100"
+                )
+
+                # Rewrite table references in custom SQL to point to the filtered CTE
+                rewritten_sql = request.sql
+                table_pattern = re.compile(
+                    rf'(?<![\.\w"]){re.escape(request.table_name)}(?![\.\w"])',
+                    re.IGNORECASE
+                )
+                rewritten_sql = table_pattern.sub("filtered_source", rewritten_sql)
+                rewritten_sql = rewritten_sql.strip().rstrip(';')
+
+                final_query = (
+                    f"WITH filtered_source AS ({filtered_source_cte}) "
+                    f"SELECT * FROM ({rewritten_sql}) AS result_sql LIMIT 100"
+                )
+            else:
+                # Direct table query mode: SELECT * FROM pg_src_<source_name>.<table_name>
+                base_query = f"SELECT * FROM {source_prefix}.{request.table_name}"
+                final_query = f"{base_query}{where_clause} LIMIT 100"
             
             logger.info(f"Executing preview query: {final_query}")
             

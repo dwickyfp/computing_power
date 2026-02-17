@@ -90,6 +90,15 @@ export function TableCustomSqlCard({
     }
   }, [open, table?.table_name, table?.sync_config?.custom_sql])
 
+  // Clear preview data when card opens/reopens or when filter_sql changes
+  // so stale results are never shown after a filter change
+  const currentFilterSql = (table as any)?.sync_config?.filter_sql ?? table?.sync_configs?.[0]?.filter_sql
+  useEffect(() => {
+    if (!open) return
+    setPreviewData(null)
+    setIsPreviewOpen(false)
+  }, [open, currentFilterSql])
+
   // --- Configure Completer with Lazy Fetching ---
   useEffect(() => {
     if (!table || !editorInstance) return
@@ -242,12 +251,17 @@ export function TableCustomSqlCard({
     setPreviewData(null)
     setIsPreviewOpen(true) // Open popover immediately to show loading state
 
+    // Get filter_sql from sync_config (single or first of array)
+    const syncConfig = (table as any)?.sync_config ?? table?.sync_configs?.[0]
+    const filterSql = syncConfig?.filter_sql || null
+
     try {
       const res = await api.post(`/pipelines/${pipelineId}/preview`, {
-        sql,
+        sql: sql || undefined,
         source_id: sourceId,
         destination_id: destinationId,
         table_name: table.table_name,
+        filter_sql: filterSql,
       })
       setPreviewData(res.data)
     } catch (e: any) {
