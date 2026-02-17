@@ -86,19 +86,40 @@ async def health_check() -> HealthResponse:
             return False
 
     async def check_worker() -> tuple[bool, dict]:
-        """Check worker health via HTTP endpoint (like compute)."""
+        """Check worker health from database (populated by scheduler every 10s)."""
         if not settings.worker_enabled:
             return False, {}
         try:
-            url = f"{settings.worker_health_url}/health"
-            async with httpx.AsyncClient(timeout=5.0) as client:
-                response = await client.get(url)
-                if response.status_code == 200:
-                    data = response.json()
-                    return data.get("healthy", False), data
-                return False, {"error": f"HTTP {response.status_code}"}
+            from app.domain.repositories.worker_health_repo import WorkerHealthRepository
+            from app.core.database import db_manager
+            
+            def _read_worker_health():
+                db = db_manager.session_factory()
+                try:
+                    repo = WorkerHealthRepository(db)
+                    latest = repo.get_latest()
+                    if not latest:
+                        return False, {"error": "No worker health data yet"}
+                    
+                    # Check staleness (>30s = stale)
+                    from datetime import datetime, timezone, timedelta
+                    now = datetime.now(timezone(timedelta(hours=7)))
+                    last_check = latest.last_check_at
+                    # Ensure both are timezone-aware for comparison
+                    if last_check.tzinfo is None:
+                        last_check = last_check.replace(tzinfo=timezone(timedelta(hours=7)))
+                    age = (now - last_check).total_seconds()
+                    
+                    if age > 30:
+                        return False, {"error": f"Stale ({age:.0f}s ago)"}
+                    
+                    return latest.healthy, {}
+                finally:
+                    db.close()
+            
+            return await asyncio.to_thread(_read_worker_health)
         except Exception as e:
-            logger.debug(f"Worker health check failed: {e}")
+            logger.debug(f"Worker health DB read failed: {e}")
             return False, {"error": str(e)}
 
     # Run all checks in parallel
@@ -157,20 +178,52 @@ async def worker_status() -> Dict[str, Any]:
         }
 
     try:
-        url = f"{settings.worker_health_url}/health"
-        async with httpx.AsyncClient(timeout=5.0) as client:
-            response = await client.get(url)
-            if response.status_code == 200:
-                data = response.json()
-                return {"enabled": True, **data}
-            return {
-                "enabled": True,
-                "healthy": False,
-                "active_workers": 0,
-                "active_tasks": 0,
-                "reserved_tasks": 0,
-                "error": f"HTTP {response.status_code}",
-            }
+        from app.domain.repositories.worker_health_repo import WorkerHealthRepository
+        from app.core.database import db_manager
+        
+        def _read_worker_status():
+            db = db_manager.session_factory()
+            try:
+                repo = WorkerHealthRepository(db)
+                latest = repo.get_latest()
+                
+                if not latest:
+                    return {
+                        "enabled": True,
+                        "healthy": False,
+                        "active_workers": 0,
+                        "active_tasks": 0,
+                        "reserved_tasks": 0,
+                        "error": "No health data yet. Scheduler will populate shortly.",
+                    }
+                
+                # Check staleness
+                from datetime import datetime, timezone, timedelta
+                now = datetime.now(timezone(timedelta(hours=7)))
+                last_check = latest.last_check_at
+                # Ensure both are timezone-aware for comparison
+                if last_check.tzinfo is None:
+                    last_check = last_check.replace(tzinfo=timezone(timedelta(hours=7)))
+                age = (now - last_check).total_seconds()
+                
+                result = {
+                    "enabled": True,
+                    "healthy": latest.healthy if age <= 30 else False,
+                    "active_workers": latest.active_workers,
+                    "active_tasks": latest.active_tasks,
+                    "reserved_tasks": latest.reserved_tasks,
+                    "last_check": latest.last_check_at.isoformat(),
+                    "age_seconds": round(age, 1),
+                }
+                if latest.error_message:
+                    result["error"] = latest.error_message
+                if age > 30:
+                    result["error"] = f"Data stale ({age:.0f}s old)"
+                return result
+            finally:
+                db.close()
+        
+        return await asyncio.to_thread(_read_worker_status)
     except Exception as e:
         logger.warning(f"Worker status check failed: {e}")
         return {

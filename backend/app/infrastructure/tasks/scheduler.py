@@ -183,48 +183,64 @@ class BackgroundScheduler:
 
     def _run_worker_health_check(self) -> None:
         """
-        Check Celery worker health and save to database.
+        Check Celery worker health via HTTP and save to database.
         Runs every 10 seconds to keep status fresh.
+        Uses the worker's own health API endpoint (like compute node).
         """
         try:
+            import httpx
             from app.core.database import db_manager
             from app.domain.repositories.worker_health_repo import WorkerHealthRepository
-            from app.infrastructure.worker_client import get_worker_client
 
             session_factory = db_manager.session_factory
             db = session_factory()
             try:
                 # Check if worker is enabled
                 if not self.settings.worker_enabled:
-                    repo = WorkerHealthRepository(db)
-                    repo.upsert_status(
-                        healthy=False,
-                        active_workers=0,
-                        active_tasks=0,
-                        reserved_tasks=0,
-                        error_message="Worker disabled in configuration"
-                    )
                     return
 
-                # Get worker health status
-                client = get_worker_client()
-                status = client.get_worker_health()
+                # Check worker health via HTTP (worker's FastAPI health endpoint)
+                url = f"{self.settings.worker_health_url}/health"
+                with httpx.Client(timeout=5.0) as client:
+                    response = client.get(url)
                 
-                # Save to database
                 repo = WorkerHealthRepository(db)
-                repo.upsert_status(
-                    healthy=status.get("healthy", False),
-                    active_workers=status.get("active_workers", 0),
-                    active_tasks=status.get("active_tasks", 0),
-                    reserved_tasks=status.get("reserved_tasks", 0),
-                    error_message=status.get("error"),
-                    extra_data=status
-                )
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    repo.upsert_status(
+                        healthy=data.get("healthy", False),
+                        active_workers=data.get("active_workers", 0),
+                        active_tasks=data.get("active_tasks", 0),
+                        reserved_tasks=data.get("reserved_tasks", 0),
+                        error_message=data.get("error"),
+                        extra_data=data,
+                    )
+                else:
+                    repo.upsert_status(
+                        healthy=False,
+                        error_message=f"HTTP {response.status_code}",
+                    )
                 
                 self._record_job_metric("worker_health_check")
             finally:
                 db.close()
         except Exception as e:
+            # If HTTP call fails, save unhealthy status
+            try:
+                from app.core.database import db_manager
+                from app.domain.repositories.worker_health_repo import WorkerHealthRepository
+                db2 = db_manager.session_factory()
+                try:
+                    repo = WorkerHealthRepository(db2)
+                    repo.upsert_status(
+                        healthy=False,
+                        error_message=str(e),
+                    )
+                finally:
+                    db2.close()
+            except Exception:
+                pass
             logger.error(
                 "Error running worker health check task", extra={"error": str(e)}
             )
