@@ -36,7 +36,7 @@ router = APIRouter(prefix="/wal-monitor", tags=["WAL Monitor"])
         "Ensures 1 source has exactly 1 monitor record."
     ),
 )
-async def upsert_wal_monitor(
+def upsert_wal_monitor(
     source_id: int,
     data: WALMonitorCreate,
     db: Session = Depends(get_db),
@@ -94,7 +94,7 @@ async def upsert_wal_monitor(
     summary="Get WAL monitor by source",
     description="Retrieve WAL monitor record for a specific source",
 )
-async def get_wal_monitor_by_source(
+def get_wal_monitor_by_source(
     source_id: int,
     db: Session = Depends(get_db),
 ):
@@ -141,7 +141,7 @@ async def get_wal_monitor_by_source(
     summary="List all WAL monitors",
     description="Retrieve all WAL monitor records with threshold status",
 )
-async def list_wal_monitors(
+def list_wal_monitors(
     db: Session = Depends(get_db),
 ):
     """
@@ -221,7 +221,7 @@ async def list_wal_monitors(
     summary="Update WAL monitor status",
     description="Update status field of WAL monitor record",
 )
-async def update_wal_monitor_status(
+def update_wal_monitor_status(
     source_id: int,
     data: WALMonitorStatusUpdate,
     db: Session = Depends(get_db),
@@ -271,7 +271,7 @@ async def update_wal_monitor_status(
     summary="Delete WAL monitor record",
     description="Delete WAL monitor record for a source",
 )
-async def delete_wal_monitor(
+def delete_wal_monitor(
     source_id: int,
     db: Session = Depends(get_db),
 ):

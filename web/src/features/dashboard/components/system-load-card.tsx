@@ -122,7 +122,7 @@ export function SystemLoadCard() {
           <span className='text-[10px] text-muted-foreground font-medium uppercase tracking-wider'>Live</span>
         </div>
       }
-      className='overflow-hidden'
+      className='overflow-hidden h-full'
     >
       <div className='grid gap-2'>
         <MetricItem

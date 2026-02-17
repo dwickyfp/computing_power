@@ -35,7 +35,7 @@ router = APIRouter()
     summary="Create tag",
     description="Create a new tag for smart grouping",
 )
-async def create_tag(
+def create_tag(
     tag_data: TagCreate, service: TagService = Depends(get_tag_service)
 ) -> TagResponse:
     """
@@ -57,7 +57,7 @@ async def create_tag(
     summary="List tags",
     description="Get a list of all tags with pagination",
 )
-async def list_tags(
+def list_tags(
     skip: int = Query(0, ge=0, description="Number of items to skip"),
     limit: int = Query(100, ge=1, le=1000, description="Maximum number of items to return"),
     service: TagService = Depends(get_tag_service),
@@ -82,7 +82,7 @@ async def list_tags(
     summary="Search tags",
     description="Search tags for autocomplete (partial match)",
 )
-async def search_tags(
+def search_tags(
     q: str = Query("", description="Search query"),
     limit: int = Query(10, ge=1, le=50, description="Maximum number of suggestions"),
     service: TagService = Depends(get_tag_service),
@@ -107,7 +107,7 @@ async def search_tags(
     summary="Get smart tags",
     description="Get all tags grouped by alphabet with usage counts",
 )
-async def get_smart_tags(
+def get_smart_tags(
     pipeline_id: int | None = Query(None, ge=1, description="Filter by pipeline ID"),
     destination_id: int | None = Query(None, ge=1, description="Filter by destination ID"),
     source_id: int | None = Query(None, ge=1, description="Filter by source ID"),
@@ -132,7 +132,7 @@ async def get_smart_tags(
     summary="Get tag relations",
     description="Get tag nodes and edges for network graph visualization",
 )
-async def get_tag_relations(
+def get_tag_relations(
     service: TagService = Depends(get_tag_service),
 ) -> TagRelationsResponse:
     """
@@ -149,7 +149,7 @@ async def get_tag_relations(
     summary="Get tag",
     description="Get a specific tag by ID",
 )
-async def get_tag(
+def get_tag(
     tag_id: int = Path(..., ge=1, description="Tag ID"),
     service: TagService = Depends(get_tag_service),
 ) -> TagResponse:
@@ -172,7 +172,7 @@ async def get_tag(
     summary="Get tag usage",
     description="Get detailed usage information for a tag",
 )
-async def get_tag_usage(
+def get_tag_usage(
     tag_id: int = Path(..., ge=1, description="Tag ID"),
     service: TagService = Depends(get_tag_service),
 ) -> TagUsageResponse:
@@ -195,7 +195,7 @@ async def get_tag_usage(
     summary="Delete tag",
     description="Delete a tag by ID",
 )
-async def delete_tag(
+def delete_tag(
     tag_id: int = Path(..., ge=1, description="Tag ID"),
     service: TagService = Depends(get_tag_service),
 ) -> None:
@@ -218,7 +218,7 @@ async def delete_tag(
     summary="Get tags for table sync",
     description="Get all tags associated with a pipeline destination table sync",
 )
-async def get_table_sync_tags(
+def get_table_sync_tags(
     table_sync_id: int = Path(..., ge=1, description="Pipeline destination table sync ID"),
     service: TagService = Depends(get_tag_service),
 ) -> TableSyncTagsResponse:
@@ -242,7 +242,7 @@ async def get_table_sync_tags(
     summary="Add tag to table sync",
     description="Add a tag to a pipeline destination table sync (creates tag if doesn't exist)",
 )
-async def add_tag_to_table_sync(
+def add_tag_to_table_sync(
     table_sync_id: int = Path(..., ge=1, description="Pipeline destination table sync ID"),
     tag_data: TableSyncTagAssociationCreate = ...,
     service: TagService = Depends(get_tag_service),
@@ -269,7 +269,7 @@ async def add_tag_to_table_sync(
     summary="Remove tag from table sync",
     description="Remove a tag association from a pipeline destination table sync",
 )
-async def remove_tag_from_table_sync(
+def remove_tag_from_table_sync(
     table_sync_id: int = Path(..., ge=1, description="Pipeline destination table sync ID"),
     tag_id: int = Path(..., ge=1, description="Tag ID"),
     service: TagService = Depends(get_tag_service),
@@ -291,7 +291,7 @@ async def remove_tag_from_table_sync(
     summary="Get table syncs by tag",
     description="Get all pipeline destination table sync IDs associated with a tag",
 )
-async def get_table_syncs_by_tag(
+def get_table_syncs_by_tag(
     tag_id: int = Path(..., ge=1, description="Tag ID"),
     service: TagService = Depends(get_tag_service),
 ) -> List[int]:

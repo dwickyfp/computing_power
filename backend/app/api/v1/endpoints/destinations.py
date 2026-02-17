@@ -26,7 +26,7 @@ router = APIRouter()
     summary="Create destination",
     description="Create a new Snowflake data destination configuration",
 )
-async def create_destination(
+def create_destination(
     destination_data: DestinationCreate,
     service: DestinationService = Depends(get_destination_service),
 ) -> DestinationResponse:
@@ -50,7 +50,7 @@ async def create_destination(
     summary="List destinations",
     description="Get a list of all configured data destinations",
 )
-async def list_destinations(
+def list_destinations(
     skip: int = Query(0, ge=0, description="Number of items to skip"),
     limit: int = Query(
         100, ge=1, le=1000, description="Maximum number of items to return"
@@ -78,7 +78,7 @@ async def list_destinations(
     summary="Get destination",
     description="Get a specific destination by ID",
 )
-async def get_destination(
+def get_destination(
     destination_id: int, service: DestinationService = Depends(get_destination_service)
 ) -> DestinationResponse:
     """
@@ -101,7 +101,7 @@ async def get_destination(
     summary="Update destination",
     description="Update an existing destination configuration",
 )
-async def update_destination(
+def update_destination(
     destination_id: int,
     destination_data: DestinationUpdate,
     service: DestinationService = Depends(get_destination_service),
@@ -127,7 +127,7 @@ async def update_destination(
     summary="Delete destination",
     description="Delete a destination configuration",
 )
-async def delete_destination(
+def delete_destination(
     destination_id: int, service: DestinationService = Depends(get_destination_service)
 ) -> None:
     """
@@ -146,7 +146,7 @@ async def delete_destination(
     summary="Test destination connection",
     description="Test connection using provided configuration",
 )
-async def test_connection(
+def test_connection(
     destination_data: DestinationCreate,
     service: DestinationService = Depends(get_destination_service),
 ) -> dict:
@@ -175,7 +175,7 @@ async def test_connection(
     summary="Duplicate destination",
     description="Duplicate an existing destination configuration",
 )
-async def duplicate_destination(
+def duplicate_destination(
     destination_id: int,
     service: DestinationService = Depends(get_destination_service),
 ) -> DestinationResponse:
@@ -199,7 +199,7 @@ async def duplicate_destination(
     summary="Get destination schema",
     description="Get tables and columns from the active destination database",
 )
-async def get_destination_schema(
+def get_destination_schema(
     destination_id: int,
     table: str | None = Query(None, description="Optional table name to filter"),
     scope: str = Query("all", description="Scope of schema fetch (all, tables)"),

@@ -25,7 +25,7 @@ def get_credit_monitor_service() -> CreditMonitorService:
     summary="Get credit usage",
     description="Get Snowflake credit usage statistics for a destination",
 )
-async def get_destination_credits(
+def get_destination_credits(
     destination_id: int,
     service: CreditMonitorService = Depends(get_credit_monitor_service),
 ) -> CreditUsageResponse:
@@ -47,7 +47,7 @@ async def get_destination_credits(
     summary="Refresh credit usage",
     description="Trigger immediate update of Snowflake credit usage data",
 )
-async def refresh_destination_credits(
+def refresh_destination_credits(
     destination_id: int,
     service: CreditMonitorService = Depends(get_credit_monitor_service),
 ) -> dict:
@@ -62,7 +62,7 @@ async def refresh_destination_credits(
                     status_code=status.HTTP_404_NOT_FOUND,
                     detail="Destination not found"
                 )
-            await service.refresh_credits_for_destination(session, destination)
+            service.refresh_credits_for_destination(session, destination)
             
         return {"message": "Credit data refreshed successfully"}
     except Exception as e:

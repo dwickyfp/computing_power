@@ -58,7 +58,7 @@ class SourceService:
         self.db = db
         self.repository = SourceRepository(db)
 
-    async def create_source(self, source_data: SourceCreate) -> Source:
+    def create_source(self, source_data: SourceCreate) -> Source:
         """
         Create a new source.
 
@@ -92,7 +92,7 @@ class SourceService:
                 extra={"source_id": source.id, "name": source.name}
             )
             wal_monitor_service = WALMonitorService()
-            await wal_monitor_service.monitor_source(source, self.db)
+            wal_monitor_service.monitor_source_sync(source, self.db)
             logger.info(
                 "WAL monitor status initialized successfully",
                 extra={"source_id": source.id}
@@ -1264,7 +1264,7 @@ class SourceService:
             logger.error(f"Failed to fetch source schema: {e}")
             raise ValueError(f"Failed to fetch source schema: {str(e)}")
 
-    async def duplicate_source(self, source_id: int) -> Source:
+    def duplicate_source(self, source_id: int) -> Source:
         """
         Duplicate an existing source.
 
@@ -1324,7 +1324,7 @@ class SourceService:
                     replication_name=attempt_rep_name,
                 )
 
-                created_source = await self.create_source(source_data)
+                created_source = self.create_source(source_data)
 
             except DuplicateEntityError as e:
                 # Name or replication_name already exists, try with next counter

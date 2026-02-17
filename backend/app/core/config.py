@@ -113,6 +113,20 @@ class Settings(BaseSettings):
         default="redis://localhost:6379/0", description="Redis connection URL"
     )
 
+    # Worker / Celery Configuration
+    worker_enabled: bool = Field(
+        default=False,
+        description="Enable async worker mode for heavy tasks (preview, etc.)",
+    )
+    celery_broker_url: str = Field(
+        default="redis://localhost:6379/1",
+        description="Celery broker URL (Redis db 1)",
+    )
+    celery_result_backend: str = Field(
+        default="redis://localhost:6379/2",
+        description="Celery result backend URL (Redis db 2)",
+    )
+
     # Logging
     log_format: str = Field(default="json", description="Log format: json or text")
     log_file_path: str = Field(default="logs/app.log", description="Path to log file")

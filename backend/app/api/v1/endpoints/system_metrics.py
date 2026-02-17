@@ -19,7 +19,7 @@ router = APIRouter(prefix="/system-metrics", tags=["System Metrics"])
     summary="Get latest system metrics",
     description="Retrieve the most recent system metrics (CPU, Memory, Swap)",
 )
-async def get_latest_system_metrics(
+def get_latest_system_metrics(
     db: Session = Depends(get_db),
 ):
     """
@@ -60,7 +60,7 @@ async def get_latest_system_metrics(
     summary="Get system metrics history",
     description="Retrieve historical system metrics",
 )
-async def get_system_metrics_history(
+def get_system_metrics_history(
     limit: int = 100,
     db: Session = Depends(get_db),
 ):

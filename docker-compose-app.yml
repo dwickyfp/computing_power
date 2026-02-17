@@ -3,9 +3,10 @@ version: "3.8"
 # =============================================================================
 # ROSETTA APPLICATION DOCKER COMPOSE
 # =============================================================================
-# This compose file runs 2 containers:
-# 1. compute-node: Rust pipeline manager (mode=worker)
+# This compose file runs 3 containers:
+# 1. compute-node: Python CDC pipeline manager (mode=worker)
 # 2. web: FastAPI backend + React frontend (mode=web)
+# 3. worker: Celery async task processor (mode=worker)
 #
 # Prerequisites:
 #   Run ./build.sh first to build the images
@@ -13,7 +14,7 @@ version: "3.8"
 
 services:
   # ===========================================================================
-  # COMPUTE NODE - Rust Pipeline Manager
+  # COMPUTE NODE - Python Pipeline Manager (CDC Engine)
   # ===========================================================================
   rosetta-compute-node:
     image: rosetta-etl:1.0.0-compute
@@ -144,6 +145,42 @@ services:
     networks:
       - rosetta-network
     restart: unless-stopped
+
+  # ===========================================================================
+  # WORKER - Celery Background Task Processor
+  # ===========================================================================
+  rosetta-worker:
+    image: rosetta-etl:1.0.0-worker
+    container_name: rosetta-worker
+    restart: unless-stopped
+    environment:
+      # Database (Config DB - same as backend)
+      DATABASE_URL: ${DATABASE_URL:-postgresql://postgres:postgres@rosetta-postgres:5432/postgres}
+      # Redis
+      REDIS_URL: ${REDIS_URL:-redis://rosetta-redis:6379/0}
+      CELERY_BROKER_URL: redis://rosetta-redis:6379/1
+      CELERY_RESULT_BACKEND: db+postgresql://postgres:postgres@rosetta-postgres:5432/postgres
+      # Security (must match backend)
+      CREDENTIAL_ENCRYPTION_KEY: Wn5x7y9z1A2B3C4D5E6F7G8H9I0J1K2L3M4N5O6P7Q8=
+      # Worker Settings
+      WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-4}
+      WORKER_TASK_SOFT_TIME_LIMIT: 120
+      WORKER_TASK_HARD_TIME_LIMIT: 180
+      # Logging
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    depends_on:
+      rosetta-postgres:
+        condition: service_healthy
+      rosetta-redis:
+        condition: service_started
+    networks:
+      - rosetta-network
+    healthcheck:
+      test: ["CMD", "celery", "-A", "main", "inspect", "ping", "--timeout", "5"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
 
 networks:
   rosetta-network:

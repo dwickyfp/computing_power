@@ -8,6 +8,7 @@
 #   ./build.sh                    # Build all images
 #   ./build.sh compute-node       # Build compute-node only
 #   ./build.sh web                # Build web only
+#   ./build.sh worker             # Build worker only
 # =============================================================================
 
 set -e
@@ -72,6 +73,16 @@ build_web() {
     log_success "Built ${IMAGE_NAME}:${IMAGE_TAG}-web"
 }
 
+build_worker() {
+    log_info "Building worker image..."
+    docker build \
+        --target worker \
+        --tag "${IMAGE_NAME}:${IMAGE_TAG}-worker" \
+        --file ${DOCKERFILE} \
+        .
+    log_success "Built ${IMAGE_NAME}:${IMAGE_TAG}-worker"
+}
+
 show_images() {
     echo ""
     log_info "Built images:"
@@ -96,13 +107,17 @@ case $TARGET in
     web)
         build_web
         ;;
+    worker)
+        build_worker
+        ;;
     all|"")
         build_compute_node
         build_web
+        build_worker
         ;;
     *)
         log_error "Unknown target: $TARGET"
-        echo "Usage: $0 [compute-node|web|all]"
+        echo "Usage: $0 [compute-node|web|worker|all]"
         exit 1
         ;;
 esac

@@ -22,7 +22,7 @@ router = APIRouter()
     summary="Get WAL metrics",
     description="Query historical WAL size metrics with optional filtering",
 )
-async def get_wal_metrics(
+def get_wal_metrics(
     source_id: int | None = Query(None, description="Filter by source ID"),
     limit: int = Query(
         100, ge=1, le=1000, description="Maximum number of metrics to return"

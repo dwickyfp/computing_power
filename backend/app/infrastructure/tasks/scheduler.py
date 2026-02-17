@@ -172,8 +172,7 @@ class BackgroundScheduler:
             db = session_factory()
             try:
                 service = NotificationService(db)
-                # Run async method in sync wrapper
-                asyncio.run(service.process_pending_notifications())
+                service.process_pending_notifications()
                 self._record_job_metric("notification_sender")
             finally:
                 db.close()

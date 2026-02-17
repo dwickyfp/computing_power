@@ -1,14 +1,16 @@
 # =============================================================================
 # ROSETTA MULTI-STAGE DOCKERFILE
 # =============================================================================
-# This Dockerfile builds 3 applications:
-# 1. Rust compute-node (worker)
+# This Dockerfile builds 4 applications:
+# 1. Python compute-node (CDC pipeline manager)
 # 2. FastAPI backend
 # 3. React frontend
+# 4. Celery worker (async task processor)
 #
 # Final images:
-# - compute-node: Rust application (mode=worker)
+# - compute-node: Python CDC engine (mode=worker)
 # - web: FastAPI + React served via Nginx (mode=web)
+# - worker: Celery worker for async tasks (mode=worker)
 # =============================================================================
 
 # =============================================================================
@@ -86,6 +88,29 @@ COPY backend/pyproject.toml ./
 
 # Install uv
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
+
+# Install dependencies (fresh resolution, no lock file)
+RUN uv sync --no-install-project
+
+# =============================================================================
+# STAGE 3.5: WORKER DEPENDENCIES
+# =============================================================================
+FROM python:3.12-slim-bookworm AS worker-deps
+
+WORKDIR /app
+
+# Install system dependencies for worker (Celery + DuckDB)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    libpq-dev \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install uv
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
+
+# Copy pyproject.toml
+COPY worker/pyproject.toml ./
 
 # Install dependencies (fresh resolution, no lock file)
 RUN uv sync --no-install-project
@@ -202,3 +227,51 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
 
 # Run entrypoint
 CMD ["/app/entrypoint.sh"]
+
+# =============================================================================
+# STAGE 6: WORKER (CELERY)
+# =============================================================================
+FROM python:3.12-slim-bookworm AS worker
+
+LABEL maintainer="Rosetta Team"
+LABEL description="Rosetta Worker - Celery async task processor"
+
+# Install runtime dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libpq5 \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Copy virtual environment from worker-deps
+COPY --from=worker-deps /app/.venv /app/.venv
+
+# Enable virtual environment
+ENV PATH="/app/.venv/bin:$PATH"
+
+# Copy worker source code
+COPY worker/ ./worker/
+
+# Set environment variables
+ENV MODE=worker
+ENV PYTHONPATH=/app/worker
+ENV TZ=Asia/Jakarta
+ENV C_FORCE_ROOT=true
+
+# Create directories with proper permissions
+RUN useradd -m -u 1001 celeryworker && \
+    chown -R celeryworker:celeryworker /app
+
+USER celeryworker
+
+# Default Celery worker command (threads pool to avoid DuckDB fork crashes)
+CMD ["celery", "-A", "main", "worker", \
+     "--loglevel=info", \
+     "-Q", "preview,default", \
+     "-c", "4", \
+     "--pool=threads"]
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+    CMD celery -A main inspect ping --timeout 5 || exit 1

@@ -6,6 +6,7 @@ import { WALMonitorList } from './components/wal-monitor-list'
 import { SystemLoadCard } from './components/system-load-card'
 import { SystemHealthWidget } from './components/system-health-widget'
 import { JobStatusCard } from './components/job-status-card'
+import { WorkerStatusCard } from './components/worker-status-card'
 import { SourceHealthCard } from './components/source-health-card'
 import { TopTablesChart } from './components/top-tables-chart'
 import { ActivityFeed } from './components/activity-feed'
@@ -294,17 +295,20 @@ function DashboardContent() {
             <BackfillStatsCard data={summary?.backfills} />
           </div>
 
-          {/* Row 4: System Monitor Status (Bottom Row, equal width 4 cols) */}
-          <div className="col-span-24 md:col-span-12 lg:col-span-6">
+          {/* Row 4: System Monitor Status (Bottom Row) */}
+          <div className="col-span-24 md:col-span-12 lg:col-span-6 h-[280px]">
             <SystemLoadCard />
           </div>
-          <div className="col-span-24 md:col-span-12 lg:col-span-6">
+          <div className="col-span-24 md:col-span-12 lg:col-span-6 h-[280px]">
             <SystemHealthWidget />
           </div>
-          <div className="col-span-24 md:col-span-12 lg:col-span-6">
+          <div className="col-span-24 md:col-span-12 lg:col-span-6 h-[280px]">
+            <WorkerStatusCard />
+          </div>
+          <div className="col-span-24 md:col-span-12 lg:col-span-6 h-[280px]">
             <JobStatusCard />
           </div>
-          <div className="col-span-24 md:col-span-12 lg:col-span-6">
+          <div className="col-span-24 md:col-span-12 lg:col-span-6 h-[280px]">
             <WALMonitorList />
           </div>
 

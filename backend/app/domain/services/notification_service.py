@@ -5,7 +5,6 @@ Handles sending notifications to external webhooks based on configuration.
 """
 
 import httpx
-import asyncio
 from datetime import datetime, timezone, timedelta
 from typing import List, Optional
 
@@ -30,7 +29,7 @@ class NotificationService:
         self.config_repo = ConfigurationRepository(db)
         self.settings = get_settings()
 
-    async def _send_webhook(self, url: str, payload: dict) -> bool:
+    def _send_webhook(self, url: str, payload: dict) -> bool:
         """
         Send payload to webhook URL.
 
@@ -42,8 +41,8 @@ class NotificationService:
             True if successful, False otherwise
         """
         try:
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                response = await client.post(url, json=payload)
+            with httpx.Client(timeout=10.0) as client:
+                response = client.post(url, json=payload)
                 response.raise_for_status()
                 logger.info(f"Notification sent successfully to {url}")
                 return True
@@ -51,7 +50,7 @@ class NotificationService:
             logger.error(f"Failed to send notification to {url}: {e}")
             return False
 
-    async def _send_telegram(self, bot_token: str, chat_id: str, message: str) -> bool:
+    def _send_telegram(self, bot_token: str, chat_id: str, message: str) -> bool:
         """
         Send message to Telegram using Bot API.
 
@@ -71,8 +70,8 @@ class NotificationService:
                 "parse_mode": "HTML"
             }
             
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                response = await client.post(url, json=payload)
+            with httpx.Client(timeout=10.0) as client:
+                response = client.post(url, json=payload)
                 response.raise_for_status()
                 logger.info(f"Notification sent successfully to Telegram chat {chat_id}")
                 return True
@@ -80,7 +79,7 @@ class NotificationService:
             logger.error(f"Failed to send Telegram notification to chat {chat_id}: {e}")
             return False
 
-    async def process_pending_notifications(self) -> int:
+    def process_pending_notifications(self) -> int:
         """
         Process pending notifications and send them to webhook and/or Telegram.
 
@@ -167,7 +166,7 @@ class NotificationService:
 
             # Send to webhook if enabled and configured
             if enable_webhook and webhook_url:
-                success = await self._send_webhook(webhook_url, payload)
+                success = self._send_webhook(webhook_url, payload)
                 
                 if success:
                     logger.info(f"Notification {notification.id} sent to webhook successfully")
@@ -187,7 +186,7 @@ class NotificationService:
                     f"Time: {notification.created_at.strftime('%Y-%m-%d %H:%M:%S') if notification.created_at else 'N/A'}"
                 )
                 
-                success = await self._send_telegram(telegram_bot_token, telegram_chat_id, telegram_message)
+                success = self._send_telegram(telegram_bot_token, telegram_chat_id, telegram_message)
                 
                 if success:
                     logger.info(f"Notification {notification.id} sent to Telegram successfully")
@@ -221,7 +220,7 @@ class NotificationService:
 
         return processed_count
 
-    async def send_test_notification(self, webhook_url: Optional[str] = None) -> bool:
+    def send_test_notification(self, webhook_url: Optional[str] = None) -> bool:
         """
         Send a test notification to the configured webhook.
 
@@ -245,9 +244,9 @@ class NotificationService:
             "timestamp": datetime.now(timezone(timedelta(hours=7))).isoformat(),
         }
 
-        return await self._send_webhook(webhook_url, payload)
+        return self._send_webhook(webhook_url, payload)
 
-    async def send_test_telegram_notification(
+    def send_test_telegram_notification(
         self, bot_token: Optional[str] = None, chat_id: Optional[str] = None
     ) -> bool:
         """
@@ -280,4 +279,4 @@ class NotificationService:
             f"Time: {datetime.now(timezone(timedelta(hours=7))).strftime('%Y-%m-%d %H:%M:%S')}"
         )
 
-        return await self._send_telegram(bot_token, chat_id, message)
+        return self._send_telegram(bot_token, chat_id, message)

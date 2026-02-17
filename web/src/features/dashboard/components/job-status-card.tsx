@@ -5,6 +5,7 @@ import { jobMetricsRepo, JobMetric } from '@/repo/job-metrics'
 import { formatDistanceToNow } from 'date-fns'
 import { Activity } from 'lucide-react'
 import { useRefreshInterval } from '../context/refresh-interval-context'
+import { ScrollArea } from '@/components/ui/scroll-area'
 
 export function JobStatusCard() {
   const { refreshInterval } = useRefreshInterval()
@@ -42,29 +43,33 @@ export function JobStatusCard() {
     <DashboardPanel
       title="Job Status"
       headerAction={<Activity className="h-4 w-4 text-muted-foreground" />}
+      className='h-full'
+      noPadding
     >
-      {isLoading ? (
-        <div className="text-xs text-muted-foreground">Loading...</div>
-      ) : !metrics || metrics.length === 0 ? (
-        <div className="text-xs text-muted-foreground">No job history found.</div>
-      ) : (
-        <div className="space-y-1">
-          {metrics.map((metric: JobMetric) => {
-            const status = getStatus(metric.key_job_scheduler, metric.last_run_at)
-            return (
-              <div key={metric.key_job_scheduler} className="flex items-center justify-between py-1 border-b border-border/40 last:border-0">
-                <div className="flex flex-col">
-                  <span className="text-xs font-medium">{getJobDisplayName(metric.key_job_scheduler)}</span>
-                  <span className="text-[10px] text-muted-foreground">
-                    {formatDistanceToNow(new Date(metric.last_run_at), { addSuffix: true })}
-                  </span>
+      <ScrollArea className='h-full px-4 py-4'>
+        {isLoading ? (
+          <div className="text-xs text-muted-foreground">Loading...</div>
+        ) : !metrics || metrics.length === 0 ? (
+          <div className="text-xs text-muted-foreground">No job history found.</div>
+        ) : (
+          <div className="space-y-1">
+            {metrics.map((metric: JobMetric) => {
+              const status = getStatus(metric.key_job_scheduler, metric.last_run_at)
+              return (
+                <div key={metric.key_job_scheduler} className="flex items-center justify-between py-1 border-b border-border/40 last:border-0">
+                  <div className="flex flex-col">
+                    <span className="text-xs font-medium">{getJobDisplayName(metric.key_job_scheduler)}</span>
+                    <span className="text-[10px] text-muted-foreground">
+                      {formatDistanceToNow(new Date(metric.last_run_at), { addSuffix: true })}
+                    </span>
+                  </div>
+                  <div className={`h-2 w-2 rounded-full ${status === 'healthy' ? 'bg-emerald-500' : 'bg-rose-500'}`} />
                 </div>
-                <div className={`h-2 w-2 rounded-full ${status === 'healthy' ? 'bg-emerald-500' : 'bg-rose-500'}`} />
-              </div>
-            )
-          })}
-        </div>
-      )}
+              )
+            })}
+          </div>
+        )}
+      </ScrollArea>
     </DashboardPanel>
   )
 }

@@ -263,7 +263,15 @@ export function TableCustomSqlCard({
         table_name: table.table_name,
         filter_sql: filterSql,
       })
-      setPreviewData(res.data)
+
+      // Check if async worker mode (returns task_id)
+      if (res.data?.task_id) {
+        await pollPreviewTask(res.data.task_id)
+      } else {
+        // Sync mode - result returned directly
+        setPreviewData(res.data)
+        setIsPreviewLoading(false)
+      }
     } catch (e: any) {
       setPreviewData({
         columns: [],
@@ -271,9 +279,75 @@ export function TableCustomSqlCard({
         data: [],
         error: e.response?.data?.detail || e.message || 'Failed to preview data',
       })
-    } finally {
       setIsPreviewLoading(false)
     }
+  }
+
+  /**
+   * Poll a preview task until it completes or fails.
+   * Uses exponential backoff: 500ms -> 1s -> 2s -> ... (max 5s)
+   */
+  const pollPreviewTask = async (taskId: string) => {
+    let delay = 500
+    const maxDelay = 5000
+    const maxAttempts = 60 // ~2 minutes max
+
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      try {
+        const res = await api.get(`/pipelines/${pipelineId}/preview/${taskId}`)
+        const { state, status, result, error } = res.data
+
+        if (state === 'SUCCESS' && result) {
+          setPreviewData(result)
+          setIsPreviewLoading(false)
+          return
+        }
+
+        if (state === 'FAILURE') {
+          setPreviewData({
+            columns: [],
+            column_types: [],
+            data: [],
+            error: error || 'Preview task failed',
+          })
+          setIsPreviewLoading(false)
+          return
+        }
+
+        if (state === 'REVOKED') {
+          setPreviewData({
+            columns: [],
+            column_types: [],
+            data: [],
+            error: 'Preview task was cancelled',
+          })
+          setIsPreviewLoading(false)
+          return
+        }
+
+        // Still running (PENDING, STARTED, PROGRESS) — wait and retry
+        await new Promise((resolve) => setTimeout(resolve, delay))
+        delay = Math.min(delay * 1.5, maxDelay)
+      } catch (e: any) {
+        setPreviewData({
+          columns: [],
+          column_types: [],
+          data: [],
+          error: e.response?.data?.detail || 'Failed to poll preview status',
+        })
+        setIsPreviewLoading(false)
+        return
+      }
+    }
+
+    // Timed out
+    setPreviewData({
+      columns: [],
+      column_types: [],
+      data: [],
+      error: 'Preview timed out. Please try again.',
+    })
+    setIsPreviewLoading(false)
   }
 
   const handleClose = (e: React.MouseEvent) => {
