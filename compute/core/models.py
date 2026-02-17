@@ -201,6 +201,7 @@ class PipelineDestinationTableSync:
     table_name_target: str
     custom_sql: Optional[str] = None
     filter_sql: Optional[str] = None
+    primary_key_column_target: Optional[str] = None
     is_exists_table_landing: bool = False
     is_exists_stream: bool = False
     is_exists_task: bool = False
@@ -220,6 +221,7 @@ class PipelineDestinationTableSync:
             table_name_target=data["table_name_target"],
             custom_sql=data.get("custom_sql"),
             filter_sql=data.get("filter_sql"),
+            primary_key_column_target=data.get("primary_key_column_target"),
             is_exists_table_landing=data.get("is_exists_table_landing", False),
             is_exists_stream=data.get("is_exists_stream", False),
             is_exists_task=data.get("is_exists_task", False),

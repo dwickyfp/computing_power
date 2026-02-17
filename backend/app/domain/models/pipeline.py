@@ -296,6 +296,12 @@ class PipelineDestinationTableSync(Base, TimestampMixin):
         comment="SQL filter condition",
     )
 
+    primary_key_column_target: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+        comment="Custom primary key columns for PostgreSQL merge (semicolon-separated: key1;key2)",
+    )
+
     # Snowflake Status Flags
     is_exists_table_landing: Mapped[bool] = mapped_column(
         Boolean, default=False, comment="Table exists in landing (Snowflake)"

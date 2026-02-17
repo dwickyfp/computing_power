@@ -1595,7 +1595,19 @@ class PostgreSQLDestination(BaseDestination):
                 )
 
             # Determine primary key columns for MERGE
-            if table_sync.custom_sql:
+            # Priority: custom primary keys > target table PK (for custom SQL) > source CDC PK
+            if table_sync.primary_key_column_target:
+                # User has specified custom primary key columns
+                custom_keys = [
+                    k.strip()
+                    for k in table_sync.primary_key_column_target.split(";")
+                    if k.strip()
+                ]
+                key_columns = custom_keys
+                self._logger.info(
+                    f"Using custom primary key columns for '{target_table}': {key_columns}"
+                )
+            elif table_sync.custom_sql:
                 # Custom SQL may transform data into a different schema
                 # (e.g., transaction rows → daily aggregates).
                 # Use the TARGET table's PK, not the source CDC record's PK.

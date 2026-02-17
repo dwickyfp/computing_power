@@ -1640,6 +1640,7 @@ class PipelineService:
 
             existing.custom_sql = table_sync_data.custom_sql
             existing.filter_sql = table_sync_data.filter_sql
+            existing.primary_key_column_target = table_sync_data.primary_key_column_target
             if table_sync_data.table_name_target:
                 existing.table_name_target = table_sync_data.table_name_target
 
@@ -1670,6 +1671,7 @@ class PipelineService:
                 table_name_target=target_name,
                 custom_sql=table_sync_data.custom_sql,
                 filter_sql=table_sync_data.filter_sql,
+                primary_key_column_target=table_sync_data.primary_key_column_target,
             )
             self.db.add(new_sync)
             self.db.commit()
