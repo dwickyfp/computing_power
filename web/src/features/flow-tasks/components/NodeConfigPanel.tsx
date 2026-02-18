@@ -145,32 +145,57 @@ export function NodeConfigPanel() {
         flowTaskId = null
     }
 
-    // ── Resizable panel — mirrors PreviewDrawer exactly ─────────────────────
-    // The outer shell is position:absolute right-0, so it overlays the canvas
-    // without being a flex sibling. Width changes never cause canvas reflow.
-    // setWidth drives the inner div only; the outer div is full h with no own size.
+    // ── Resizable panel ───────────────────────────────────────────────────────
+    // Strategy: write width directly to DOM via RAF (no React state during drag
+    // = zero re-renders of form content). `will-change: width` promotes the
+    // panel to its own GPU layer so the browser composites it independently.
+    // RAF throttles updates to exactly 1 per display frame (max 60fps).
+    // Only on mouseup do we commit to React state (one re-render total).
     const MIN_WIDTH = 256
     const MAX_WIDTH = 640
     const DEFAULT_WIDTH = 288
     const [panelWidth, setPanelWidth] = useState(DEFAULT_WIDTH)
+    const innerRef = useRef<HTMLDivElement>(null)
     const dragging = useRef(false)
     const startX = useRef(0)
     const startW = useRef(0)
+    const rafId = useRef<number | null>(null)
 
     const onResizeMouseDown = useCallback((e: React.MouseEvent) => {
         e.preventDefault()
         dragging.current = true
         startX.current = e.clientX
-        startW.current = panelWidth
+        startW.current = innerRef.current ? innerRef.current.offsetWidth : panelWidth
+        // Lock cursor globally so it doesn't flicker when moving off the handle
+        document.body.style.cursor = 'col-resize'
+        document.body.style.userSelect = 'none'
     }, [panelWidth])
 
     useEffect(() => {
         const onMove = (e: MouseEvent) => {
-            if (!dragging.current) return
-            const delta = startX.current - e.clientX
-            setPanelWidth(Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, startW.current + delta)))
+            if (!dragging.current || !innerRef.current) return
+            // Cancel any pending frame — use latest mouse position only
+            if (rafId.current !== null) cancelAnimationFrame(rafId.current)
+            rafId.current = requestAnimationFrame(() => {
+                if (!innerRef.current) return
+                const delta = startX.current - e.clientX
+                const next = Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, startW.current + delta))
+                innerRef.current.style.width = `${next}px`
+                rafId.current = null
+            })
         }
-        const onUp = () => { dragging.current = false }
+        const onUp = () => {
+            if (!dragging.current) return
+            dragging.current = false
+            document.body.style.cursor = ''
+            document.body.style.userSelect = ''
+            if (rafId.current !== null) {
+                cancelAnimationFrame(rafId.current)
+                rafId.current = null
+            }
+            // Commit final value to state — one re-render, panel keeps its size on remount
+            if (innerRef.current) setPanelWidth(innerRef.current.offsetWidth)
+        }
         window.addEventListener('mousemove', onMove)
         window.addEventListener('mouseup', onUp)
         return () => {
@@ -190,8 +215,9 @@ export function NodeConfigPanel() {
         // Width changes to the inner div never trigger canvas reflow.
         <div className="absolute top-0 right-0 h-full z-20 pointer-events-none">
             <div
+                ref={innerRef}
                 className="relative flex flex-col h-full border-l border-border bg-background overflow-y-auto animate-in slide-in-from-right duration-200 pointer-events-auto"
-                style={{ width: panelWidth }}
+                style={{ width: panelWidth, willChange: 'width' }}
             >
                 {/* Drag-to-resize handle */}
                 <div
