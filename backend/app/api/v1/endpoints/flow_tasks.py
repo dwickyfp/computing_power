@@ -11,6 +11,7 @@ from app.api.deps import get_flow_task_service
 from app.core.exceptions import EntityNotFoundError
 from app.core.logging import get_logger
 from app.domain.schemas.flow_task import (
+    ColumnInfo,
     FlowTaskCreate,
     FlowTaskGraphResponse,
     FlowTaskGraphSave,
@@ -20,6 +21,7 @@ from app.domain.schemas.flow_task import (
     FlowTaskRunHistoryResponse,
     FlowTaskTriggerResponse,
     FlowTaskUpdate,
+    NodeColumnsResponse,
     NodePreviewRequest,
     NodePreviewTaskResponse,
     TaskStatusResponse,
@@ -268,6 +270,47 @@ def get_task_status(
     """
     status_data = service.get_task_status(celery_task_id)
     return TaskStatusResponse(**status_data)
+
+
+# ─── Node schema ───────────────────────────────────────────────────────────────
+
+@router.post(
+    "/{flow_task_id}/node-schema",
+    response_model=NodeColumnsResponse,
+    summary="Resolve node output schema via DuckDB",
+)
+def get_node_schema(
+    flow_task_id: int,
+    request: NodePreviewRequest,
+    service: FlowTaskService = Depends(get_flow_task_service),
+) -> NodeColumnsResponse:
+    """
+    Execute the CTE chain up to the target node with LIMIT 0 in the worker's
+    DuckDB instance and return the schema (column names + types) of the output.
+
+    This correctly reflects transformed schemas — e.g. after Aggregate the
+    columns are the group-by fields + aggregation aliases, not the source table
+    columns. No actual data rows are fetched.
+    """
+    from app.core.config import get_settings
+    from app.infrastructure.worker_client import get_node_schema_from_worker
+
+    settings = get_settings()
+    worker_url = getattr(settings, "worker_health_url", "http://0.0.0.0:8002")
+
+    graph_snapshot = {
+        "nodes": [n.dict() for n in request.nodes],
+        "edges": [e.dict(by_alias=True) for e in request.edges],
+    }
+
+    cols = get_node_schema_from_worker(
+        node_id=request.node_id,
+        nodes=graph_snapshot["nodes"],
+        edges=graph_snapshot["edges"],
+        worker_base_url=worker_url,
+    )
+
+    return NodeColumnsResponse(columns=[ColumnInfo(**c) for c in cols])
 
 
 # ─── Run History ───────────────────────────────────────────────────────────────

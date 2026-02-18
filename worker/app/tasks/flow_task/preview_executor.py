@@ -129,6 +129,71 @@ def execute_node_preview(
                 pass
 
 
+def execute_node_schema(
+    node_id: str,
+    graph_snapshot: dict,
+) -> dict:
+    """
+    Return the column schema (names + DuckDB type strings) for a node's output
+    by executing the CTE chain up to that node with LIMIT 0.
+
+    Zero rows are fetched from the remote DB — only the Arrow schema is read,
+    so this is fast regardless of table size or transformation complexity.
+
+    Returns:
+        {
+            "columns": [
+                {"column_name": "...", "data_type": "VARCHAR"},
+                ...
+            ]
+        }
+    """
+    conn: Optional[duckdb.DuckDBPyConnection] = None
+    try:
+        conn = _setup_duckdb_connection()
+
+        nodes = graph_snapshot.get("nodes", [])
+        edges = graph_snapshot.get("edges", [])
+
+        _inject_attach_configs(nodes, conn)
+
+        compiler = GraphCompiler({"nodes": nodes, "edges": edges}).compile()
+
+        target_cte = compiler.cte_map.get(node_id)
+        if not target_cte:
+            raise ValueError(
+                f"Node '{node_id}' not found in compiled graph. "
+                f"Available: {list(compiler.cte_map.keys())}"
+            )
+
+        partial_prefix = compiler.get_cte_sql_up_to(target_cte)
+        if not partial_prefix:
+            raise ValueError(f"Could not build SQL up to CTE '{target_cte}'")
+
+        schema_sql = f"{partial_prefix}\nSELECT * FROM {target_cte} LIMIT 0"
+        logger.debug(f"Schema SQL for node {node_id}:\n{schema_sql}")
+
+        rel = conn.execute(schema_sql)
+        description = rel.description or []
+
+        return {
+            "columns": [
+                {
+                    "column_name": col[0],
+                    "data_type": str(col[1]),
+                }
+                for col in description
+            ]
+        }
+
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
 def _serialize_row(row: tuple) -> List[Any]:
     """Convert a tuple row to a JSON-serializable list."""
     result = []

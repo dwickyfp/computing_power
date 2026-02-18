@@ -40,7 +40,10 @@ export function DestinationsPage() {
         }
     }, [])
 
-    const destinations = data?.destinations || []
+    const destinations = (data?.destinations ?? []).map((d) => ({
+        ...d,
+        total_tables: d.total_tables ?? 0,
+    }))
 
     return (
         <DestinationsProvider>

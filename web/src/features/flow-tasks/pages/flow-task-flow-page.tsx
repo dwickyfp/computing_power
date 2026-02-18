@@ -285,11 +285,10 @@ function FlowCanvas({ flowTaskId }: { flowTaskId: number }) {
         setCtxMenu(null)
     }, [selectNode])
 
-    // Right-click a node → show context menu
+    // Right-click a node → show context menu ONLY (no config panel open)
     const onNodeContextMenu: NodeMouseHandler = useCallback(
         (event, node) => {
             event.preventDefault()
-            selectNode(node.id)
             setCtxMenu({
                 x: event.clientX,
                 y: event.clientY,
@@ -297,7 +296,7 @@ function FlowCanvas({ flowTaskId }: { flowTaskId: number }) {
                 nodeLabel: (node.data.label as string) || node.type || '',
             })
         },
-        [selectNode]
+        []
     )
 
     // ─── Preview a node ────────────────────────────────────────────────────────
@@ -410,7 +409,7 @@ function FlowCanvas({ flowTaskId }: { flowTaskId: number }) {
                     <NodePalette />
                 </div>
 
-                {/* Canvas */}
+                {/* Canvas + overlaid config panel */}
                 <div
                     className="flex-1 relative"
                     ref={reactFlowRef}
@@ -483,10 +482,11 @@ function FlowCanvas({ flowTaskId }: { flowTaskId: number }) {
                             onClose={() => setCtxMenu(null)}
                         />
                     )}
-                </div>
 
-                {/* Right Config Panel */}
-                {selectedNodeId && <NodeConfigPanel />}
+                    {/* Right Config Panel — absolutely positioned so it overlays the canvas
+                        without affecting the canvas flex width (no layout reflow on resize) */}
+                    {selectedNodeId && <NodeConfigPanel />}
+                </div>
             </div>
         </div>
     )

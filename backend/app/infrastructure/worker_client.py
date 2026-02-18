@@ -434,3 +434,29 @@ class WorkerClient:
 def get_worker_client() -> WorkerClient:
     """Get the singleton WorkerClient instance."""
     return WorkerClient.get_instance()
+
+
+def get_node_schema_from_worker(
+    node_id: str,
+    nodes: list,
+    edges: list,
+    worker_base_url: str = "http://0.0.0.0:8002",
+) -> list[dict]:
+    """
+    Call the worker's synchronous POST /schema endpoint to resolve the output
+    column schema for a node by executing LIMIT 0 through the DuckDB CTE chain.
+
+    Returns a list of {"column_name": str, "data_type": str} dicts,
+    or an empty list if the worker is unreachable or the graph is incomplete.
+    """
+    import httpx
+
+    payload = {"node_id": node_id, "nodes": nodes, "edges": edges}
+    try:
+        with httpx.Client(timeout=30.0) as client:
+            resp = client.post(f"{worker_base_url}/schema", json=payload)
+            resp.raise_for_status()
+            return resp.json().get("columns", [])
+    except Exception as e:
+        logger.warning(f"Worker /schema call failed (node={node_id}): {e}")
+        return []

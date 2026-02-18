@@ -1,10 +1,15 @@
 /**
  * NodeConfigPanel — right-side drawer showing the config form for the selected node.
  * Opens when a node is selected on the canvas.
+ *
+ * Column selectors use useNodeSchema() which runs the DuckDB CTE chain
+ * up to the target node (LIMIT 0) in the worker to derive the real output schema —
+ * correctly reflecting post-aggregate, post-clean, post-pivot columns.
  */
 
 import { useFlowTaskStore } from '../store/flow-task-store'
 import { useQuery } from '@tanstack/react-query'
+import { useRef, useState, useEffect, useCallback } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -17,14 +22,162 @@ import {
 } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { Separator } from '@/components/ui/separator'
-import { X, Trash2, Eye, Loader2 } from 'lucide-react'
+import { X, Trash2, Eye, Loader2, Plus, GripVertical } from 'lucide-react'
 import type { FlowNodeType, FlowNodeData, WriteMode } from '@/repo/flow-tasks'
+import type { ColumnInfo } from '@/repo/flow-tasks'
 import { sourcesRepo } from '@/repo/sources'
 import { destinationsRepo } from '@/repo/destinations'
+import { useNodeSchema } from '../hooks/useNodeSchema'
+import { useParams } from '@tanstack/react-router'
+
+// ─── Shared helper components ─────────────────────────────────────────────────
+
+function ColumnSelect({
+    columns,
+    value,
+    onChange,
+    placeholder = 'Select column…',
+    isLoading = false,
+}: {
+    columns: ColumnInfo[]
+    value: string
+    onChange: (v: string) => void
+    placeholder?: string
+    isLoading?: boolean
+}) {
+    if (isLoading) {
+        return (
+            <div className="flex items-center gap-1.5 h-7 text-xs text-muted-foreground">
+                <Loader2 className="h-3 w-3 animate-spin" /> Resolving schema…
+            </div>
+        )
+    }
+    return (
+        <Select value={value || ''} onValueChange={onChange}>
+            <SelectTrigger className="h-7 text-xs">
+                <SelectValue placeholder={placeholder} />
+            </SelectTrigger>
+            <SelectContent>
+                {columns.length === 0 ? (
+                    <div className="px-2 py-1.5 text-xs text-muted-foreground">
+                        No columns — check upstream config
+                    </div>
+                ) : (
+                    columns.map((c) => (
+                        <SelectItem key={c.column_name} value={c.column_name}>
+                            <span>{c.column_name}</span>
+                            <span className="ml-1.5 text-[10px] text-muted-foreground font-mono">
+                                {c.data_type}
+                            </span>
+                        </SelectItem>
+                    ))
+                )}
+            </SelectContent>
+        </Select>
+    )
+}
+
+function MultiColumnSelect({
+    columns,
+    selected,
+    onChange,
+    isLoading = false,
+}: {
+    columns: ColumnInfo[]
+    selected: string[]
+    onChange: (cols: string[]) => void
+    isLoading?: boolean
+}) {
+    if (isLoading) {
+        return (
+            <div className="flex items-center gap-1.5 h-7 text-xs text-muted-foreground">
+                <Loader2 className="h-3 w-3 animate-spin" /> Resolving schema…
+            </div>
+        )
+    }
+    if (columns.length === 0) {
+        return (
+            <div className="text-xs text-muted-foreground">No columns — check upstream</div>
+        )
+    }
+    return (
+        <div className="flex flex-wrap gap-1 pt-0.5">
+            {columns.map((c) => {
+                const active = selected.includes(c.column_name)
+                return (
+                    <button
+                        key={c.column_name}
+                        type="button"
+                        onClick={() =>
+                            onChange(
+                                active
+                                    ? selected.filter((s) => s !== c.column_name)
+                                    : [...selected, c.column_name],
+                            )
+                        }
+                        className={`rounded px-1.5 py-0.5 text-[10px] border transition-colors ${
+                            active
+                                ? 'bg-violet-600 border-violet-600 text-white'
+                                : 'border-border text-muted-foreground hover:border-violet-400'
+                        }`}
+                    >
+                        {c.column_name}
+                    </button>
+                )
+            })}
+        </div>
+    )
+}
+
+// ─── Main panel ────────────────────────────────────────────────────────────────
 
 export function NodeConfigPanel() {
     const { nodes, selectedNodeId, selectNode, updateNodeData, removeNode, requestPreview } =
         useFlowTaskStore()
+
+    // Extract flow task ID from route params
+    let flowTaskId: number | null = null
+    try {
+        const params = useParams({ strict: false }) as Record<string, string>
+        const raw = params['flowTaskId'] ?? params['flow_task_id'] ?? params['id'] ?? ''
+        flowTaskId = raw ? parseInt(raw) : null
+    } catch {
+        flowTaskId = null
+    }
+
+    // ── Resizable panel — mirrors PreviewDrawer exactly ─────────────────────
+    // The outer shell is position:absolute right-0, so it overlays the canvas
+    // without being a flex sibling. Width changes never cause canvas reflow.
+    // setWidth drives the inner div only; the outer div is full h with no own size.
+    const MIN_WIDTH = 256
+    const MAX_WIDTH = 640
+    const DEFAULT_WIDTH = 288
+    const [panelWidth, setPanelWidth] = useState(DEFAULT_WIDTH)
+    const dragging = useRef(false)
+    const startX = useRef(0)
+    const startW = useRef(0)
+
+    const onResizeMouseDown = useCallback((e: React.MouseEvent) => {
+        e.preventDefault()
+        dragging.current = true
+        startX.current = e.clientX
+        startW.current = panelWidth
+    }, [panelWidth])
+
+    useEffect(() => {
+        const onMove = (e: MouseEvent) => {
+            if (!dragging.current) return
+            const delta = startX.current - e.clientX
+            setPanelWidth(Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, startW.current + delta)))
+        }
+        const onUp = () => { dragging.current = false }
+        window.addEventListener('mousemove', onMove)
+        window.addEventListener('mouseup', onUp)
+        return () => {
+            window.removeEventListener('mousemove', onMove)
+            window.removeEventListener('mouseup', onUp)
+        }
+    }, [])
 
     const selectedNode = (nodes ?? []).find((n) => n.id === selectedNodeId)
     if (!selectedNode) return null
@@ -33,7 +186,21 @@ export function NodeConfigPanel() {
         updateNodeData(selectedNode.id, patch)
 
     return (
-        <div className="flex flex-col h-full w-72 border-l border-border bg-background overflow-y-auto animate-in slide-in-from-right duration-200">
+        // Outer shell: absolute right-0, full height, no own width — overlays canvas
+        // Width changes to the inner div never trigger canvas reflow.
+        <div className="absolute top-0 right-0 h-full z-20 pointer-events-none">
+            <div
+                className="relative flex flex-col h-full border-l border-border bg-background overflow-y-auto animate-in slide-in-from-right duration-200 pointer-events-auto"
+                style={{ width: panelWidth }}
+            >
+                {/* Drag-to-resize handle */}
+                <div
+                    onMouseDown={onResizeMouseDown}
+                    className="absolute left-0 top-0 h-full w-3 cursor-col-resize flex items-center justify-center hover:bg-muted/50 transition-colors z-10 group"
+                    title="Drag to resize"
+                >
+                    <GripVertical className="h-4 w-4 text-muted-foreground/40 group-hover:text-muted-foreground transition-colors" />
+                </div>
             {/* Header */}
             <div className="flex items-center justify-between px-3 py-2 border-b border-border/50">
                 <p className="text-sm font-semibold capitalize">
@@ -45,7 +212,12 @@ export function NodeConfigPanel() {
                         size="icon"
                         className="h-6 w-6 text-violet-500 hover:text-violet-600"
                         title="Preview node output"
-                        onClick={() => requestPreview?.(selectedNode.id, selectedNode.data.label ?? selectedNode.type)}
+                        onClick={() =>
+                            requestPreview?.(
+                                selectedNode.id,
+                                selectedNode.data.label ?? selectedNode.type,
+                            )
+                        }
                     >
                         <Eye className="h-3.5 w-3.5" />
                     </Button>
@@ -54,9 +226,7 @@ export function NodeConfigPanel() {
                         size="icon"
                         className="h-6 w-6 text-destructive hover:text-destructive"
                         title="Delete node"
-                        onClick={() => {
-                            removeNode(selectedNode.id)
-                        }}
+                        onClick={() => removeNode(selectedNode.id)}
                     >
                         <Trash2 className="h-3.5 w-3.5" />
                     </Button>
@@ -87,38 +257,56 @@ export function NodeConfigPanel() {
 
             {/* Type-specific config */}
             <div className="px-3 py-3 space-y-3">
-                <NodeTypeConfig type={selectedNode.type} data={selectedNode.data} update={update} />
+                <NodeTypeConfig
+                    type={selectedNode.type}
+                    data={selectedNode.data}
+                    update={update}
+                    nodeId={selectedNode.id}
+                    flowTaskId={flowTaskId}
+                />
             </div>
-        </div>
+            </div>{/* end inner panel */}
+        </div> // end outer shell
     )
 }
 
 // ─── Per-type config forms ─────────────────────────────────────────────────────
 
+type ConfigFormProps = {
+    data: FlowNodeData
+    update: (patch: Partial<FlowNodeData>) => void
+    nodeId: string
+    flowTaskId: number | null
+}
+
 function NodeTypeConfig({
     type,
     data,
     update,
+    nodeId,
+    flowTaskId,
 }: {
     type: FlowNodeType
     data: FlowNodeData
     update: (patch: Partial<FlowNodeData>) => void
+    nodeId: string
+    flowTaskId: number | null
 }) {
     switch (type) {
         case 'input':
-            return <InputConfig data={data} update={update} />
+            return <InputConfig data={data} update={update} nodeId={nodeId} flowTaskId={flowTaskId} />
         case 'clean':
-            return <CleanConfig data={data} update={update} />
+            return <CleanConfig data={data} update={update} nodeId={nodeId} flowTaskId={flowTaskId} />
         case 'aggregate':
-            return <AggregateConfig data={data} update={update} />
+            return <AggregateConfig data={data} update={update} nodeId={nodeId} flowTaskId={flowTaskId} />
         case 'join':
-            return <JoinConfig data={data} update={update} />
+            return <JoinConfig data={data} update={update} nodeId={nodeId} flowTaskId={flowTaskId} />
         case 'union':
-            return <UnionConfig data={data} update={update} />
+            return <UnionConfig data={data} update={update} nodeId={nodeId} flowTaskId={flowTaskId} />
         case 'pivot':
-            return <PivotConfig data={data} update={update} />
+            return <PivotConfig data={data} update={update} nodeId={nodeId} flowTaskId={flowTaskId} />
         case 'output':
-            return <OutputConfig data={data} update={update} />
+            return <OutputConfig data={data} update={update} nodeId={nodeId} flowTaskId={flowTaskId} />
         default:
             return (
                 <p className="text-xs text-muted-foreground">No config for this node type.</p>
@@ -128,7 +316,7 @@ function NodeTypeConfig({
 
 // ─── Input ─────────────────────────────────────────────────────────────────────
 
-function InputConfig({ data, update }: ConfigFormProps) {
+function InputConfig({ data, update, nodeId: _nodeId, flowTaskId: _flowTaskId }: ConfigFormProps) {
     const sourceType = (data.source_type as 'POSTGRES' | 'SNOWFLAKE') || 'POSTGRES'
     const sourceId = data.source_id as number | undefined
     const destinationId = data.destination_id as number | undefined
@@ -371,7 +559,31 @@ function InputConfig({ data, update }: ConfigFormProps) {
 
 // ─── Clean ─────────────────────────────────────────────────────────────────────
 
-function CleanConfig({ data, update }: ConfigFormProps) {
+const FILTER_OPERATORS = [
+    '=', '!=', '>', '<', '>=', '<=',
+    'LIKE', 'NOT LIKE', 'IS NULL', 'IS NOT NULL', 'IN',
+]
+
+interface FilterRow { col: string; op: string; val: string }
+
+function CleanConfig({ data, update, nodeId, flowTaskId }: ConfigFormProps) {
+    const { columns, isLoading } = useNodeSchema(flowTaskId, nodeId)
+    const filterRows: FilterRow[] = (data.filter_rows as FilterRow[]) || []
+    const selectColumns: string[] = (data.select_columns as string[]) || []
+
+    const setFilterRows = (rows: FilterRow[]) => {
+        const expr = rows
+            .filter((r) => r.col && r.op)
+            .map((r) => {
+                if (r.op === 'IS NULL') return `${r.col} IS NULL`
+                if (r.op === 'IS NOT NULL') return `${r.col} IS NOT NULL`
+                if (r.op === 'IN') return `${r.col} IN (${r.val})`
+                return `${r.col} ${r.op} '${r.val}'`
+            })
+            .join(' AND ')
+        update({ filter_rows: rows, filter_expr: expr || undefined })
+    }
+
     return (
         <>
             <SwitchField
@@ -385,28 +597,97 @@ function CleanConfig({ data, update }: ConfigFormProps) {
                 onChange={(v) => update({ deduplicate: v })}
             />
 
-            <Field label="Filter expression">
-                <Input
-                    className="h-7 text-xs font-mono"
-                    value={(data.filter_expr as string) || ''}
-                    onChange={(e) => update({ filter_expr: e.target.value })}
-                    placeholder="e.g. age > 18 AND status = 'active'"
-                />
+            <Field label="Filter rows">
+                <div className="space-y-1.5">
+                    {filterRows.map((row, i) => (
+                        <div key={i} className="flex gap-1 items-center">
+                            <Select
+                                value={row.col}
+                                onValueChange={(v) => {
+                                    const next = [...filterRows]
+                                    next[i] = { ...next[i], col: v }
+                                    setFilterRows(next)
+                                }}
+                            >
+                                <SelectTrigger className="h-6 text-[11px] flex-1 min-w-0">
+                                    <SelectValue placeholder="col" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {isLoading ? (
+                                        <div className="px-2 py-1 text-xs flex items-center gap-1">
+                                            <Loader2 className="h-3 w-3 animate-spin" /> Loading…
+                                        </div>
+                                    ) : (
+                                        columns.map((c) => (
+                                            <SelectItem key={c.column_name} value={c.column_name}>
+                                                {c.column_name}
+                                            </SelectItem>
+                                        ))
+                                    )}
+                                </SelectContent>
+                            </Select>
+                            <Select
+                                value={row.op}
+                                onValueChange={(v) => {
+                                    const next = [...filterRows]
+                                    next[i] = { ...next[i], op: v }
+                                    setFilterRows(next)
+                                }}
+                            >
+                                <SelectTrigger className="h-6 text-[11px] w-20 shrink-0">
+                                    <SelectValue placeholder="op" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {FILTER_OPERATORS.map((op) => (
+                                        <SelectItem key={op} value={op}>{op}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                            {row.op !== 'IS NULL' && row.op !== 'IS NOT NULL' ? (
+                                <Input
+                                    className="h-6 text-[11px] flex-1 min-w-0"
+                                    value={row.val}
+                                    onChange={(e) => {
+                                        const next = [...filterRows]
+                                        next[i] = { ...next[i], val: e.target.value }
+                                        setFilterRows(next)
+                                    }}
+                                    placeholder="value"
+                                />
+                            ) : (
+                                <div className="flex-1" />
+                            )}
+                            <Button
+                                variant="ghost" size="icon"
+                                className="h-6 w-6 shrink-0 hover:text-destructive"
+                                onClick={() => setFilterRows(filterRows.filter((_, j) => j !== i))}
+                            >
+                                <X className="h-3 w-3" />
+                            </Button>
+                        </div>
+                    ))}
+                    <Button
+                        variant="outline" size="sm"
+                        className="h-6 text-[11px] w-full gap-1"
+                        onClick={() => setFilterRows([...filterRows, { col: '', op: '=', val: '' }])}
+                    >
+                        <Plus className="h-3 w-3" /> Add filter
+                    </Button>
+                </div>
             </Field>
 
-            <Field label="Select columns (comma-separated)">
-                <Input
-                    className="h-7 text-xs"
-                    value={((data.select_columns as string[]) || []).join(', ')}
-                    onChange={(e) =>
-                        update({
-                            select_columns: e.target.value
-                                ? e.target.value.split(',').map((s) => s.trim())
-                                : [],
-                        })
-                    }
-                    placeholder="col1, col2, col3"
+            <Field label="Select columns">
+                <MultiColumnSelect
+                    columns={columns}
+                    selected={selectColumns}
+                    onChange={(cols) => update({ select_columns: cols })}
+                    isLoading={isLoading}
                 />
+                {selectColumns.length > 0 && (
+                    <p className="text-[10px] text-muted-foreground mt-1">
+                        {selectColumns.length} column{selectColumns.length !== 1 ? 's' : ''} selected
+                    </p>
+                )}
             </Field>
         </>
     )
@@ -414,35 +695,99 @@ function CleanConfig({ data, update }: ConfigFormProps) {
 
 // ─── Aggregate ─────────────────────────────────────────────────────────────────
 
-function AggregateConfig({ data, update }: ConfigFormProps) {
-    const groupBy = (data.group_by as string[]) || []
+const AGG_FUNCTIONS = ['COUNT', 'COUNT_DISTINCT', 'SUM', 'AVG', 'MIN', 'MAX', 'FIRST', 'LAST']
+
+interface AggRow { column: string; function: string; alias: string }
+
+function AggregateConfig({ data, update, nodeId, flowTaskId }: ConfigFormProps) {
+    const { columns, isLoading } = useNodeSchema(flowTaskId, nodeId)
+    const groupBy: string[] = (data.group_by as string[]) || []
+    const aggregations: AggRow[] = (data.aggregations as AggRow[]) || []
 
     return (
         <>
-            <Field label="Group by columns (comma-separated)">
-                <Input
-                    className="h-7 text-xs"
-                    value={groupBy.join(', ')}
-                    onChange={(e) =>
-                        update({
-                            group_by: e.target.value
-                                ? e.target.value.split(',').map((s) => s.trim())
-                                : [],
-                        })
-                    }
-                    placeholder="col1, col2"
+            <Field label="Group by columns">
+                <MultiColumnSelect
+                    columns={columns}
+                    selected={groupBy}
+                    onChange={(cols) => update({ group_by: cols })}
+                    isLoading={isLoading}
                 />
             </Field>
-            <p className="text-[10px] text-muted-foreground">
-                Aggregation columns can be configured in full-edit mode.
-            </p>
+
+            <Field label="Aggregations">
+                <div className="space-y-1.5">
+                    {aggregations.map((row, i) => (
+                        <div key={i} className="flex gap-1 items-center">
+                            <ColumnSelect
+                                columns={columns}
+                                value={row.column}
+                                onChange={(v) => {
+                                    const next = [...aggregations]
+                                    next[i] = { ...next[i], column: v }
+                                    update({ aggregations: next })
+                                }}
+                                isLoading={isLoading}
+                                placeholder="column"
+                            />
+                            <Select
+                                value={row.function}
+                                onValueChange={(v) => {
+                                    const next = [...aggregations]
+                                    next[i] = { ...next[i], function: v }
+                                    update({ aggregations: next })
+                                }}
+                            >
+                                <SelectTrigger className="h-7 text-xs w-24 shrink-0">
+                                    <SelectValue placeholder="func" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {AGG_FUNCTIONS.map((f) => (
+                                        <SelectItem key={f} value={f}>{f}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                            <Input
+                                className="h-7 text-xs w-20 shrink-0"
+                                value={row.alias}
+                                onChange={(e) => {
+                                    const next = [...aggregations]
+                                    next[i] = { ...next[i], alias: e.target.value }
+                                    update({ aggregations: next })
+                                }}
+                                placeholder="alias"
+                            />
+                            <Button
+                                variant="ghost" size="icon"
+                                className="h-7 w-7 shrink-0 hover:text-destructive"
+                                onClick={() =>
+                                    update({ aggregations: aggregations.filter((_, j) => j !== i) })
+                                }
+                            >
+                                <X className="h-3 w-3" />
+                            </Button>
+                        </div>
+                    ))}
+                    <Button
+                        variant="outline" size="sm"
+                        className="h-6 text-[11px] w-full gap-1"
+                        onClick={() =>
+                            update({
+                                aggregations: [...aggregations, { column: '', function: 'COUNT', alias: '' }],
+                            })
+                        }
+                    >
+                        <Plus className="h-3 w-3" /> Add aggregation
+                    </Button>
+                </div>
+            </Field>
         </>
     )
 }
 
 // ─── Join ──────────────────────────────────────────────────────────────────────
 
-function JoinConfig({ data, update }: ConfigFormProps) {
+function JoinConfig({ data, update, nodeId: _nodeId, flowTaskId: _flowTaskId }: ConfigFormProps) {
     return (
         <>
             <Field label="Join Type">
@@ -472,7 +817,7 @@ function JoinConfig({ data, update }: ConfigFormProps) {
 
 // ─── Union ─────────────────────────────────────────────────────────────────────
 
-function UnionConfig({ data, update }: ConfigFormProps) {
+function UnionConfig({ data, update, nodeId: _nodeId, flowTaskId: _flowTaskId }: ConfigFormProps) {
     return (
         <SwitchField
             label="UNION ALL (keep duplicates)"
@@ -484,7 +829,8 @@ function UnionConfig({ data, update }: ConfigFormProps) {
 
 // ─── Pivot ─────────────────────────────────────────────────────────────────────
 
-function PivotConfig({ data, update }: ConfigFormProps) {
+function PivotConfig({ data, update, nodeId, flowTaskId }: ConfigFormProps) {
+    const { columns, isLoading } = useNodeSchema(flowTaskId, nodeId)
     const pivotType = (data.pivot_type as string) || 'PIVOT'
 
     return (
@@ -505,20 +851,20 @@ function PivotConfig({ data, update }: ConfigFormProps) {
             </Field>
 
             <Field label="Pivot column">
-                <Input
-                    className="h-7 text-xs"
+                <ColumnSelect
+                    columns={columns}
                     value={(data.pivot_column as string) || ''}
-                    onChange={(e) => update({ pivot_column: e.target.value })}
-                    placeholder="category"
+                    onChange={(v) => update({ pivot_column: v })}
+                    isLoading={isLoading}
                 />
             </Field>
 
             <Field label="Value column">
-                <Input
-                    className="h-7 text-xs"
+                <ColumnSelect
+                    columns={columns}
                     value={(data.value_column as string) || ''}
-                    onChange={(e) => update({ value_column: e.target.value })}
-                    placeholder="amount"
+                    onChange={(v) => update({ value_column: v })}
+                    isLoading={isLoading}
                 />
             </Field>
 
@@ -542,23 +888,41 @@ function PivotConfig({ data, update }: ConfigFormProps) {
 
 // ─── Output ────────────────────────────────────────────────────────────────────
 
-function OutputConfig({ data, update }: ConfigFormProps) {
+function OutputConfig({ data, update, nodeId, flowTaskId }: ConfigFormProps) {
+    const { columns, isLoading: schemaLoading } = useNodeSchema(flowTaskId, nodeId)
+
+    const { data: destsData, isLoading: destsLoading } = useQuery({
+        queryKey: ['destinations'],
+        queryFn: () => destinationsRepo.getAll(),
+        staleTime: 30_000,
+    })
+
+    const upsertKeys: string[] = (data.upsert_keys as string[]) || []
+
     return (
         <>
-            <Field label="Destination ID">
-                <Input
-                    className="h-7 text-xs"
-                    type="number"
-                    value={(data.destination_id as number) ?? ''}
-                    onChange={(e) =>
-                        update({
-                            destination_id: e.target.value
-                                ? parseInt(e.target.value)
-                                : undefined,
-                        })
-                    }
-                    placeholder="Destination database ID"
-                />
+            <Field label="Destination">
+                {destsLoading ? (
+                    <div className="flex items-center gap-1.5 h-7 text-xs text-muted-foreground">
+                        <Loader2 className="h-3 w-3 animate-spin" /> Loading…
+                    </div>
+                ) : (
+                    <Select
+                        value={data.destination_id != null ? String(data.destination_id) : ''}
+                        onValueChange={(v) => update({ destination_id: parseInt(v) })}
+                    >
+                        <SelectTrigger className="h-7 text-xs">
+                            <SelectValue placeholder="Select destination…" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {(destsData?.destinations ?? []).map((d) => (
+                                <SelectItem key={d.id} value={String(d.id)}>
+                                    {d.name}
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                )}
             </Field>
 
             <Field label="Schema">
@@ -594,18 +958,12 @@ function OutputConfig({ data, update }: ConfigFormProps) {
                 </Select>
             </Field>
 
-            <Field label="Upsert keys (comma-separated)">
-                <Input
-                    className="h-7 text-xs"
-                    value={((data.upsert_keys as string[]) || []).join(', ')}
-                    onChange={(e) =>
-                        update({
-                            upsert_keys: e.target.value
-                                ? e.target.value.split(',').map((s) => s.trim())
-                                : [],
-                        })
-                    }
-                    placeholder="id, created_at"
+            <Field label="Upsert keys">
+                <MultiColumnSelect
+                    columns={columns}
+                    selected={upsertKeys}
+                    onChange={(cols) => update({ upsert_keys: cols })}
+                    isLoading={schemaLoading}
                 />
             </Field>
         </>
@@ -613,11 +971,6 @@ function OutputConfig({ data, update }: ConfigFormProps) {
 }
 
 // ─── Shared helpers ────────────────────────────────────────────────────────────
-
-type ConfigFormProps = {
-    data: FlowNodeData
-    update: (patch: Partial<FlowNodeData>) => void
-}
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
     return (

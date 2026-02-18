@@ -258,3 +258,18 @@ class TaskStatusResponse(BaseSchema):
     result: Optional[Dict[str, Any]] = None
     meta: Optional[Dict[str, Any]] = None
     error: Optional[str] = None
+
+
+# ─── Node schema (DuckDB-derived) ─────────────────────────────────────────────
+
+class ColumnInfo(BaseSchema):
+    """A single column descriptor returned by the node-schema endpoint."""
+
+    column_name: str
+    data_type: str
+
+
+class NodeColumnsResponse(BaseSchema):
+    """Schema response from POST /{flow_task_id}/node-schema."""
+
+    columns: List[ColumnInfo]

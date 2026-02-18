@@ -205,6 +205,17 @@ export interface TaskStatusResponse {
     error: string | null
 }
 
+// ─── Column Schema ────────────────────────────────────────────────────────────
+
+export interface ColumnInfo {
+    column_name: string
+    data_type: string
+}
+
+export interface NodeColumnsResponse {
+    columns: ColumnInfo[]
+}
+
 // ─── Trigger ─────────────────────────────────────────────────────────────────
 
 export interface FlowTaskTriggerResponse {
@@ -275,5 +286,12 @@ export const flowTasksRepo = {
 
     getRunDetail(runId: number) {
         return api.get<FlowTaskRunHistory>(`/flow-tasks/runs/${runId}`)
+    },
+
+    // Node schema — resolved via DuckDB LIMIT 0 in the worker
+    // Sends the live graph snapshot; returns column names + DuckDB type strings
+    // that reflect the *actual* output of the node (including transforms, aggregates, etc.)
+    getNodeSchema(flowTaskId: number, payload: NodePreviewRequest) {
+        return api.post<NodeColumnsResponse>(`/flow-tasks/${flowTaskId}/node-schema`, payload)
     },
 }

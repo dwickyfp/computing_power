@@ -127,13 +127,17 @@ def _build_input_cte(node: dict, _pred_ctes: list) -> str:
 
 def _build_clean_cte(node: dict, pred_ctes: list) -> str:
     """
-    CLEAN node — filter, rename, calculate, group & replace.
+    CLEAN node — filter, rename, calculate, deduplicate, select columns.
 
     data keys:
-      filters: list[str]           — raw SQL WHERE conditions (ANDed)
+      filter_expr: str             — compiled SQL WHERE expression (from UI filter builder)
+      filters: list[str]           — legacy raw SQL WHERE conditions (ANDed, fallback)
+      select_columns: list[str]    — explicit column list to keep (empty = keep all)
+      drop_columns: list[str]      — legacy columns to drop via EXCLUDE
       renames: [{old, new}]        — column renames
       calculations: [{expr, alias}] — new calculated columns
-      drop_columns: list[str]      — columns to drop
+      drop_nulls: bool             — wrap in SELECT * WHERE col IS NOT NULL (skipped; handled downstream)
+      deduplicate: bool            — emit SELECT DISTINCT
     """
     if not pred_ctes:
         raise ValueError(f"Clean node {node['id']} has no upstream nodes")
@@ -141,31 +145,48 @@ def _build_clean_cte(node: dict, pred_ctes: list) -> str:
     data = node.get("data", {})
     source = pred_ctes[0]
 
-    filters: List[str] = data.get("filters", [])
+    # --- Column selection ---
+    # Priority: explicit select_columns > drop_columns (legacy) > *
+    select_columns: List[str] = data.get("select_columns", [])
+    drop_cols: List[str] = data.get("drop_columns", [])
     renames: List[dict] = data.get("renames", [])
     calcs: List[dict] = data.get("calculations", [])
-    drop_cols: List[str] = data.get("drop_columns", [])
 
-    # Build column list
-    col_parts = []
+    if select_columns:
+        # Explicit column list wins
+        col_parts = list(select_columns)
+    else:
+        col_parts = []
+        select_all = "* EXCLUDE (" + ", ".join(drop_cols) + ")" if drop_cols else "*"
+        col_parts.append(select_all)
 
-    # All columns except dropped
-    select_all = "* EXCLUDE (" + ", ".join(drop_cols) + ")" if drop_cols else "*"
-    col_parts.append(select_all)
-
-    # Renames via alias
+    # Renames via alias (append after base columns)
     for r in renames:
         col_parts.append(f"{r['old']} AS {r['new']}")
 
-    # Calculations
+    # Calculated columns
     for c in calcs:
         col_parts.append(f"{c['expr']} AS {c['alias']}")
 
+    distinct_kw = "DISTINCT " if data.get("deduplicate") else ""
     col_expr = ", ".join(col_parts)
-    sql = f"SELECT {col_expr} FROM {source}"
-    if filters:
-        where = " AND ".join(f"({f})" for f in filters)
-        sql += f" WHERE {where}"
+    sql = f"SELECT {distinct_kw}{col_expr} FROM {source}"
+
+    # --- WHERE conditions ---
+    # Priority: filter_expr (string from UI builder) > filters (legacy list)
+    filter_expr: str = data.get("filter_expr", "").strip()
+    legacy_filters: List[str] = data.get("filters", [])
+
+    where_parts: List[str] = []
+    if filter_expr:
+        where_parts.append(f"({filter_expr})")
+    for f in legacy_filters:
+        if f and f.strip():
+            where_parts.append(f"({f})")
+
+    if where_parts:
+        sql += " WHERE " + " AND ".join(where_parts)
+
     return sql
 
 
@@ -187,7 +208,8 @@ def _build_aggregate_cte(node: dict, pred_ctes: list) -> str:
 
     col_parts = list(group_by)
     for agg in aggs:
-        func = agg.get("func", "COUNT").upper()
+        # Support both "function" (from NodeConfigPanel) and legacy "func" key
+        func = (agg.get("function") or agg.get("func") or "COUNT").upper()
         col = agg.get("column", "*")
         alias = agg.get("alias", f"{func.lower()}_{col}")
         if func == "COUNT_DISTINCT":
