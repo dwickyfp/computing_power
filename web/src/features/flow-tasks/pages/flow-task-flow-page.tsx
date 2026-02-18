@@ -39,6 +39,8 @@ import {
     BreadcrumbSeparator,
 } from '@/components/ui/breadcrumb'
 import { Badge } from '@/components/ui/badge'
+import { Switch } from '@/components/ui/switch'
+import { Label } from '@/components/ui/label'
 import {
     Save,
     Play,
@@ -90,6 +92,28 @@ function FlowCanvas({ flowTaskId }: { flowTaskId: number }) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const rfInstance = useRef<any>(null)
     const [pollingTaskId, setPollingTaskId] = useState<string | null>(null)
+    const [autoSave, setAutoSave] = useState(false)
+    const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+    const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null)
+    const [lastSavedLabel, setLastSavedLabel] = useState('')
+
+    // Update relative label every 10 s
+    useEffect(() => {
+        function formatRelative(d: Date) {
+            const diff = Math.floor((Date.now() - d.getTime()) / 1000)
+            if (diff < 10) return 'Saved just now'
+            if (diff < 60) return `Saved ${diff}s ago`
+            const m = Math.floor(diff / 60)
+            if (m < 60) return `Saved ${m}m ago`
+            const h = Math.floor(m / 60)
+            if (h < 24) return `Saved ${h}h ago`
+            return `Saved ${d.toLocaleDateString()}`
+        }
+        if (!lastSavedAt) { setLastSavedLabel(''); return }
+        setLastSavedLabel(formatRelative(lastSavedAt))
+        const id = setInterval(() => setLastSavedLabel(formatRelative(lastSavedAt)), 10_000)
+        return () => clearInterval(id)
+    }, [lastSavedAt])
 
     // Right-click context menu state
     const [ctxMenu, setCtxMenu] = useState<{
@@ -143,6 +167,9 @@ function FlowCanvas({ flowTaskId }: { flowTaskId: number }) {
             if (Array.isArray(graph.nodes_json)) setNodes(graph.nodes_json as FlowNode[])
             if (Array.isArray(graph.edges_json)) setEdges(graph.edges_json as FlowEdge[])
             markClean()
+            // Use updated_at from graph response if available, else now
+            const savedAt = graph.updated_at ? new Date(graph.updated_at) : new Date()
+            setLastSavedAt(savedAt)
         }
     }, [graphData, setNodes, setEdges, markClean])
 
@@ -210,6 +237,7 @@ function FlowCanvas({ flowTaskId }: { flowTaskId: number }) {
         },
         onSuccess: () => {
             markClean()
+            setLastSavedAt(new Date())
             toast.success('Graph saved')
             // Invalidate only the flow-task detail (status/name), NOT the graph query.
             // Invalidating the graph query would trigger a refetch that calls setNodes([]),
@@ -224,6 +252,21 @@ function FlowCanvas({ flowTaskId }: { flowTaskId: number }) {
         },
         onError: () => toast.error('Failed to save graph'),
     })
+
+    // ─── Auto-save: trigger 2 s after last change when enabled ────────────────
+
+    useEffect(() => {
+        if (!autoSave || !isDirty) return
+        if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current)
+        autoSaveTimer.current = setTimeout(() => {
+            saveMutation.mutate()
+        }, 2000)
+        return () => {
+            if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current)
+        }
+    // saveMutation is stable (useMutation), safe to omit from deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [autoSave, isDirty, nodes, edges])
 
     // ─── Run ───────────────────────────────────────────────────────────────────
 
@@ -368,12 +411,32 @@ function FlowCanvas({ flowTaskId }: { flowTaskId: number }) {
                 </Breadcrumb>
 
                 <div className="ml-auto flex items-center gap-2">
+                    {lastSavedLabel && (
+                        <span className="text-[11px] text-muted-foreground">{lastSavedLabel}</span>
+                    )}
                     {isDirty && (
-                        <Badge variant="outline" className="text-amber-600 border-amber-400 text-[10px]">
+                        <Badge variant="outline" className="text-sky-500 border-sky-500/40 bg-sky-500/10 text-[10px]">
                             <AlertCircle className="h-2.5 w-2.5 mr-1" />
                             Unsaved
                         </Badge>
                     )}
+                    <div className="flex items-center gap-1.5 border border-border rounded-md px-2.5 py-1">
+                        <Switch
+                            id="auto-save"
+                            checked={autoSave}
+                            onCheckedChange={setAutoSave}
+                            className="h-4 w-7 [&_span]:h-3 [&_span]:w-3"
+                        />
+                        <Label htmlFor="auto-save" className="text-[11px] text-muted-foreground cursor-pointer select-none">
+                            {autoSave ? (
+                                saveMutation.isPending ? (
+                                    <span className="flex items-center gap-1">
+                                        <Loader2 className="h-2.5 w-2.5 animate-spin" /> Saving…
+                                    </span>
+                                ) : 'Auto-save on'
+                            ) : 'Auto-save'}
+                        </Label>
+                    </div>
                     <Button
                         size="sm"
                         variant="outline"
