@@ -6,7 +6,15 @@ Implements AES-256-GCM encryption for securing sensitive data at rest.
 
 import base64
 import os
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
+from app.core.config import get_settings
+
+settings = get_settings()
+
+
+def get_cipher() -> AESGCM:
+    """
     Get AESGCM cipher instance using the configured encryption key.
     
     The key must be 32 bytes (256 bits) for AES-256.
