@@ -314,9 +314,18 @@ class CDCEventHandler(BasePythonChangeHandler):
 
             # Update data flow monitoring
             if written > 0:
-                self._update_monitoring(
-                    routing, table_name, written
-                )
+                # For Snowflake, use landing table name; for PostgreSQL, use target table name
+                if dest_type.lower() == "snowflake":
+                    target_table = routing.table_sync.table_name_target.upper()
+                    if target_table.startswith("LANDING_"):
+                        monitoring_table_name = target_table
+                    else:
+                        monitoring_table_name = f"LANDING_{target_table}"
+                else:
+                    # For PostgreSQL and other destinations, use the target table name
+                    monitoring_table_name = routing.table_sync.table_name_target
+
+                self._update_monitoring(routing, monitoring_table_name, written)
 
             # Clear error state if previously failed - destination is now healthy
             if routing.pipeline_destination.is_error or routing.table_sync.is_error:
