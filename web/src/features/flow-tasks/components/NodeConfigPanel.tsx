@@ -914,9 +914,7 @@ function PivotConfig({ data, update, nodeId, flowTaskId }: ConfigFormProps) {
 
 // ─── Output ────────────────────────────────────────────────────────────────────
 
-function OutputConfig({ data, update, nodeId, flowTaskId }: ConfigFormProps) {
-    const { columns, isLoading: schemaLoading } = useNodeSchema(flowTaskId, nodeId)
-
+function OutputConfig({ data, update }: ConfigFormProps) {
     const { data: destsData, isLoading: destsLoading } = useQuery({
         queryKey: ['destinations'],
         queryFn: () => destinationsRepo.getAll(),
@@ -924,6 +922,7 @@ function OutputConfig({ data, update, nodeId, flowTaskId }: ConfigFormProps) {
     })
 
     const upsertKeys: string[] = (data.upsert_keys as string[]) || []
+    const upsertKeysText = upsertKeys.join(', ')
 
     return (
         <>
@@ -985,12 +984,21 @@ function OutputConfig({ data, update, nodeId, flowTaskId }: ConfigFormProps) {
             </Field>
 
             <Field label="Upsert keys">
-                <MultiColumnSelect
-                    columns={columns}
-                    selected={upsertKeys}
-                    onChange={(cols) => update({ upsert_keys: cols })}
-                    isLoading={schemaLoading}
+                <Input
+                    className="h-7 text-xs"
+                    value={upsertKeysText}
+                    onChange={(e) => {
+                        const cols = e.target.value
+                            .split(',')
+                            .map((s) => s.trim())
+                            .filter(Boolean)
+                        update({ upsert_keys: cols })
+                    }}
+                    placeholder="e.g. id, user_id"
                 />
+                <p className="text-[10px] text-muted-foreground">
+                    Comma-separated column names
+                </p>
             </Field>
         </>
     )

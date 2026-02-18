@@ -53,6 +53,8 @@ import { toast } from 'sonner'
 import { type FlowGraph, type FlowNode, type FlowEdge, flowTasksRepo } from '@/repo/flow-tasks'
 import { useFlowTaskStore } from '../store/flow-task-store'
 import { useTheme } from '@/context/theme-provider'
+import { Search } from '@/components/search'
+import { ThemeSwitch } from '@/components/theme-switch'
 import { NodePalette } from '../components/NodePalette'
 import { NodeConfigPanel } from '../components/NodeConfigPanel'
 import { PreviewDrawer } from '../components/PreviewDrawer'
@@ -376,6 +378,7 @@ function FlowCanvas({ flowTaskId }: { flowTaskId: number }) {
 
     return (
         <div className="flex flex-col h-screen overflow-hidden">
+
             {/* Top Bar */}
             <div className="flex items-center gap-3 px-4 py-2 border-b border-border bg-background z-10 flex-shrink-0">
                 <Breadcrumb>
@@ -462,6 +465,9 @@ function FlowCanvas({ flowTaskId }: { flowTaskId: number }) {
                         )}
                         Run
                     </Button>
+                    <div className="w-px h-5 bg-border" />
+                    <Search />
+                    <ThemeSwitch />
                 </div>
             </div>
 
