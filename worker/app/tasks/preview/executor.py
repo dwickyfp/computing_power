@@ -121,10 +121,19 @@ def execute_preview(
                 f"WITH filtered_source AS ({filtered_source_cte}) "
                 f"SELECT * FROM ({rewritten_sql}) AS result_sql LIMIT {row_limit}"
             )
+
+            # Count query for custom SQL
+            count_query = (
+                f"WITH filtered_source AS (SELECT * FROM {source_prefix}.{table_name}{where_clause}) "
+                f"SELECT COUNT(*) as total FROM ({rewritten_sql}) AS result_sql"
+            )
         else:
             # Direct table query
             base_query = f"SELECT * FROM {source_prefix}.{table_name}"
             final_query = f"{base_query}{where_clause} LIMIT {row_limit}"
+
+            # Count query for direct table
+            count_query = f"SELECT COUNT(*) as total FROM {source_prefix}.{table_name}{where_clause}"
 
         logger.info("Executing preview query", query=final_query)
 
@@ -153,7 +162,11 @@ def execute_preview(
             except Exception as e:
                 logger.warning("Failed to attach destination DB", error=str(e))
 
-            # Execute query
+            # Execute count query first
+            count_result = con.execute(count_query).fetchone()
+            total_count = count_result[0] if count_result else 0
+
+            # Execute data query
             result = con.execute(final_query).fetch_arrow_table()
         finally:
             con.close()
@@ -163,7 +176,7 @@ def execute_preview(
         column_types = extract_column_types(result.schema)
         data = result.to_pylist()
 
-        response = serialize_preview_result(columns, column_types, data)
+        response = serialize_preview_result(columns, column_types, data, total_count)
 
         # 7. Cache result
         try:
