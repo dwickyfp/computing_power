@@ -104,10 +104,16 @@ class SnowflakeAdapter(BaseConnectionAdapter):
         warehouse = config.get("warehouse", "")
         schema = config.get("schema", "PUBLIC")
 
-        # Handle private key — prefer content over path
-        private_key_content: Optional[str] = config.get("private_key_content")
+        # Handle private key — prefer content over path.
+        # The config JSON may store it as "private_key_content" (worker standard)
+        # or as "private_key" (backend/pipeline standard) — accept both.
+        private_key_content: Optional[str] = (
+            config.get("private_key_content") or config.get("private_key")
+        )
         private_key_path: Optional[str] = config.get("private_key_path")
-        passphrase: Optional[str] = config.get("private_key_passphrase")
+        passphrase: Optional[str] = (
+            config.get("private_key_passphrase") or config.get("passphrase")
+        )
 
         # Decrypt if the value looks encrypted (base64 ciphertext)
         if private_key_content and not private_key_content.strip().startswith("-----"):
@@ -262,7 +268,7 @@ class SourceConnectionFactory:
         config_raw = row.config if isinstance(row.config, dict) else json.loads(row.config)
 
         # Decrypt password fields
-        for key in ("password", "private_key_content", "private_key_passphrase"):
+        for key in ("password", "private_key_content", "private_key", "private_key_passphrase", "passphrase"):
             if key in config_raw and config_raw[key]:
                 try:
                     config_raw[key] = decrypt_value(config_raw[key])

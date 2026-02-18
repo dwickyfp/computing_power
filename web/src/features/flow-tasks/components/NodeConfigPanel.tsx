@@ -33,7 +33,7 @@ export function NodeConfigPanel() {
         updateNodeData(selectedNode.id, patch)
 
     return (
-        <div className="flex flex-col h-full w-72 border-l border-border bg-background overflow-y-auto">
+        <div className="flex flex-col h-full w-72 border-l border-border bg-background overflow-y-auto animate-in slide-in-from-right duration-200">
             {/* Header */}
             <div className="flex items-center justify-between px-3 py-2 border-b border-border/50">
                 <p className="text-sm font-semibold capitalize">

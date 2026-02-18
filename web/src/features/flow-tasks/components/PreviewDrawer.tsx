@@ -1,19 +1,77 @@
 /**
  * PreviewDrawer — bottom slide-up panel that shows the node preview result.
+ * Supports drag-to-resize via the top resize handle.
  */
 
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useFlowTaskStore } from '../store/flow-task-store'
 import { Button } from '@/components/ui/button'
-import { X, Loader2, AlertCircle } from 'lucide-react'
+import { X, Loader2, AlertCircle, GripHorizontal } from 'lucide-react'
 import { cn } from '@/lib/utils'
+
+const MIN_HEIGHT = 120
+const MAX_HEIGHT = 600
+const DEFAULT_HEIGHT = 224  // h-56
 
 export function PreviewDrawer() {
     const { preview, closePreview } = useFlowTaskStore()
+    const [height, setHeight] = useState(DEFAULT_HEIGHT)
+    const [visible, setVisible] = useState(false)
+    const dragging = useRef(false)
+    const startY = useRef(0)
+    const startH = useRef(0)
+
+    // Trigger enter animation
+    useEffect(() => {
+        if (preview.isOpen) {
+            setHeight(DEFAULT_HEIGHT)
+            // small delay so the initial transform is applied before transitioning
+            requestAnimationFrame(() => setVisible(true))
+        } else {
+            setVisible(false)
+        }
+    }, [preview.isOpen])
+
+    const onMouseDown = useCallback((e: React.MouseEvent) => {
+        e.preventDefault()
+        dragging.current = true
+        startY.current = e.clientY
+        startH.current = height
+    }, [height])
+
+    useEffect(() => {
+        const onMove = (e: MouseEvent) => {
+            if (!dragging.current) return
+            const delta = startY.current - e.clientY
+            setHeight(Math.min(MAX_HEIGHT, Math.max(MIN_HEIGHT, startH.current + delta)))
+        }
+        const onUp = () => { dragging.current = false }
+        window.addEventListener('mousemove', onMove)
+        window.addEventListener('mouseup', onUp)
+        return () => {
+            window.removeEventListener('mousemove', onMove)
+            window.removeEventListener('mouseup', onUp)
+        }
+    }, [])
 
     if (!preview.isOpen) return null
 
     return (
-        <div className="absolute bottom-0 left-0 right-0 z-10 border-t border-border bg-background shadow-lg transition-all duration-200">
+        <div
+            className={cn(
+                'absolute bottom-0 left-0 right-0 z-10 border-t border-border bg-background shadow-lg',
+                'transition-transform duration-300 ease-out',
+                visible ? 'translate-y-0' : 'translate-y-full'
+            )}
+        >
+            {/* Resize handle */}
+            <div
+                onMouseDown={onMouseDown}
+                className="flex items-center justify-center h-3 cursor-ns-resize hover:bg-muted/50 transition-colors group"
+            >
+                <GripHorizontal className="h-3 w-3 text-muted-foreground/50 group-hover:text-muted-foreground transition-colors" />
+            </div>
+
             {/* Header */}
             <div className="flex items-center justify-between px-4 py-2 border-b border-border/50">
                 <div className="flex items-center gap-2">
@@ -39,7 +97,7 @@ export function PreviewDrawer() {
             </div>
 
             {/* Body */}
-            <div className="h-56 overflow-auto p-2">
+            <div className="overflow-auto p-2" style={{ height }}>
                 {preview.isLoading && (
                     <div className="flex items-center justify-center h-full gap-2 text-muted-foreground">
                         <Loader2 className="h-4 w-4 animate-spin" />

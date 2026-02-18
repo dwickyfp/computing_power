@@ -506,8 +506,7 @@ class GraphCompiler:
             raise ValueError(f"CTE '{target_cte}' not found in compiled graph")
 
         cte_block = ",\n".join(f"{name} AS (\n{body}\n)" for name, body in parts)
-        last_cte = parts[-1][0]
-        return f"WITH {cte_block}\nSELECT * FROM {last_cte}"
+        return f"WITH {cte_block}"
 
     @property
     def full_cte_prefix(self) -> str:
