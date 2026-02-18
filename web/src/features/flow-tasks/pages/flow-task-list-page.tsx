@@ -50,6 +50,7 @@ import {
     Pencil,
     Trash2,
     ExternalLink,
+    Play,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { formatDistanceToNow } from 'date-fns'
@@ -198,6 +199,21 @@ export default function FlowTaskListPage() {
         onError: () => toast.error('Failed to delete flow task'),
     })
 
+    const [runningId, setRunningId] = useState<number | null>(null)
+    const runMutation = useMutation({
+        mutationFn: (id: number) => flowTasksRepo.run(id),
+        onMutate: (id) => setRunningId(id),
+        onSuccess: (_data, id) => {
+            setRunningId(null)
+            toast.success('Flow task triggered')
+            setTimeout(() => queryClient.invalidateQueries({ queryKey: ['flow-tasks'] }), 300)
+        },
+        onError: (_err, id) => {
+            setRunningId(null)
+            toast.error('Failed to trigger flow task')
+        },
+    })
+
     const openCreate = useCallback(() => {
         setEditTarget(undefined)
         setDialogOpen(true)
@@ -257,13 +273,14 @@ export default function FlowTaskListPage() {
                                 <TableHead className="w-[120px]">Status</TableHead>
                                 <TableHead className="w-[120px]">Trigger</TableHead>
                                 <TableHead>Last Execution</TableHead>
+                                <TableHead className="w-[80px]">Run</TableHead>
                                 <TableHead className="w-[60px]"></TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
                             {isLoading && (
                                 <TableRow>
-                                    <TableCell colSpan={5} className="text-center py-12">
+                                    <TableCell colSpan={6} className="text-center py-12">
                                         <Loader2 className="h-6 w-6 animate-spin mx-auto text-muted-foreground/50" />
                                     </TableCell>
                                 </TableRow>
@@ -271,7 +288,7 @@ export default function FlowTaskListPage() {
                             {!isLoading && flowTasks.length === 0 && (
                                 <TableRow>
                                     <TableCell
-                                        colSpan={5}
+                                        colSpan={6}
                                         className="text-center py-16 text-muted-foreground"
                                     >
                                         <div className="flex flex-col items-center gap-2">
@@ -334,6 +351,20 @@ export default function FlowTaskListPage() {
                                                 </span>
                                             )}
                                         </div>
+                                    </TableCell>
+                                    <TableCell>
+                                        <Button
+                                            size="sm"
+                                            variant="outline"
+                                            className="h-7 px-2.5 gap-1.5 text-xs font-medium"
+                                            disabled={ft.status === 'RUNNING' || runningId === ft.id}
+                                            onClick={() => runMutation.mutate(ft.id)}
+                                        >
+                                            {runningId === ft.id
+                                                ? <Loader2 className="h-3 w-3 animate-spin" />
+                                                : <Play className="h-3 w-3" />}
+                                            Run
+                                        </Button>
                                     </TableCell>
                                     <TableCell>
                                         <DropdownMenu>
