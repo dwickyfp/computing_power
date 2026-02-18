@@ -84,10 +84,14 @@ def execute_preview(
             logger.warning("Redis cache check failed", error=str(e))
 
         # 3. Get source & destination config from config DB
-        source_config, dest_config = _fetch_connection_configs(source_id, destination_id)
+        source_config, dest_config = _fetch_connection_configs(
+            source_id, destination_id
+        )
 
         # 4. Build query
-        sanitized_source_name = re.sub(r"[^a-zA-Z0-9_]", "_", source_config["name"].lower())
+        sanitized_source_name = re.sub(
+            r"[^a-zA-Z0-9_]", "_", source_config["name"].lower()
+        )
         source_prefix = f"pg_src_{sanitized_source_name}"
 
         sanitized_dest_name = re.sub(r"[^a-zA-Z0-9_]", "_", dest_config["name"].lower())
@@ -104,9 +108,7 @@ def execute_preview(
 
         if sql:
             # Custom SQL mode: CTE + rewrite
-            filtered_source_cte = (
-                f"SELECT * FROM {source_prefix}.{table_name}{where_clause} LIMIT {row_limit}"
-            )
+            filtered_source_cte = f"SELECT * FROM {source_prefix}.{table_name}{where_clause} LIMIT {row_limit}"
             rewritten_sql = sql
             table_pattern = re.compile(
                 rf'(?<![\.\w"]){re.escape(table_name)}(?![\.\w"])',
@@ -129,7 +131,9 @@ def execute_preview(
         # 5. Execute in DuckDB
         con = duckdb.connect(":memory:")
         try:
+            # Configure DuckDB for performance
             con.execute(f"SET memory_limit='{settings.duckdb_memory_limit}'")
+            con.execute(f"SET threads={getattr(settings, 'duckdb_threads', 4)}")
             con.execute("INSTALL postgres;")
             con.execute("LOAD postgres;")
 
@@ -226,7 +230,11 @@ def _fetch_connection_configs(
         if isinstance(dest_cfg, str):
             dest_cfg = json.loads(dest_cfg)
 
-        dest_pass = decrypt_value(dest_cfg.get("password", "")) if dest_cfg.get("password") else ""
+        dest_pass = (
+            decrypt_value(dest_cfg.get("password", ""))
+            if dest_cfg.get("password")
+            else ""
+        )
         dest_config = {
             "name": dest_row.name,
             "conn_str": (
