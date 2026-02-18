@@ -139,6 +139,30 @@ class BackgroundScheduler:
                 "Error running table list refresh task", extra={"error": str(e)}
             )
 
+    def _run_destination_table_list_refresh(self) -> None:
+        """
+        Synchronous wrapper for destination table list refresh task.
+        Dispatches a Celery task per destination to the worker.
+        """
+        try:
+            from app.core.database import db_manager
+            from app.domain.services.destination import DestinationService
+
+            session_factory = db_manager.session_factory
+            db = session_factory()
+            try:
+                service = DestinationService(db)
+                service.refresh_table_list_all()
+                self._record_job_metric("destination_table_list_refresh")
+            finally:
+                db.close()
+
+        except Exception as e:
+            logger.error(
+                "Error running destination table list refresh task",
+                extra={"error": str(e)},
+            )
+
     def _run_system_metric_collection(self) -> None:
         """
         Synchronous wrapper for system metric collection task.
@@ -378,6 +402,17 @@ class BackgroundScheduler:
             trigger=IntervalTrigger(minutes=5),
             id="table_list_refresh",
             name="Table List Refresh",
+            replace_existing=True,
+            max_instances=1,
+            coalesce=True,
+        )
+
+        # Schedule Destination Table List Refresh (every 30 minutes, via worker)
+        self.scheduler.add_job(
+            self._run_destination_table_list_refresh,
+            trigger=IntervalTrigger(minutes=30),
+            id="destination_table_list_refresh",
+            name="Destination Table List Refresh",
             replace_existing=True,
             max_instances=1,
             coalesce=True,

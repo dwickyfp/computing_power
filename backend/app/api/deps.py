@@ -95,3 +95,18 @@ def get_tag_service(db: Session = Depends(get_db)) -> TagService:
         Tag service instance
     """
     return TagService(db)
+
+
+def get_flow_task_service(db: Session = Depends(get_db)) -> "FlowTaskService":
+    """
+    Get flow task service dependency.
+
+    Args:
+        db: Database session
+
+    Returns:
+        FlowTask service instance
+    """
+    from app.domain.services.flow_task import FlowTaskService
+
+    return FlowTaskService(db)

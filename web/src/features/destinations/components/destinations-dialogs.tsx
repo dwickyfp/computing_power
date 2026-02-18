@@ -3,6 +3,7 @@ import { destinationsRepo } from '@/repo/destinations'
 import { toast } from 'sonner'
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import { DestinationsMutateDrawer } from './destinations-mutate-drawer'
+import { DestinationTableListModal } from './destination-table-list-modal'
 import { useDestinations } from './destinations-provider'
 
 export function DestinationsDialogs() {
@@ -50,6 +51,18 @@ export function DestinationsDialogs() {
               }
             }}
             currentRow={currentRow}
+          />
+
+          <DestinationTableListModal
+            key={`destination-table-list-${currentRow.id}`}
+            destination={currentRow}
+            open={open === 'table-list'}
+            onOpenChange={(isOpen) => {
+              if (!isOpen) {
+                setOpen(null)
+                setTimeout(() => setCurrentRow(null), 500)
+              }
+            }}
           />
 
           <ConfirmDialog

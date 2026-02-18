@@ -18,6 +18,16 @@ from app.domain.models.job_metric import JobMetric
 from app.domain.models.queue_backfill import QueueBackfillData, BackfillStatus
 from app.domain.models.tag import TagList, PipelineDestinationTableSyncTag
 from app.domain.models.worker_health import WorkerHealthStatus
+from app.domain.models.flow_task import (
+    FlowTask,
+    FlowTaskGraph,
+    FlowTaskRunHistory,
+    FlowTaskRunNodeLog,
+    FlowTaskStatus,
+    FlowTaskTriggerType,
+    FlowTaskRunStatus,
+    FlowTaskNodeStatus,
+)
 
 __all__ = [
     "Base",
@@ -37,4 +47,12 @@ __all__ = [
     "TagList",
     "PipelineDestinationTableSyncTag",
     "WorkerHealthStatus",
+    "FlowTask",
+    "FlowTaskGraph",
+    "FlowTaskRunHistory",
+    "FlowTaskRunNodeLog",
+    "FlowTaskStatus",
+    "FlowTaskTriggerType",
+    "FlowTaskRunStatus",
+    "FlowTaskNodeStatus",
 ]
