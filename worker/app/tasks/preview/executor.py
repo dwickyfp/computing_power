@@ -41,11 +41,16 @@ def execute_preview(
     Execute a preview query using DuckDB with attached Postgres databases.
 
     Flow:
-    1. Check Redis cache
+    1. Check Redis cache (auto-regenerates if custom SQL or filter changes)
     2. Fetch source/destination config from config DB
     3. Build query (with optional filter + custom SQL via CTE)
     4. Execute in DuckDB with Postgres extension
-    5. Serialize and cache results
+    5. Serialize and cache results (5 min TTL)
+
+    Cache Invalidation:
+    - Cache key includes: custom SQL, filter SQL, source_id, dest_id, table_name
+    - Any change to custom SQL or filter will result in cache miss → regenerates data
+    - Cache TTL: 300 seconds (5 minutes)
 
     Args:
         sql: Optional custom SQL query
@@ -64,12 +69,28 @@ def execute_preview(
         if sql:
             validate_preview_sql(sql)
 
-        # 1. Compute cache hash
+        # 1. Compute cache hash - include all parameters that affect the query result
+        # This ensures cache regeneration when custom SQL or filter changes
         filter_str = filter_sql or ""
         sql_str = sql or ""
-        input_string = f"{sql_str}{source_id}{destination_id}{table_name}{filter_str}"
+        # Use structured format with delimiters to avoid hash collisions
+        cache_components = [
+            f"sql:{sql_str}",
+            f"source:{source_id}",
+            f"dest:{destination_id}",
+            f"table:{table_name}",
+            f"filter:{filter_str}",
+        ]
+        input_string = "|".join(cache_components)
         query_hash = hashlib.sha256(input_string.encode()).hexdigest()
         cache_key = f"preview:{query_hash}"
+
+        logger.info(
+            "Preview cache key computed",
+            cache_key=cache_key[:16] + "...",
+            has_custom_sql=bool(sql),
+            has_filter=bool(filter_sql),
+        )
 
         # 2. Check cache
         redis_client = None
@@ -78,8 +99,16 @@ def execute_preview(
             if redis_client:
                 cached = redis_client.get(cache_key)
                 if cached:
-                    logger.info("Preview cache hit", cache_key=cache_key)
+                    logger.info(
+                        "Preview cache hit - returning cached result",
+                        cache_key=cache_key[:16] + "...",
+                    )
                     return json.loads(cached)
+                else:
+                    logger.info(
+                        "Preview cache miss - will regenerate data",
+                        cache_key=cache_key[:16] + "...",
+                    )
         except Exception as e:
             logger.warning("Redis cache check failed", error=str(e))
 
@@ -165,11 +194,16 @@ def execute_preview(
 
         response = serialize_preview_result(columns, column_types, data)
 
-        # 7. Cache result
+        # 7. Cache result (5 minute TTL)
         try:
             if redis_client:
                 redis_client.setex(cache_key, 300, json.dumps(response))
-                logger.info("Preview result cached", cache_key=cache_key)
+                logger.info(
+                    "Preview result cached successfully",
+                    cache_key=cache_key[:16] + "...",
+                    row_count=len(data),
+                    ttl_seconds=300,
+                )
         except Exception as e:
             logger.warning("Failed to cache preview result", error=str(e))
 
