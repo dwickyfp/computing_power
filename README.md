@@ -187,13 +187,13 @@ Rosetta uses a shared configuration database pattern where all three services re
 
 The system schema is defined in `migrations/001_create_table.sql`:
 
-*   **sources**: PostgreSQL source connection configurations
-*   **destinations**: Snowflake/PostgreSQL destination connection details
-*   **pipelines**: Pipeline definitions linking sources to destinations
-*   **pipeline_destinations**: Many-to-many relationship between pipelines and destinations
-*   **pipeline_metadata**: Real-time status, health metrics, and WAL monitoring data per destination
-*   **queue_backfill_data**: Backfill job queue and status tracking
-*   **data_flow_record_monitoring**: CDC event tracking for observability
+- **sources**: PostgreSQL source connection configurations
+- **destinations**: Snowflake/PostgreSQL destination connection details
+- **pipelines**: Pipeline definitions linking sources to destinations
+- **pipeline_destinations**: Many-to-many relationship between pipelines and destinations
+- **pipeline_metadata**: Real-time status, health metrics, and WAL monitoring data per destination
+- **queue_backfill_data**: Backfill job queue and status tracking
+- **data_flow_record_monitoring**: CDC event tracking for observability
 
 ### Service Communication Flow
 
@@ -305,10 +305,10 @@ src/
 
 ### Prerequisites
 
-*   **Python 3.11+** with [uv](https://docs.astral.sh/uv/) package manager (for Backend and Compute)
-*   **Node.js 18+** with [pnpm](https://pnpm.io/) (for Web)
-*   **Docker** & Docker Compose (for running local PostgreSQL instances)
-*   **OpenSSL** (for generating Snowflake authentication keys)
+- **Python 3.11+** with [uv](https://docs.astral.sh/uv/) package manager (for Backend and Compute)
+- **Node.js 18+** with [pnpm](https://pnpm.io/) (for Web)
+- **Docker** & Docker Compose (for running local PostgreSQL instances)
+- **OpenSSL** (for generating Snowflake authentication keys)
 
 ### Step 1: Generate Private & Public Keys
 
@@ -332,6 +332,7 @@ Rosetta uses Key-Pair Authentication for Snowflake.
 Create environment files for each service:
 
 **Backend** (`backend/.env`):
+
 ```bash
 DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5433/postgres
 SECRET_KEY=your-secret-key-here
@@ -339,6 +340,7 @@ WAL_MONITOR_INTERVAL_SECONDS=300
 ```
 
 **Compute** (`compute/.env`):
+
 ```bash
 CONFIG_DATABASE_URL=postgres://postgres:postgres@localhost:5433/postgres
 DEBUG=false
@@ -365,12 +367,14 @@ docker-compose up -d
 ```
 
 This starts:
+
 - **Config DB** on port 5433 (PostgreSQL 16 for pipeline configurations)
 - **Source DB** on port 5434 (PostGIS 16-3.4 for CDC source)
 - **Target DB** on port 5435 (PostGIS for PostgreSQL destination testing)
 - **Redis** on port 6379 (Redis 7 for DLQ)
 
 All PostgreSQL instances are configured with:
+
 - `wal_level=logical` for CDC support
 - `max_replication_slots=10`
 - `max_wal_senders=10`
@@ -425,6 +429,7 @@ Use the dashboard at `http://localhost:5173` to manage pipelines through a visua
 Backend provides comprehensive REST endpoints at `http://localhost:8000/api/v1`:
 
 **Pipeline Management:**
+
 - `POST /pipelines` - Create pipeline (initially in PAUSE status)
 - `GET /pipelines` - List all pipelines with metadata
 - `GET /pipelines/{id}` - Get pipeline details
@@ -434,30 +439,36 @@ Backend provides comprehensive REST endpoints at `http://localhost:8000/api/v1`:
 - `POST /pipelines/{id}/pause` - Pause pipeline
 
 **Multi-Destination:**
+
 - `POST /pipelines/{id}/destinations` - Add destination to pipeline
 - `DELETE /pipelines/{id}/destinations/{dest_id}` - Remove destination
 - `GET /pipelines/{id}/destinations/{dest_id}/metadata` - Get destination health
 
 **Backfill:**
+
 - `POST /pipelines/{id}/backfill` - Create backfill job with filters
 - `GET /pipelines/{id}/backfill` - List backfill jobs
 - `POST /pipelines/{id}/backfill/{job_id}/cancel` - Cancel job
 
 **DLQ Recovery:**
+
 - `GET /pipelines/{id}/destinations/{dest_id}/dlq/count` - Get failed record count
 - `POST /pipelines/{id}/destinations/{dest_id}/recover-dlq` - Recover failed records
 
 **Monitoring:**
+
 - `GET /wal-metrics` - Get WAL size history
 - `GET /pipelines/{id}/monitoring` - Get CDC event statistics
 
 ### Via Direct SQL
+
 Compute service polls for status changes, so you can also control pipelines via SQL:
 
-*   **Pause**: `UPDATE pipelines SET status = 'PAUSE' WHERE name = '...';`
-*   **Start**: `UPDATE pipelines SET status = 'START' WHERE name = '...';`
+- **Pause**: `UPDATE pipelines SET status = 'PAUSE' WHERE name = '...';`
+- **Start**: `UPDATE pipelines SET status = 'START' WHERE name = '...';`
 
 Monitor pipeline health:
+
 ```sql
 SELECT p.name, pm.health_status, pm.wal_size, pm.last_success_time
 FROM pipelines p
@@ -467,6 +478,7 @@ JOIN pipeline_metadata pm ON p.id = pm.pipeline_id;
 ## Testing
 
 ### Backend Tests
+
 ```bash
 cd backend
 uv run pytest tests/             # Run all tests
@@ -474,6 +486,7 @@ uv run pytest tests/ --cov=app   # With coverage report
 ```
 
 ### Compute Tests
+
 ```bash
 cd compute
 pytest tests/
@@ -481,15 +494,15 @@ pytest tests/
 
 ## Port Reference
 
-| Service    | Port | Description                           |
-|------------|------|---------------------------------------|
-| Backend    | 8000 | FastAPI REST API + OpenAPI docs       |
-| Compute    | 8001 | Health check endpoint                 |
-| Web        | 5173 | Vite dev server                       |
-| Config DB  | 5433 | PostgreSQL config database            |
-| Source DB  | 5434 | PostgreSQL source (PostGIS)           |
-| Target DB  | 5435 | PostgreSQL destination (PostGIS)      |
-| Redis      | 6379 | Redis for DLQ (Dead Letter Queue)     |
+| Service   | Port | Description                       |
+| --------- | ---- | --------------------------------- |
+| Backend   | 8000 | FastAPI REST API + OpenAPI docs   |
+| Compute   | 8001 | Health check endpoint             |
+| Web       | 5173 | Vite dev server                   |
+| Config DB | 5433 | PostgreSQL config database        |
+| Source DB | 5434 | PostgreSQL source (PostGIS)       |
+| Target DB | 5435 | PostgreSQL destination (PostGIS)  |
+| Redis     | 6379 | Redis for DLQ (Dead Letter Queue) |
 
 ## Documentation
 

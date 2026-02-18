@@ -17,6 +17,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from zoneinfo import ZoneInfo
 from app.domain.models.base import Base, TimestampMixin
@@ -327,6 +328,32 @@ class PipelineDestinationTableSync(Base, TimestampMixin):
         Text,
         nullable=True,
         comment="Error message if in error state",
+    )
+
+    # Lineage Tracking
+    lineage_metadata: Mapped[dict | None] = mapped_column(
+        JSONB,
+        nullable=True,
+        comment="Column-level lineage metadata from SQL parsing",
+    )
+
+    lineage_status: Mapped[str | None] = mapped_column(
+        String(20),
+        nullable=True,
+        default="PENDING",
+        comment="Lineage generation status: PENDING, GENERATING, COMPLETED, FAILED",
+    )
+
+    lineage_error: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+        comment="Error message if lineage generation failed",
+    )
+
+    lineage_generated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        comment="Timestamp when lineage was last generated",
     )
 
     # Relationships

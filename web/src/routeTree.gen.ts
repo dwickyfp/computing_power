@@ -37,6 +37,7 @@ import { Route as AuthenticatedErrorsErrorRouteImport } from './routes/_authenti
 import { Route as AuthenticatedDestinationsDestinationIdRouteImport } from './routes/_authenticated/destinations/$destinationId'
 import { Route as AuthenticatedSourcesSourceIdDetailsRouteImport } from './routes/_authenticated/sources/$sourceId.details'
 import { Route as AuthenticatedPipelinesPipelineIdFlowRouteImport } from './routes/_authenticated/pipelines/$pipelineId.flow'
+import { Route as AuthenticatedPipelinesPipelineIdDestinationsDestIdTablesSyncIdRouteImport } from './routes/_authenticated/pipelines/$pipelineId.destinations.$destId.tables.$syncId'
 
 const ClerkRouteRoute = ClerkRouteRouteImport.update({
   id: '/clerk',
@@ -190,6 +191,14 @@ const AuthenticatedPipelinesPipelineIdFlowRoute =
     path: '/flow',
     getParentRoute: () => AuthenticatedPipelinesPipelineIdRoute,
   } as any)
+const AuthenticatedPipelinesPipelineIdDestinationsDestIdTablesSyncIdRoute =
+  AuthenticatedPipelinesPipelineIdDestinationsDestIdTablesSyncIdRouteImport.update(
+    {
+      id: '/destinations/$destId/tables/$syncId',
+      path: '/destinations/$destId/tables/$syncId',
+      getParentRoute: () => AuthenticatedPipelinesPipelineIdRoute,
+    } as any,
+  )
 
 export interface FileRoutesByFullPath {
   '/': typeof AuthenticatedIndexRoute
@@ -217,6 +226,7 @@ export interface FileRoutesByFullPath {
   '/sources/': typeof AuthenticatedSourcesIndexRoute
   '/pipelines/$pipelineId/flow': typeof AuthenticatedPipelinesPipelineIdFlowRoute
   '/sources/$sourceId/details': typeof AuthenticatedSourcesSourceIdDetailsRoute
+  '/pipelines/$pipelineId/destinations/$destId/tables/$syncId': typeof AuthenticatedPipelinesPipelineIdDestinationsDestIdTablesSyncIdRoute
 }
 export interface FileRoutesByTo {
   '/clerk': typeof ClerkAuthenticatedRouteRouteWithChildren
@@ -242,6 +252,7 @@ export interface FileRoutesByTo {
   '/sources': typeof AuthenticatedSourcesIndexRoute
   '/pipelines/$pipelineId/flow': typeof AuthenticatedPipelinesPipelineIdFlowRoute
   '/sources/$sourceId/details': typeof AuthenticatedSourcesSourceIdDetailsRoute
+  '/pipelines/$pipelineId/destinations/$destId/tables/$syncId': typeof AuthenticatedPipelinesPipelineIdDestinationsDestIdTablesSyncIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -273,6 +284,7 @@ export interface FileRoutesById {
   '/_authenticated/sources/': typeof AuthenticatedSourcesIndexRoute
   '/_authenticated/pipelines/$pipelineId/flow': typeof AuthenticatedPipelinesPipelineIdFlowRoute
   '/_authenticated/sources/$sourceId/details': typeof AuthenticatedSourcesSourceIdDetailsRoute
+  '/_authenticated/pipelines/$pipelineId/destinations/$destId/tables/$syncId': typeof AuthenticatedPipelinesPipelineIdDestinationsDestIdTablesSyncIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -302,6 +314,7 @@ export interface FileRouteTypes {
     | '/sources/'
     | '/pipelines/$pipelineId/flow'
     | '/sources/$sourceId/details'
+    | '/pipelines/$pipelineId/destinations/$destId/tables/$syncId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/clerk'
@@ -327,6 +340,7 @@ export interface FileRouteTypes {
     | '/sources'
     | '/pipelines/$pipelineId/flow'
     | '/sources/$sourceId/details'
+    | '/pipelines/$pipelineId/destinations/$destId/tables/$syncId'
   id:
     | '__root__'
     | '/_authenticated'
@@ -357,6 +371,7 @@ export interface FileRouteTypes {
     | '/_authenticated/sources/'
     | '/_authenticated/pipelines/$pipelineId/flow'
     | '/_authenticated/sources/$sourceId/details'
+    | '/_authenticated/pipelines/$pipelineId/destinations/$destId/tables/$syncId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -567,6 +582,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedPipelinesPipelineIdFlowRouteImport
       parentRoute: typeof AuthenticatedPipelinesPipelineIdRoute
     }
+    '/_authenticated/pipelines/$pipelineId/destinations/$destId/tables/$syncId': {
+      id: '/_authenticated/pipelines/$pipelineId/destinations/$destId/tables/$syncId'
+      path: '/destinations/$destId/tables/$syncId'
+      fullPath: '/pipelines/$pipelineId/destinations/$destId/tables/$syncId'
+      preLoaderRoute: typeof AuthenticatedPipelinesPipelineIdDestinationsDestIdTablesSyncIdRouteImport
+      parentRoute: typeof AuthenticatedPipelinesPipelineIdRoute
+    }
   }
 }
 
@@ -589,12 +611,15 @@ const AuthenticatedDestinationsRouteRouteWithChildren =
 
 interface AuthenticatedPipelinesPipelineIdRouteChildren {
   AuthenticatedPipelinesPipelineIdFlowRoute: typeof AuthenticatedPipelinesPipelineIdFlowRoute
+  AuthenticatedPipelinesPipelineIdDestinationsDestIdTablesSyncIdRoute: typeof AuthenticatedPipelinesPipelineIdDestinationsDestIdTablesSyncIdRoute
 }
 
 const AuthenticatedPipelinesPipelineIdRouteChildren: AuthenticatedPipelinesPipelineIdRouteChildren =
   {
     AuthenticatedPipelinesPipelineIdFlowRoute:
       AuthenticatedPipelinesPipelineIdFlowRoute,
+    AuthenticatedPipelinesPipelineIdDestinationsDestIdTablesSyncIdRoute:
+      AuthenticatedPipelinesPipelineIdDestinationsDestIdTablesSyncIdRoute,
   }
 
 const AuthenticatedPipelinesPipelineIdRouteWithChildren =

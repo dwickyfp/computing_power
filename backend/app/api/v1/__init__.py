@@ -19,6 +19,7 @@ from app.api.v1.endpoints import (
     notification_logs,
     backfill,
     tags,
+    lineage,
 )
 
 # Create v1 router
@@ -38,6 +39,8 @@ api_router.include_router(credits.router, prefix="/destinations", tags=["credits
 api_router.include_router(pipelines.router, prefix="/pipelines", tags=["pipelines"])
 
 api_router.include_router(table_sync.router, prefix="/pipelines", tags=["table-sync"])
+
+api_router.include_router(lineage.router, prefix="/pipelines", tags=["lineage"])
 
 api_router.include_router(wal_metrics.router, prefix="/metrics", tags=["metrics"])
 

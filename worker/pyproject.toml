@@ -19,6 +19,7 @@ dependencies = [
     "python-json-logger==2.0.7",
     "fastapi>=0.115.0",
     "uvicorn>=0.32.0",
+    "sqlglot>=26.0.0",
 ]
 
 [dependency-groups]
