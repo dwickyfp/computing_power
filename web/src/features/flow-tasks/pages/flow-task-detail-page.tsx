@@ -44,6 +44,10 @@ import {
     CheckCircle2,
     XCircle,
     Clock,
+    Activity,
+    Calendar,
+    Database,
+    Zap,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { formatDistanceToNow } from 'date-fns'
@@ -57,113 +61,172 @@ import {
 // ─── Sub-components ────────────────────────────────────────────────────────────
 
 function RunStatusBadge({ status }: { status: FlowTaskRunStatus }) {
-    const map: Record<FlowTaskRunStatus, { label: string; cls: string }> = {
+    const map: Record<FlowTaskRunStatus, { label: string; cls: string; icon: React.ElementType }> = {
         RUNNING: {
             label: 'Running',
-            cls: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
+            cls: 'bg-blue-600 text-white border-blue-600 dark:bg-blue-500 dark:border-blue-500',
+            icon: Loader2,
         },
         SUCCESS: {
             label: 'Success',
-            cls: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
+            cls: 'bg-emerald-600 text-white border-emerald-600 dark:bg-emerald-500 dark:border-emerald-500',
+            icon: CheckCircle2,
         },
         FAILED: {
             label: 'Failed',
-            cls: 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400',
+            cls: 'bg-rose-600 text-white border-rose-600 dark:bg-rose-500 dark:border-rose-500',
+            icon: XCircle,
         },
         CANCELLED: {
             label: 'Cancelled',
-            cls: 'bg-muted text-muted-foreground',
+            cls: 'bg-gray-600 text-white border-gray-600 dark:bg-gray-500 dark:border-gray-500',
+            icon: XCircle,
         },
     }
-    const { label, cls } = map[status]
+    const { label, cls, icon: Icon } = map[status] || map.CANCELLED
     return (
-        <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium ${cls}`}>
-            {status === 'RUNNING' && <Loader2 className="h-3 w-3 animate-spin" />}
+        <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold border shadow-sm ${cls}`}>
+            <Icon className={`h-3 w-3 ${status === 'RUNNING' ? 'animate-spin' : ''}`} />
             {label}
         </span>
     )
 }
 
 function NodeStatusIcon({ status }: { status: FlowTaskNodeStatus }) {
-    if (status === 'SUCCESS') return <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
-    if (status === 'FAILED') return <XCircle className="h-3.5 w-3.5 text-rose-500" />
-    if (status === 'RUNNING') return <Loader2 className="h-3.5 w-3.5 animate-spin text-blue-500" />
-    return <Clock className="h-3.5 w-3.5 text-muted-foreground" />
+    if (status === 'SUCCESS') return <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+    if (status === 'FAILED') return <XCircle className="h-4 w-4 text-rose-500" />
+    if (status === 'RUNNING') return <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
+    return <Clock className="h-4 w-4 text-muted-foreground/50" />
 }
 
 function RunRow({ run }: { run: FlowTaskRunHistory }) {
     const [open, setOpen] = useState(false)
+    const duration = run.finished_at
+        ? `${Math.round((new Date(run.finished_at).getTime() - new Date(run.started_at).getTime()) / 1000)}s`
+        : '—'
 
     return (
-        <Collapsible open={open} onOpenChange={setOpen}>
-            <CollapsibleTrigger asChild>
-                <TableRow className="cursor-pointer hover:bg-muted/30">
-                    <TableCell>
+        <Collapsible open={open} onOpenChange={setOpen} asChild>
+            <>
+                <TableRow className="group cursor-pointer hover:bg-muted/50 transition-colors">
+                    <TableCell className="w-[50px] font-mono text-xs text-muted-foreground">
                         <div className="flex items-center gap-2">
-                            {open ? (
-                                <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
-                            ) : (
-                                <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
-                            )}
-                            <span className="text-xs font-mono text-muted-foreground">
-                                #{run.id}
-                            </span>
+                            <CollapsibleTrigger asChild>
+                                <Button variant="ghost" size="icon" className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground">
+                                    {open ? (
+                                        <ChevronDown className="h-4 w-4" />
+                                    ) : (
+                                        <ChevronRight className="h-4 w-4" />
+                                    )}
+                                </Button>
+                            </CollapsibleTrigger>
+                            <span>#{run.id}</span>
                         </div>
                     </TableCell>
                     <TableCell>
                         <RunStatusBadge status={run.status} />
                     </TableCell>
-                    <TableCell className="text-sm text-muted-foreground">
-                        {formatDistanceToNow(new Date(run.started_at), { addSuffix: true })}
+                    <TableCell>
+                        <Badge variant="outline" className="text-[10px] font-mono capitalize">
+                            {run.trigger_type.toLowerCase()}
+                        </Badge>
                     </TableCell>
-                    <TableCell className="font-mono text-sm text-right">
-                        {run.total_input_records?.toLocaleString() ?? '—'}
+                    <TableCell className="text-sm">
+                         <div className="flex flex-col">
+                            <span className="font-medium">
+                                {formatDistanceToNow(new Date(run.started_at), { addSuffix: true })}
+                            </span>
+                            <span className="text-xs text-muted-foreground">
+                                {new Date(run.started_at).toLocaleString()}
+                            </span>
+                        </div>
                     </TableCell>
-                    <TableCell className="font-mono text-sm text-right">
-                        {run.total_output_records?.toLocaleString() ?? '—'}
+                    <TableCell>
+                        <div className="flex flex-col">
+                             <div className="flex items-center gap-2 text-sm">
+                                <span className="font-mono text-muted-foreground w-16 text-right">In:</span>
+                                <span className="font-medium">{run.total_input_records?.toLocaleString() ?? '—'}</span>
+                            </div>
+                            <div className="flex items-center gap-2 text-sm mt-0.5">
+                                <span className="font-mono text-muted-foreground w-16 text-right">Out:</span>
+                                <span className="font-medium">{run.total_output_records?.toLocaleString() ?? '—'}</span>
+                            </div>
+                        </div>
                     </TableCell>
-                    <TableCell className="text-sm text-muted-foreground">
-                        {run.finished_at
-                            ? `${Math.round(
-                                  (new Date(run.finished_at).getTime() -
-                                      new Date(run.started_at).getTime()) /
-                                      1000
-                              )}s`
-                            : '—'}
+                    <TableCell className="text-sm font-medium text-muted-foreground">
+                        {duration}
                     </TableCell>
                 </TableRow>
-            </CollapsibleTrigger>
-            <CollapsibleContent>
-                <>
-                    {run.node_logs?.map((log) => (
-                        <TableRow key={log.id} className="bg-muted/20">
-                            <TableCell colSpan={6} className="pl-10 py-1">
-                                <div className="flex items-center gap-3 text-xs">
-                                    <NodeStatusIcon status={log.status} />
-                                    <span className="font-medium">{log.node_label || log.node_id}</span>
-                                    <Badge variant="outline" className="text-[10px] font-mono">
-                                        {log.node_type}
-                                    </Badge>
-                                    <span className="text-muted-foreground">
-                                        in: {log.row_count_in?.toLocaleString() ?? 0} →
-                                        out: {log.row_count_out?.toLocaleString() ?? 0}
-                                    </span>
-                                    {log.duration_ms != null && (
-                                        <span className="text-muted-foreground">
-                                            {log.duration_ms}ms
-                                        </span>
-                                    )}
-                                    {log.error_message && (
-                                        <span className="text-rose-500 truncate max-w-xs">
-                                            {log.error_message}
-                                        </span>
-                                    )}
+                <CollapsibleContent asChild>
+                    <TableRow className="hover:bg-transparent !border-0">
+                        <TableCell colSpan={6} className="p-0 border-0">
+                            <div className="bg-muted/30 border-b px-4 py-3 shadow-inner">
+                                <div className="rounded-md border bg-background overflow-hidden">
+                                     <Table>
+                                        <TableHeader className="bg-muted/50">
+                                            <TableRow className="hover:bg-transparent border-b">
+                                                <TableHead className="h-8 text-xs font-semibold">Node</TableHead>
+                                                <TableHead className="h-8 text-xs font-semibold">Type</TableHead>
+                                                <TableHead className="h-8 text-xs font-semibold text-right">In</TableHead>
+                                                <TableHead className="h-8 text-xs font-semibold text-right">Out</TableHead>
+                                                <TableHead className="h-8 text-xs font-semibold text-right">Duration</TableHead>
+                                                <TableHead className="h-8 text-xs font-semibold">Status</TableHead>
+                                            </TableRow>
+                                        </TableHeader>
+                                        <TableBody>
+                                            {run.node_logs?.map((log) => (
+                                                <TableRow key={log.id} className="hover:bg-muted/20 border-b last:border-0 border-border/50">
+                                                    <TableCell className="py-2 font-medium text-sm">
+                                                        <span className="flex items-center gap-2">
+                                                            <div className={`w-1.5 h-1.5 rounded-full ${
+                                                                log.status === 'SUCCESS' ? 'bg-emerald-500' :
+                                                                log.status === 'FAILED' ? 'bg-rose-500' :
+                                                                log.status === 'RUNNING' ? 'bg-blue-500' : 'bg-gray-300'
+                                                            }`} />
+                                                            {log.node_label || log.node_id}
+                                                        </span>
+                                                        {log.error_message && (
+                                                            <div className="mt-1 text-xs text-rose-600 bg-rose-50 dark:bg-rose-900/20 dark:text-rose-300 rounded px-2 py-1 max-w-lg break-words border border-rose-100 dark:border-rose-900/30">
+                                                                {log.error_message}
+                                                            </div>
+                                                        )}
+                                                    </TableCell>
+                                                    <TableCell className="py-2">
+                                                        <Badge variant="secondary" className="text-[10px] uppercase tracking-wider font-semibold opacity-80 decoration-0">
+                                                            {log.node_type}
+                                                        </Badge>
+                                                    </TableCell>
+                                                    <TableCell className="py-2 text-right font-mono text-xs text-muted-foreground">
+                                                        {log.row_count_in?.toLocaleString() ?? '-'}
+                                                    </TableCell>
+                                                    <TableCell className="py-2 text-right font-mono text-xs text-muted-foreground">
+                                                        {log.row_count_out?.toLocaleString() ?? '-'}
+                                                    </TableCell>
+                                                    <TableCell className="py-2 text-right font-mono text-xs text-muted-foreground">
+                                                        {log.duration_ms != null ? `${log.duration_ms}ms` : '-'}
+                                                    </TableCell>
+                                                    <TableCell className="py-2">
+                                                        <div className="flex items-center gap-2">
+                                                            <NodeStatusIcon status={log.status} />
+                                                        </div>
+                                                    </TableCell>
+                                                </TableRow>
+                                            ))}
+                                            {(!run.node_logs || run.node_logs.length === 0) && (
+                                                <TableRow>
+                                                    <TableCell colSpan={6} className="text-center py-4 text-xs text-muted-foreground">
+                                                        No logs available
+                                                    </TableCell>
+                                                </TableRow>
+                                            )}
+                                        </TableBody>
+                                     </Table>
                                 </div>
-                            </TableCell>
-                        </TableRow>
-                    ))}
-                </>
-            </CollapsibleContent>
+                            </div>
+                        </TableCell>
+                    </TableRow>
+                </CollapsibleContent>
+            </>
         </Collapsible>
     )
 }
@@ -325,46 +388,60 @@ export default function FlowTaskDetailPage() {
                         </div>
                     </CardHeader>
                     <CardContent>
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
-                            <StatItem
-                                label="Status"
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm mt-2">
+                             <StatItem
+                                label="Execution Status"
+                                icon={Activity}
                                 value={
                                     <span
-                                        className={`font-semibold ${
+                                        className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-semibold ${
                                             ft.status === 'SUCCESS'
-                                                ? 'text-emerald-600'
+                                                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-900/30'
                                                 : ft.status === 'FAILED'
-                                                ? 'text-rose-600'
+                                                ? 'bg-rose-50 text-rose-700 border border-rose-200 dark:bg-rose-900/30'
                                                 : ft.status === 'RUNNING'
-                                                ? 'text-blue-600'
-                                                : 'text-muted-foreground'
+                                                ? 'bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-900/30'
+                                                : 'bg-muted text-muted-foreground border border-border'
                                         }`}
                                     >
+                                        {ft.status === 'RUNNING' && <Loader2 className="h-3 w-3 animate-spin" />}
                                         {ft.status}
                                     </span>
                                 }
                             />
                             <StatItem
                                 label="Last Run"
+                                icon={Calendar}
                                 value={
-                                    ft.last_run_at
-                                        ? formatDistanceToNow(new Date(ft.last_run_at), {
-                                              addSuffix: true,
-                                          })
-                                        : 'Never'
+                                    <div className="flex flex-col">
+                                        <span>
+                                            {ft.last_run_at
+                                            ? formatDistanceToNow(new Date(ft.last_run_at), {
+                                                  addSuffix: true,
+                                              })
+                                            : 'Never'}
+                                        </span>
+                                        {ft.last_run_at && (
+                                            <span className="text-[10px] text-muted-foreground font-normal">
+                                                {new Date(ft.last_run_at).toLocaleString()}
+                                            </span>
+                                        )}
+                                    </div>
                                 }
                             />
                             <StatItem
-                                label="Last Records Written"
+                                label="Records Processed"
+                                icon={Database}
                                 value={
                                     ft.last_run_record_count != null
-                                        ? ft.last_run_record_count.toLocaleString()
+                                        ? <span className="font-mono">{ft.last_run_record_count.toLocaleString()}</span>
                                         : '—'
                                 }
                             />
                             <StatItem
-                                label="Trigger"
-                                value={ft.trigger_type}
+                                label="Trigger Method"
+                                icon={Zap}
+                                value={<span className="capitalize">{ft.trigger_type.toLowerCase() || 'Manual'}</span>}
                             />
                         </div>
                     </CardContent>
@@ -372,29 +449,34 @@ export default function FlowTaskDetailPage() {
 
                 {/* Run History */}
                 <Card>
-                    <CardHeader>
-                        <CardTitle className="text-base">Run History</CardTitle>
-                        <CardDescription>
-                            Click a row to expand per-node logs.
-                        </CardDescription>
+                    <CardHeader className="pb-3">
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <CardTitle className="text-base font-semibold">Run History</CardTitle>
+                                <CardDescription className="text-xs mt-1">
+                                    Detailed logs of past executions. Click a row to inspect node performance.
+                                </CardDescription>
+                            </div>
+                           {/* Add filter or refresh button here later if needed */}
+                        </div>
                     </CardHeader>
-                    <CardContent className="p-0">
+                    <CardContent className="p-0 border-t">
                         <Table>
                             <TableHeader>
-                                <TableRow>
-                                    <TableHead className="w-16">Run</TableHead>
-                                    <TableHead>Status</TableHead>
-                                    <TableHead>Started</TableHead>
-                                    <TableHead className="text-right">Input Rows</TableHead>
-                                    <TableHead className="text-right">Output Rows</TableHead>
-                                    <TableHead>Duration</TableHead>
+                                <TableRow className="hover:bg-transparent border-b border-border/60">
+                                    <TableHead className="w-[80px]">Run ID</TableHead>
+                                    <TableHead className="w-[140px]">Status</TableHead>
+                                    <TableHead className="w-[100px]">Trigger</TableHead>
+                                    <TableHead className="w-[200px]">Started</TableHead>
+                                    <TableHead>Throughput</TableHead>
+                                    <TableHead className="w-[100px]">Duration</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
                                 {runsLoading && (
                                     <TableRow>
                                         <TableCell colSpan={6} className="text-center py-8">
-                                            <Loader2 className="h-5 w-5 animate-spin mx-auto" />
+                                            <Loader2 className="h-5 w-5 animate-spin mx-auto text-muted-foreground" />
                                         </TableCell>
                                     </TableRow>
                                 )}
@@ -402,7 +484,7 @@ export default function FlowTaskDetailPage() {
                                     <TableRow>
                                         <TableCell
                                             colSpan={6}
-                                            className="text-center py-10 text-muted-foreground"
+                                            className="text-center py-12 text-sm text-muted-foreground"
                                         >
                                             No runs yet. Click "Run Now" to start.
                                         </TableCell>
@@ -420,11 +502,14 @@ export default function FlowTaskDetailPage() {
     )
 }
 
-function StatItem({ label, value }: { label: string; value: React.ReactNode }) {
+function StatItem({ label, value, icon: Icon }: { label: string; value: React.ReactNode; icon: React.ElementType }) {
     return (
-        <div>
-            <p className="text-xs text-muted-foreground">{label}</p>
-            <p className="mt-0.5 font-medium">{value}</p>
+        <div className="flex flex-col gap-1 p-3 rounded-md border bg-card/50 hover:bg-card transition-colors">
+            <div className="flex items-center gap-2 text-muted-foreground mb-1">
+                <Icon className="h-3.5 w-3.5" />
+                <span className="text-xs font-medium uppercase tracking-wider">{label}</span>
+            </div>
+            <div className="text-sm font-medium pl-0.5">{value}</div>
         </div>
     )
 }

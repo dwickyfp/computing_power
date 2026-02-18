@@ -6,6 +6,7 @@ import { Main } from '@/components/layout/main'
 import { Search } from '@/components/search'
 import { ThemeSwitch } from '@/components/theme-switch'
 import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
 import {
     Table,
     TableBody,
@@ -61,13 +62,13 @@ import { zodResolver } from '@hookform/resolvers/zod'
 
 function StatusBadge({ status }: { status: FlowTaskStatus }) {
     const variants: Record<FlowTaskStatus, string> = {
-        IDLE: 'bg-muted text-muted-foreground',
-        RUNNING: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
-        SUCCESS: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
-        FAILED: 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400',
+        IDLE: 'bg-muted text-muted-foreground border-border',
+        RUNNING: 'bg-blue-600 text-white border-blue-600 dark:bg-blue-500 dark:border-blue-500',
+        SUCCESS: 'bg-emerald-600 text-white border-emerald-600 dark:bg-emerald-500 dark:border-emerald-500',
+        FAILED: 'bg-rose-600 text-white border-rose-600 dark:bg-rose-500 dark:border-rose-500',
     }
     return (
-        <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium ${variants[status]}`}>
+        <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold border shadow-sm ${variants[status]}`}>
             {status === 'RUNNING' && <Loader2 className="h-3 w-3 animate-spin" />}
             {status}
         </span>
@@ -248,22 +249,22 @@ export default function FlowTaskListPage() {
                 </div>
 
                 {/* Table */}
-                <div className="rounded-md border border-border/50">
+                <div className="rounded-md border border-border/50 overflow-hidden bg-card/40 backdrop-blur-sm">
                     <Table>
-                        <TableHeader>
-                            <TableRow>
-                                <TableHead>Name</TableHead>
-                                <TableHead>Status</TableHead>
-                                <TableHead>Last Run</TableHead>
-                                <TableHead className="text-right">Records Written</TableHead>
-                                <TableHead className="w-10" />
+                        <TableHeader className="bg-muted/30">
+                            <TableRow className="hover:bg-transparent border-b border-border/60">
+                                <TableHead className="w-[380px] pl-4">Flow Task</TableHead>
+                                <TableHead className="w-[120px]">Status</TableHead>
+                                <TableHead className="w-[120px]">Trigger</TableHead>
+                                <TableHead>Last Execution</TableHead>
+                                <TableHead className="w-[60px]"></TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
                             {isLoading && (
                                 <TableRow>
-                                    <TableCell colSpan={5} className="text-center py-8">
-                                        <Loader2 className="h-5 w-5 animate-spin mx-auto text-muted-foreground" />
+                                    <TableCell colSpan={5} className="text-center py-12">
+                                        <Loader2 className="h-6 w-6 animate-spin mx-auto text-muted-foreground/50" />
                                     </TableCell>
                                 </TableRow>
                             )}
@@ -271,43 +272,68 @@ export default function FlowTaskListPage() {
                                 <TableRow>
                                     <TableCell
                                         colSpan={5}
-                                        className="text-center py-12 text-muted-foreground"
+                                        className="text-center py-16 text-muted-foreground"
                                     >
-                                        <GitBranch className="h-8 w-8 mx-auto mb-2 opacity-30" />
-                                        <p>No flow tasks yet. Create one to get started.</p>
+                                        <div className="flex flex-col items-center gap-2">
+                                            <div className="h-12 w-12 rounded-full bg-muted/50 flex items-center justify-center mb-2">
+                                                <GitBranch className="h-6 w-6 opacity-30" />
+                                            </div>
+                                            <span className="font-medium">No flow tasks yet</span>
+                                            <span className="text-sm opacity-60">Create one to get started with your ETL pipelines.</span>
+                                        </div>
                                     </TableCell>
                                 </TableRow>
                             )}
                             {flowTasks.map((ft) => (
-                                <TableRow key={ft.id} className="group">
-                                    <TableCell>
-                                        <Link
-                                            to="/flow-tasks/$flowTaskId"
-                                            params={{ flowTaskId: String(ft.id) }}
-                                            className="font-medium hover:underline"
-                                        >
-                                            {ft.name}
-                                        </Link>
-                                        {ft.description && (
-                                            <p className="text-xs text-muted-foreground truncate max-w-xs mt-0.5">
-                                                {ft.description}
-                                            </p>
-                                        )}
+                                <TableRow key={ft.id} className="group hover:bg-muted/30 transition-colors border-b border-border/40 last:border-0">
+                                    <TableCell className="pl-4 py-3">
+                                        <div className="flex items-start gap-3">
+                                            <div className="h-9 w-9 mt-0.5 rounded-lg border bg-background/50 flex items-center justify-center shrink-0 shadow-sm">
+                                                <GitBranch className="h-4 w-4 text-muted-foreground" />
+                                            </div>
+                                            <div className="flex flex-col gap-0.5">
+                                                <Link
+                                                    to="/flow-tasks/$flowTaskId"
+                                                    params={{ flowTaskId: String(ft.id) }}
+                                                    className="font-medium hover:underline text-sm text-foreground block decoration-primary/50 underline-offset-4"
+                                                >
+                                                    {ft.name}
+                                                </Link>
+                                                {ft.description ? (
+                                                    <p className="text-xs text-muted-foreground line-clamp-1 max-w-[280px]">
+                                                        {ft.description}
+                                                    </p>
+                                                ) : (
+                                                    <span className="text-xs text-muted-foreground/50 italic">No description provided</span>
+                                                )}
+                                            </div>
+                                        </div>
                                     </TableCell>
                                     <TableCell>
                                         <StatusBadge status={ft.status} />
                                     </TableCell>
-                                    <TableCell className="text-sm text-muted-foreground">
-                                        {ft.last_run_at
-                                            ? formatDistanceToNow(new Date(ft.last_run_at), {
-                                                  addSuffix: true,
-                                              })
-                                            : '—'}
+                                    <TableCell>
+                                        <Badge variant="secondary" className="text-[10px] font-mono capitalize px-2 py-0.5 bg-muted/50 text-muted-foreground font-medium border-0 tracking-wider">
+                                            {ft.trigger_type?.toLowerCase() || 'manual'}
+                                        </Badge>
                                     </TableCell>
-                                    <TableCell className="text-right font-mono text-sm">
-                                        {ft.last_run_record_count != null
-                                            ? ft.last_run_record_count.toLocaleString()
-                                            : '—'}
+                                    <TableCell>
+                                        <div className="flex flex-col gap-0.5">
+                                            <span className="text-sm font-medium">
+                                                {ft.last_run_at
+                                                    ? formatDistanceToNow(new Date(ft.last_run_at), {
+                                                          addSuffix: true,
+                                                      })
+                                                    : 'Never executed'}
+                                            </span>
+                                            {ft.last_run_at && (
+                                                <span className="text-xs text-muted-foreground font-mono">
+                                                    {ft.last_run_record_count != null
+                                                         ? `${ft.last_run_record_count.toLocaleString()} records`
+                                                         : '—'}
+                                                </span>
+                                            )}
+                                        </div>
                                     </TableCell>
                                     <TableCell>
                                         <DropdownMenu>
@@ -315,42 +341,42 @@ export default function FlowTaskListPage() {
                                                 <Button
                                                     variant="ghost"
                                                     size="icon"
-                                                    className="h-7 w-7 opacity-0 group-hover:opacity-100"
+                                                    className="h-8 w-8 text-muted-foreground group-hover:text-foreground opacity-50 group-hover:opacity-100 transition-all"
                                                 >
                                                     <MoreHorizontal className="h-4 w-4" />
                                                 </Button>
                                             </DropdownMenuTrigger>
-                                            <DropdownMenuContent align="end">
-                                                <DropdownMenuItem asChild>
-                                                    <Link
-                                                        to="/flow-tasks/$flowTaskId/flow"
-                                                        params={{ flowTaskId: String(ft.id) }}
-                                                        className="flex items-center gap-2"
-                                                    >
-                                                        <GitBranch className="h-4 w-4" />
-                                                        Open Flow Editor
-                                                    </Link>
-                                                </DropdownMenuItem>
+                                            <DropdownMenuContent align="end" className="w-48">
                                                 <DropdownMenuItem asChild>
                                                     <Link
                                                         to="/flow-tasks/$flowTaskId"
                                                         params={{ flowTaskId: String(ft.id) }}
-                                                        className="flex items-center gap-2"
+                                                        className="flex items-center gap-2 cursor-pointer"
                                                     >
-                                                        <ExternalLink className="h-4 w-4" />
+                                                        <ExternalLink className="h-4 w-4 text-muted-foreground" />
                                                         View Details
                                                     </Link>
                                                 </DropdownMenuItem>
-                                                <DropdownMenuItem
-                                                    onClick={() => openEdit(ft)}
-                                                    className="flex items-center gap-2"
-                                                >
-                                                    <Pencil className="h-4 w-4" />
-                                                    Edit
+                                                <DropdownMenuItem asChild>
+                                                    <Link
+                                                        to="/flow-tasks/$flowTaskId/flow"
+                                                        params={{ flowTaskId: String(ft.id) }}
+                                                        className="flex items-center gap-2 cursor-pointer"
+                                                    >
+                                                        <GitBranch className="h-4 w-4 text-muted-foreground" />
+                                                        Flow Editor
+                                                    </Link>
                                                 </DropdownMenuItem>
                                                 <DropdownMenuSeparator />
                                                 <DropdownMenuItem
-                                                    className="text-destructive flex items-center gap-2"
+                                                    onClick={() => openEdit(ft)}
+                                                    className="flex items-center gap-2 cursor-pointer"
+                                                >
+                                                    <Pencil className="h-4 w-4 text-muted-foreground" />
+                                                    Edit Settings
+                                                </DropdownMenuItem>
+                                                <DropdownMenuItem
+                                                    className="text-destructive focus:text-destructive flex items-center gap-2 cursor-pointer"
                                                     onClick={() => setDeleteTarget(ft)}
                                                 >
                                                     <Trash2 className="h-4 w-4" />
