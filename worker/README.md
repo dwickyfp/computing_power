@@ -83,24 +83,24 @@ Set these environment variables in the backend's `.env`:
 ```env
 WORKER_ENABLED=true
 CELERY_BROKER_URL=redis://localhost:6379/1
-CELERY_RESULT_BACKEND=db+postgresql://postgres:postgres@localhost:5433/postgres
+CELERY_RESULT_BACKEND=redis://localhost:6379/2
 ```
 
 ## Configuration
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `DATABASE_URL` | `postgresql://...` | Config database URL |
-| `REDIS_URL` | `redis://localhost:6379/0` | Redis cache URL |
-| `CELERY_BROKER_URL` | `redis://localhost:6379/1` | Celery broker (Redis db 1) |
-| `CELERY_RESULT_BACKEND` | `db+postgresql://...` | Task result storage |
-| `CREDENTIAL_ENCRYPTION_KEY` | (required) | AES-256-GCM key (match backend) |
-| `WORKER_CONCURRENCY` | `4` | Worker process count |
-| `WORKER_TASK_SOFT_TIME_LIMIT` | `120` | Soft timeout (seconds) |
-| `WORKER_TASK_HARD_TIME_LIMIT` | `180` | Hard timeout (seconds) |
-| `WORKER_PREVIEW_ROW_LIMIT` | `100` | Max preview rows |
-| `WORKER_DUCKDB_MEMORY_LIMIT` | `1GB` | DuckDB memory limit |
-| `LOG_LEVEL` | `INFO` | Logging level |
+| Variable                      | Default                    | Description                      |
+| ----------------------------- | -------------------------- | -------------------------------- |
+| `DATABASE_URL`                | `postgresql://...`         | Config database URL              |
+| `REDIS_URL`                   | `redis://localhost:6379/0` | Redis cache URL                  |
+| `CELERY_BROKER_URL`           | `redis://localhost:6379/1` | Celery broker (Redis db 1)       |
+| `CELERY_RESULT_BACKEND`       | `redis://localhost:6379/2` | Task result storage (Redis db 2) |
+| `CREDENTIAL_ENCRYPTION_KEY`   | (required)                 | AES-256-GCM key (match backend)  |
+| `WORKER_CONCURRENCY`          | `4`                        | Worker process count             |
+| `WORKER_TASK_SOFT_TIME_LIMIT` | `120`                      | Soft timeout (seconds)           |
+| `WORKER_TASK_HARD_TIME_LIMIT` | `180`                      | Hard timeout (seconds)           |
+| `WORKER_PREVIEW_ROW_LIMIT`    | `100`                      | Max preview rows                 |
+| `WORKER_DUCKDB_MEMORY_LIMIT`  | `1GB`                      | DuckDB memory limit              |
+| `LOG_LEVEL`                   | `INFO`                     | Logging level                    |
 
 ## Docker
 
