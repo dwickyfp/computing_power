@@ -253,6 +253,9 @@ ENV PATH="/app/.venv/bin:$PATH"
 # Copy worker source code
 COPY worker/ ./worker/
 
+# Make start.sh executable
+RUN chmod +x ./worker/start.sh
+
 # Set environment variables
 ENV MODE=worker
 ENV PYTHONPATH=/app/worker
@@ -265,13 +268,9 @@ RUN useradd -m -u 1001 celeryworker && \
 
 USER celeryworker
 
-# Default Celery worker command (threads pool to avoid DuckDB fork crashes)
-CMD ["celery", "-A", "main", "worker", \
-     "--loglevel=info", \
-     "-Q", "preview,default", \
-     "-c", "4", \
-     "--pool=threads"]
+# Start both health server and Celery worker via start.sh
+CMD ["./worker/start.sh"]
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
-    CMD celery -A main inspect ping --timeout 5 || exit 1
+    CMD curl -f http://localhost:8002/health || exit 1
