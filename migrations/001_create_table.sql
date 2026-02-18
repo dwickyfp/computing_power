@@ -77,12 +77,26 @@ CREATE TABLE IF NOT EXISTS pipelines_destination_table_sync(
     is_exists_table_destination BOOLEAN DEFAULT FALSE, -- table destination in snowflake
     is_error BOOLEAN NOT NULL DEFAULT FALSE,
     error_message TEXT NULL,
+    lineage_metadata JSONB NULL,
+    lineage_status VARCHAR(20) DEFAULT 'PENDING', -- PENDING, GENERATING, COMPLETED, FAILED
+    lineage_error TEXT NULL,
+    lineage_generated_at TIMESTAMPTZ NULL,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 -- Alter table pipelines_destination_table_sync add primary_key_column_target if not exists
 ALTER TABLE pipelines_destination_table_sync ADD COLUMN IF NOT EXISTS primary_key_column_target TEXT NULL; 
+
+-- Add lineage_metadata column for storing column-level data lineage
+ALTER TABLE pipelines_destination_table_sync ADD COLUMN IF NOT EXISTS lineage_metadata JSONB NULL;
+ALTER TABLE pipelines_destination_table_sync ADD COLUMN IF NOT EXISTS lineage_status VARCHAR(20) DEFAULT 'PENDING'; -- PENDING, GENERATING, COMPLETED, FAILED
+ALTER TABLE pipelines_destination_table_sync ADD COLUMN IF NOT EXISTS lineage_error TEXT NULL;
+ALTER TABLE pipelines_destination_table_sync ADD COLUMN IF NOT EXISTS lineage_generated_at TIMESTAMPTZ NULL;
+
+CREATE INDEX IF NOT EXISTS idx_pipelines_destination_table_sync_lineage_status ON pipelines_destination_table_sync(lineage_status);
+
+COMMENT ON COLUMN pipelines_destination_table_sync.lineage_metadata IS 'JSON containing column-level lineage: {source_tables, source_columns, output_columns, column_lineage}';
 
 -- Table 4: Pipeline Metadata (contains runtime information)
 CREATE TABLE IF NOT EXISTS pipeline_metadata (

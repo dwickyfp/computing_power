@@ -162,6 +162,43 @@ class WorkerClient:
             logger.error(f"Failed to submit preview task: {e}")
             raise ConnectionError(f"Worker unavailable: {e}") from e
 
+    def submit_lineage_task(
+        self,
+        table_sync_id: int,
+        custom_sql: str | None,
+        source_table: str,
+        source_columns: list[str] | None = None,
+    ) -> str:
+        """
+        Submit a lineage generation task to the worker.
+
+        Args:
+            table_sync_id: ID of the table sync config
+            custom_sql: Custom SQL to parse
+            source_table: Source table name
+            source_columns: List of source column names
+
+        Returns:
+            Task ID string
+        """
+        try:
+            result = self._send_task_with_retry(
+                "worker.lineage.generate",
+                args=[table_sync_id, custom_sql, source_table, source_columns],
+                queue="default",
+            )
+            logger.info(
+                f"Lineage task submitted: {result.id}",
+                extra={
+                    "task_id": result.id,
+                    "table_sync_id": table_sync_id,
+                },
+            )
+            return result.id
+        except Exception as e:
+            logger.error(f"Failed to submit lineage task: {e}")
+            raise ConnectionError(f"Worker unavailable: {e}") from e
+
     def get_task_status(self, task_id: str) -> dict[str, Any]:
         """
         Get the status of a submitted task.

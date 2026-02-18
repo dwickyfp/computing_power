@@ -187,6 +187,22 @@ class PipelineDestinationTableSyncResponse(BaseSchema):
     error_message: str | None = Field(
         default=None, description="Error message if in error state"
     )
+
+    # Lineage fields
+    lineage_metadata: dict | None = Field(
+        default=None, description="Column-level lineage data"
+    )
+    lineage_status: str | None = Field(
+        default="PENDING",
+        description="Lineage generation status: PENDING, GENERATING, COMPLETED, FAILED",
+    )
+    lineage_error: str | None = Field(
+        default=None, description="Lineage generation error message"
+    )
+    lineage_generated_at: datetime | None = Field(
+        default=None, description="Timestamp when lineage was last generated"
+    )
+
     created_at: datetime = Field(..., description="Creation timestamp")
     updated_at: datetime = Field(..., description="Last update timestamp")
 
