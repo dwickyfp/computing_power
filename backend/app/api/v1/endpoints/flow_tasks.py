@@ -179,6 +179,17 @@ def save_graph(
     """
     try:
         graph = service.save_graph(flow_task_id, data)
+        # Invalidate schema cache so stale column info from the old graph
+        # is not served after the topology/node config changes.
+        try:
+            from app.core.config import get_settings
+            from app.infrastructure.schema_cache import invalidate_schema_cache
+            invalidate_schema_cache(
+                flow_task_id=flow_task_id,
+                redis_url=get_settings().redis_url,
+            )
+        except Exception as cache_err:
+            logger.warning("Schema cache invalidation failed (non-fatal): %s", cache_err)
         return FlowTaskGraphResponse.from_orm(graph)
     except EntityNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
@@ -294,20 +305,29 @@ def get_node_schema(
     """
     from app.core.config import get_settings
     from app.infrastructure.worker_client import get_node_schema_from_worker
+    from app.infrastructure.schema_cache import get_or_fetch_schema
 
     settings = get_settings()
     worker_url = getattr(settings, "worker_health_url", "http://0.0.0.0:8002")
 
-    graph_snapshot = {
-        "nodes": [n.dict() for n in request.nodes],
-        "edges": [e.dict(by_alias=True) for e in request.edges],
-    }
+    nodes_raw = [n.dict() for n in request.nodes]
+    edges_raw = [e.dict(by_alias=True) for e in request.edges]
 
-    cols = get_node_schema_from_worker(
+    def _fetch():
+        return get_node_schema_from_worker(
+            node_id=request.node_id,
+            nodes=nodes_raw,
+            edges=edges_raw,
+            worker_base_url=worker_url,
+        )
+
+    cols = get_or_fetch_schema(
+        flow_task_id=flow_task_id,
         node_id=request.node_id,
-        nodes=graph_snapshot["nodes"],
-        edges=graph_snapshot["edges"],
-        worker_base_url=worker_url,
+        nodes=nodes_raw,
+        edges=edges_raw,
+        redis_url=settings.redis_url,
+        fetcher=_fetch,
     )
 
     return NodeColumnsResponse(columns=[ColumnInfo(**c) for c in cols])
