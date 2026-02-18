@@ -54,6 +54,7 @@ import { useTheme } from '@/context/theme-provider'
 import { NodePalette } from '../components/NodePalette'
 import { NodeConfigPanel } from '../components/NodeConfigPanel'
 import { PreviewDrawer } from '../components/PreviewDrawer'
+import { NodeContextMenu } from '../components/NodeContextMenu'
 
 // Node type registry — maps node type strings to components
 import { InputNode } from '../components/nodes/InputNode'
@@ -89,6 +90,14 @@ function FlowCanvas({ flowTaskId }: { flowTaskId: number }) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const rfInstance = useRef<any>(null)
     const [pollingTaskId, setPollingTaskId] = useState<string | null>(null)
+
+    // Right-click context menu state
+    const [ctxMenu, setCtxMenu] = useState<{
+        x: number
+        y: number
+        nodeId: string
+        nodeLabel: string
+    } | null>(null)
 
     const {
         nodes,
@@ -262,7 +271,25 @@ function FlowCanvas({ flowTaskId }: { flowTaskId: number }) {
         [selectNode]
     )
 
-    const onPaneClick = useCallback(() => selectNode(null), [selectNode])
+    const onPaneClick = useCallback(() => {
+        selectNode(null)
+        setCtxMenu(null)
+    }, [selectNode])
+
+    // Right-click a node → show context menu
+    const onNodeContextMenu: NodeMouseHandler = useCallback(
+        (event, node) => {
+            event.preventDefault()
+            selectNode(node.id)
+            setCtxMenu({
+                x: event.clientX,
+                y: event.clientY,
+                nodeId: node.id,
+                nodeLabel: (node.data.label as string) || node.type || '',
+            })
+        },
+        [selectNode]
+    )
 
     // ─── Preview a node ────────────────────────────────────────────────────────
 
@@ -397,6 +424,7 @@ function FlowCanvas({ flowTaskId }: { flowTaskId: number }) {
                             onInit={(inst) => { rfInstance.current = inst }}
                             onNodeClick={onNodeClick}
                             onPaneClick={onPaneClick}
+                            onNodeContextMenu={onNodeContextMenu}
                             defaultViewport={{ x: 80, y: 80, zoom: 0.85 }}
                             minZoom={0.25}
                             maxZoom={2}
@@ -428,6 +456,24 @@ function FlowCanvas({ flowTaskId }: { flowTaskId: number }) {
 
                     {/* Preview Drawer (absolute bottom) */}
                     <PreviewDrawer />
+
+                    {/* Node right-click context menu */}
+                    {ctxMenu && (
+                        <NodeContextMenu
+                            x={ctxMenu.x}
+                            y={ctxMenu.y}
+                            nodeId={ctxMenu.nodeId}
+                            nodeLabel={ctxMenu.nodeLabel}
+                            onEdit={() => selectNode(ctxMenu.nodeId)}
+                            onPreview={() =>
+                                handlePreviewNode(ctxMenu.nodeId, ctxMenu.nodeLabel)
+                            }
+                            onDelete={() => {
+                                useFlowTaskStore.getState().removeNode(ctxMenu.nodeId)
+                            }}
+                            onClose={() => setCtxMenu(null)}
+                        />
+                    )}
                 </div>
 
                 {/* Right Config Panel */}

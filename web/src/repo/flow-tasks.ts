@@ -1,4 +1,5 @@
 import { api } from './client'
+import type { Edge } from '@xyflow/react'
 
 // ─── Enums ──────────────────────────────────────────────────────────────────
 
@@ -78,13 +79,8 @@ export interface FlowNode {
     data: FlowNodeData
 }
 
-export interface FlowEdge {
-    id: string
-    source: string
-    target: string
-    sourceHandle?: string | null
-    targetHandle?: string | null
-}
+// FlowEdge is a ReactFlow Edge — gives us animated, style, markerEnd etc. for free
+export type FlowEdge = Edge
 
 export interface FlowGraph {
     nodes: FlowNode[]

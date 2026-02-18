@@ -71,18 +71,18 @@ export const useFlowTaskStore = create<FlowTaskStore>((set) => ({
 
     // ─── Graph actions ──────────────────────────────────────────────────────────
 
-    setNodes: (nodes) => set({ nodes }),
-    setEdges: (edges) => set({ edges }),
+    setNodes: (nodes) => set({ nodes: nodes ?? [] }),
+    setEdges: (edges) => set({ edges: edges ?? [] }),
 
     onNodesChange: (changes) =>
         set((state) => ({
-            nodes: applyNodeChanges(changes, state.nodes) as FlowNode[],
+            nodes: applyNodeChanges(changes, state.nodes ?? []) as FlowNode[],
             isDirty: true,
         })),
 
     onEdgesChange: (changes) =>
         set((state) => ({
-            edges: applyEdgeChanges(changes, state.edges) as FlowEdge[],
+            edges: applyEdgeChanges(changes, state.edges ?? []) as FlowEdge[],
             isDirty: true,
         })),
 
@@ -95,20 +95,20 @@ export const useFlowTaskStore = create<FlowTaskStore>((set) => ({
                     style: { stroke: '#6366f1', strokeWidth: 2 },
                     markerEnd: { type: 'arrowclosed', color: '#6366f1' },
                 },
-                state.edges
+                state.edges ?? []
             ) as FlowEdge[],
             isDirty: true,
         })),
 
     addNode: (node) =>
         set((state) => ({
-            nodes: [...state.nodes, node],
+            nodes: [...(state.nodes ?? []), node],
             isDirty: true,
         })),
 
     updateNodeData: (nodeId, data) =>
         set((state) => ({
-            nodes: state.nodes.map((n) =>
+            nodes: (state.nodes ?? []).map((n) =>
                 n.id === nodeId ? { ...n, data: { ...n.data, ...data } } : n
             ),
             isDirty: true,

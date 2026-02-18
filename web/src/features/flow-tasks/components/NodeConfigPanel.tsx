@@ -26,7 +26,7 @@ export function NodeConfigPanel() {
     const { nodes, selectedNodeId, selectNode, updateNodeData, removeNode, requestPreview } =
         useFlowTaskStore()
 
-    const selectedNode = nodes.find((n) => n.id === selectedNodeId)
+    const selectedNode = (nodes ?? []).find((n) => n.id === selectedNodeId)
     if (!selectedNode) return null
 
     const update = (patch: Partial<FlowNodeData>) =>
@@ -133,7 +133,7 @@ function InputConfig({ data, update }: ConfigFormProps) {
     const sourceId = data.source_id as number | undefined
     const destinationId = data.destination_id as number | undefined
 
-    // Fetch all postgres sources
+    // Fetch all postgres sources (always fetched when type is POSTGRES)
     const { data: sourcesData, isLoading: sourcesLoading } = useQuery({
         queryKey: ['sources'],
         queryFn: () => sourcesRepo.getAll(),
@@ -141,11 +141,11 @@ function InputConfig({ data, update }: ConfigFormProps) {
         staleTime: 30_000,
     })
 
-    // Fetch all snowflake destinations
+    // Fetch all destinations (used for both SNOWFLAKE and POSTGRES destination options)
     const { data: destsData, isLoading: destsLoading } = useQuery({
         queryKey: ['destinations'],
         queryFn: () => destinationsRepo.getAll(),
-        enabled: sourceType === 'SNOWFLAKE',
+        enabled: true,
         staleTime: 30_000,
     })
 
@@ -153,11 +153,46 @@ function InputConfig({ data, update }: ConfigFormProps) {
         (d) => d.type.toLowerCase().includes('snowflake')
     ) ?? []
 
+    // Postgres destinations (target DBs that can also be read from)
+    const postgresDests = destsData?.destinations.filter(
+        (d) => d.type.toLowerCase().includes('postgres') || d.type.toLowerCase().includes('postgresql')
+    ) ?? []
+
+    // For POSTGRES mode: encode selection as "src:<id>" or "dst:<id>" in a single dropdown
+    const pgConnectionValue =
+        sourceType === 'POSTGRES'
+            ? sourceId != null
+                ? `src:${sourceId}`
+                : destinationId != null
+                    ? `dst:${destinationId}`
+                    : ''
+            : ''
+
+    const handlePgConnectionChange = (v: string) => {
+        if (v.startsWith('src:')) {
+            update({ source_id: parseInt(v.slice(4)), destination_id: undefined, table_name: undefined })
+        } else if (v.startsWith('dst:')) {
+            update({ destination_id: parseInt(v.slice(4)), source_id: undefined, table_name: undefined })
+        }
+    }
+
+    // Determine which id to use for table fetching
+    // For POSTGRES: source_id → sourcesRepo.getAvailableTables, destination_id → destinationsRepo.getTableList
+    const pgUseDestTable = sourceType === 'POSTGRES' && !sourceId && !!destinationId
+
     // Fetch available tables for selected source (postgres)
     const { data: pgTables, isLoading: pgTablesLoading } = useQuery({
         queryKey: ['source-available-tables', sourceId],
         queryFn: () => sourcesRepo.getAvailableTables(sourceId!),
         enabled: sourceType === 'POSTGRES' && !!sourceId,
+        staleTime: 30_000,
+    })
+
+    // Fetch table list for postgres destination (when destination is selected in POSTGRES mode)
+    const { data: pgDestTableData, isLoading: pgDestTablesLoading } = useQuery({
+        queryKey: ['destination-tables', destinationId],
+        queryFn: () => destinationsRepo.getTableList(destinationId!),
+        enabled: pgUseDestTable,
         staleTime: 30_000,
     })
 
@@ -171,11 +206,18 @@ function InputConfig({ data, update }: ConfigFormProps) {
 
     const tables: string[] =
         sourceType === 'POSTGRES'
-            ? (pgTables ?? [])
+            ? pgUseDestTable
+                ? (pgDestTableData?.tables ?? [])
+                : (pgTables ?? [])
             : (sfTableData?.tables ?? [])
 
-    const tablesLoading = sourceType === 'POSTGRES' ? pgTablesLoading : sfTablesLoading
-    const activeId = sourceType === 'POSTGRES' ? sourceId : destinationId
+    const tablesLoading =
+        sourceType === 'POSTGRES'
+            ? pgUseDestTable ? pgDestTablesLoading : pgTablesLoading
+            : sfTablesLoading
+
+    const activeId = sourceType === 'POSTGRES' ? (sourceId ?? destinationId) : destinationId
+    const pgLoading = sourcesLoading || destsLoading
 
     return (
         <>
@@ -203,10 +245,10 @@ function InputConfig({ data, update }: ConfigFormProps) {
             </Field>
 
             {/* Source / Destination selector */}
-            <Field label={sourceType === 'POSTGRES' ? 'Source' : 'Destination'}>
-                {sourceType === 'POSTGRES' && sourcesLoading && (
+            <Field label={sourceType === 'POSTGRES' ? 'Connection' : 'Destination'}>
+                {sourceType === 'POSTGRES' && pgLoading && (
                     <div className="flex items-center gap-1.5 h-7 text-xs text-muted-foreground">
-                        <Loader2 className="h-3 w-3 animate-spin" /> Loading sources…
+                        <Loader2 className="h-3 w-3 animate-spin" /> Loading connections…
                     </div>
                 )}
                 {sourceType === 'SNOWFLAKE' && destsLoading && (
@@ -214,22 +256,39 @@ function InputConfig({ data, update }: ConfigFormProps) {
                         <Loader2 className="h-3 w-3 animate-spin" /> Loading destinations…
                     </div>
                 )}
-                {sourceType === 'POSTGRES' && !sourcesLoading && (
+                {sourceType === 'POSTGRES' && !pgLoading && (
                     <Select
-                        value={sourceId != null ? String(sourceId) : ''}
-                        onValueChange={(v) =>
-                            update({ source_id: parseInt(v), table_name: undefined })
-                        }
+                        value={pgConnectionValue}
+                        onValueChange={handlePgConnectionChange}
                     >
                         <SelectTrigger className="h-7 text-xs">
-                            <SelectValue placeholder="Select source…" />
+                            <SelectValue placeholder="Select connection…" />
                         </SelectTrigger>
                         <SelectContent>
-                            {(sourcesData?.sources ?? []).map((s) => (
-                                <SelectItem key={s.id} value={String(s.id)}>
-                                    {s.name}
-                                </SelectItem>
-                            ))}
+                            {(sourcesData?.sources ?? []).length > 0 && (
+                                <>
+                                    <div className="px-2 py-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
+                                        Sources
+                                    </div>
+                                    {(sourcesData?.sources ?? []).map((s) => (
+                                        <SelectItem key={`src:${s.id}`} value={`src:${s.id}`}>
+                                            {s.name}
+                                        </SelectItem>
+                                    ))}
+                                </>
+                            )}
+                            {postgresDests.length > 0 && (
+                                <>
+                                    <div className="px-2 py-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
+                                        Destinations
+                                    </div>
+                                    {postgresDests.map((d) => (
+                                        <SelectItem key={`dst:${d.id}`} value={`dst:${d.id}`}>
+                                            {d.name}
+                                        </SelectItem>
+                                    ))}
+                                </>
+                            )}
                         </SelectContent>
                     </Select>
                 )}
