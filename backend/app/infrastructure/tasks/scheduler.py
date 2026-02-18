@@ -202,8 +202,9 @@ class BackgroundScheduler:
                     return
 
                 # Check worker health via HTTP (worker's FastAPI health endpoint)
+                # Increased timeout to 10s to allow for Celery inspector operations
                 url = f"{self.settings.worker_health_url}/health"
-                with httpx.Client(timeout=5.0) as client:
+                with httpx.Client(timeout=10.0) as client:
                     response = client.get(url)
 
                 repo = WorkerHealthRepository(db)
