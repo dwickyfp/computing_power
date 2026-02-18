@@ -77,12 +77,12 @@ def add_pipeline_destination(
         Updated pipeline with new destination
     """
     pipeline = service.add_pipeline_destination(pipeline_id, destination_id)
-    
+
     # Trigger initialization for the new destination (and others)
     # Trigger initialization for the new destination (and others)
     # if background_tasks:
     #     background_tasks.add_task(service.initialize_pipeline, pipeline.id)
-        
+
     return PipelineResponse.from_orm(pipeline)
 
 
@@ -111,6 +111,7 @@ def remove_pipeline_destination(
     """
     pipeline = service.remove_pipeline_destination(pipeline_id, destination_id)
     return PipelineResponse.from_orm(pipeline)
+
 
 @router.get(
     "",
@@ -331,19 +332,27 @@ def preview_pipeline_sql(
     settings = get_settings()
 
     if settings.worker_enabled:
+        from fastapi import HTTPException
         from app.infrastructure.worker_client import get_worker_client
 
-        client = get_worker_client()
-        task_id = client.submit_preview_task(
-            sql=request.sql,
-            source_id=request.source_id,
-            destination_id=request.destination_id,
-            table_name=request.table_name,
-            filter_sql=request.filter_sql,
-        )
-        return {"task_id": task_id, "state": "PENDING", "status": "queued"}
+        try:
+            client = get_worker_client()
+            task_id = client.submit_preview_task(
+                sql=request.sql,
+                source_id=request.source_id,
+                destination_id=request.destination_id,
+                table_name=request.table_name,
+                filter_sql=request.filter_sql,
+            )
+            return {"task_id": task_id, "state": "PENDING", "status": "queued"}
+        except ConnectionError as e:
+            # Worker unavailable - return error, don't fall back to sync
+            raise HTTPException(
+                status_code=503,
+                detail="Worker service unavailable. Please ensure the worker is running.",
+            )
 
-    # Sync mode (original behavior)
+    # Sync mode only when WORKER_ENABLED=false
     return service.preview_custom_sql(request)
 
 

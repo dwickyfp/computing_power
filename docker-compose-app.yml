@@ -173,13 +173,16 @@ services:
       CREDENTIAL_ENCRYPTION_KEY: Wn5x7y9z1A2B3C4D5E6F7G8H9I0J1K2L3M4N5O6P7Q8=
       # Worker Settings
       WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-4}
-      WORKER_TASK_SOFT_TIME_LIMIT: 120
-      WORKER_TASK_HARD_TIME_LIMIT: 180
+      TASK_SOFT_TIME_LIMIT: 120
+      TASK_HARD_TIME_LIMIT: 180
+      PREVIEW_ROW_LIMIT: 100
+      DUCKDB_MEMORY_LIMIT: 1GB
       # Health Server
       SERVER_HOST: 0.0.0.0
       SERVER_PORT: 8002
       # Logging
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      LOG_FORMAT: json
     depends_on:
       rosetta-postgres:
         condition: service_healthy

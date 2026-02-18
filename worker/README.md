@@ -26,7 +26,8 @@ worker/
 │   └── services/
 │       └── health_service.py   # Health check & worker stats
 ├── main.py                     # Entry point
-├── start.sh                    # Startup script
+├── start.sh                    # Startup script (Linux/Mac)
+├── start.ps1                   # Startup script (Windows)
 ├── Dockerfile                  # Container image
 ├── pyproject.toml              # Dependencies (uv)
 └── .env.example                # Environment template
@@ -65,12 +66,31 @@ cp .env.example .env
 
 ### Run Worker
 
+**Linux/Mac:**
+
 ```bash
 # Using start script
 ./start.sh
 
-# Or directly with Celery
-celery -A main worker --loglevel=info -Q preview,default -c 4
+# With custom options
+./start.sh --concurrency 8 --loglevel debug --beat
+```
+
+**Windows (PowerShell):**
+
+```powershell
+# Using PowerShell script
+.\start.ps1
+
+# With custom options
+.\start.ps1 -Concurrency 8 -LogLevel debug -Beat
+```
+
+**Direct Celery (all platforms):**
+
+```bash
+# Basic worker
+celery -A main worker --loglevel=info -Q preview,default -c 4 --pool=threads
 
 # With Flower monitoring (optional)
 celery -A main flower --port=5555

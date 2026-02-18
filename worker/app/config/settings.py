@@ -7,7 +7,8 @@ Pydantic-based settings with environment variable support.
 from functools import lru_cache
 from typing import Any
 
-from pydantic import BaseSettings, Field
+from pydantic import Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class WorkerSettings(BaseSettings):
@@ -22,8 +23,12 @@ class WorkerSettings(BaseSettings):
     # Connection Pool
     db_pool_size: int = Field(default=5, ge=1, le=20, description="DB pool size")
     db_max_overflow: int = Field(default=5, ge=0, le=20, description="DB pool overflow")
-    db_pool_timeout: int = Field(default=30, ge=5, le=120, description="DB pool timeout")
-    db_pool_recycle: int = Field(default=1800, ge=300, description="DB pool recycle time")
+    db_pool_timeout: int = Field(
+        default=30, ge=5, le=120, description="DB pool timeout"
+    )
+    db_pool_recycle: int = Field(
+        default=1800, ge=300, description="DB pool recycle time"
+    )
 
     # Redis (cache, same db as backend)
     redis_url: str = Field(
@@ -66,9 +71,7 @@ class WorkerSettings(BaseSettings):
     )
 
     # Health API Server
-    server_host: str = Field(
-        default="0.0.0.0", description="Health API server host"
-    )
+    server_host: str = Field(default="0.0.0.0", description="Health API server host")
     server_port: int = Field(
         default=8002, ge=1024, le=65535, description="Health API server port"
     )
@@ -77,9 +80,7 @@ class WorkerSettings(BaseSettings):
     log_level: str = Field(default="INFO", description="Logging level")
     log_format: str = Field(default="json", description="Log format: json or text")
 
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
     @property
     def database_connection_string(self) -> str:
