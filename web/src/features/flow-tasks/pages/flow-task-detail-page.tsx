@@ -36,6 +36,12 @@ import {
     BreadcrumbSeparator,
 } from '@/components/ui/breadcrumb'
 import {
+    Tooltip,
+    TooltipContent,
+    TooltipProvider,
+    TooltipTrigger,
+} from '@/components/ui/tooltip'
+import {
     GitBranch,
     Play,
     Loader2,
@@ -186,8 +192,22 @@ function RunRow({ run }: { run: FlowTaskRunHistory }) {
                                                             {log.node_label || log.node_id}
                                                         </span>
                                                         {log.error_message && (
-                                                            <div className="mt-1 text-xs text-rose-600 bg-rose-50 dark:bg-rose-900/20 dark:text-rose-300 rounded px-2 py-1 max-w-lg break-words border border-rose-100 dark:border-rose-900/30">
-                                                                {log.error_message}
+                                                            <div className="mt-1">
+                                                                <TooltipProvider>
+                                                                    <Tooltip delayDuration={0}>
+                                                                        <TooltipTrigger asChild>
+                                                                            <div className="inline-block max-w-[400px] text-xs text-rose-600 bg-rose-50 dark:bg-rose-900/20 dark:text-rose-300 rounded px-2 py-1 border border-rose-100 dark:border-rose-900/30 truncate cursor-help hover:bg-rose-100 dark:hover:bg-rose-900/40 transition-colors">
+                                                                                {log.error_message}
+                                                                            </div>
+                                                                        </TooltipTrigger>
+                                                                        <TooltipContent side="top" align="start" className="max-w-[400px] break-words bg-popover text-popover-foreground border-border shadow-md">
+                                                                            <div className="text-xs font-mono p-1">
+                                                                                <span className="font-semibold text-rose-500 mb-1 block">Error Detail:</span>
+                                                                                {log.error_message}
+                                                                            </div>
+                                                                        </TooltipContent>
+                                                                    </Tooltip>
+                                                                </TooltipProvider>
                                                             </div>
                                                         )}
                                                     </TableCell>
@@ -252,7 +272,7 @@ export default function FlowTaskDetailPage() {
 
     const { data: runsResp, isLoading: runsLoading } = useQuery({
         queryKey: ['flow-tasks', id, 'runs'],
-        queryFn: () => flowTasksRepo.getRuns(id, 1, 20),
+        queryFn: () => flowTasksRepo.getRuns(id, 1, 100),
         refetchInterval: pollingTaskId ? 3000 : false,
     })
 
@@ -448,8 +468,8 @@ export default function FlowTaskDetailPage() {
                 </Card>
 
                 {/* Run History */}
-                <Card>
-                    <CardHeader className="pb-3">
+                <Card className="flex flex-col">
+                    <CardHeader className="pb-3 flex-shrink-0">
                         <div className="flex items-center justify-between">
                             <div>
                                 <CardTitle className="text-base font-semibold">Run History</CardTitle>
@@ -460,9 +480,9 @@ export default function FlowTaskDetailPage() {
                            {/* Add filter or refresh button here later if needed */}
                         </div>
                     </CardHeader>
-                    <CardContent className="p-0 border-t">
+                    <CardContent className="p-0 border-t relative max-h-[600px] overflow-auto scrollbar-thin scrollbar-thumb-muted-foreground/20 scrollbar-track-transparent">
                         <Table>
-                            <TableHeader>
+                            <TableHeader className="sticky top-0 bg-card z-10 shadow-sm">
                                 <TableRow className="hover:bg-transparent border-b border-border/60">
                                     <TableHead className="w-[80px]">Run ID</TableHead>
                                     <TableHead className="w-[140px]">Status</TableHead>
