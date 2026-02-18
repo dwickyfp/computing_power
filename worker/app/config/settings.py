@@ -21,8 +21,10 @@ class WorkerSettings(BaseSettings):
     )
 
     # Connection Pool
-    db_pool_size: int = Field(default=5, ge=1, le=20, description="DB pool size")
-    db_max_overflow: int = Field(default=5, ge=0, le=20, description="DB pool overflow")
+    db_pool_size: int = Field(default=10, ge=1, le=50, description="DB pool size")
+    db_max_overflow: int = Field(
+        default=10, ge=0, le=50, description="DB pool overflow"
+    )
     db_pool_timeout: int = Field(
         default=30, ge=5, le=120, description="DB pool timeout"
     )
@@ -55,7 +57,7 @@ class WorkerSettings(BaseSettings):
 
     # Worker Behavior
     worker_concurrency: int = Field(
-        default=4, ge=1, le=16, description="Number of concurrent worker processes"
+        default=8, ge=1, le=32, description="Number of concurrent worker threads"
     )
     task_soft_time_limit: int = Field(
         default=120, ge=10, le=600, description="Soft time limit for tasks (seconds)"
@@ -64,10 +66,13 @@ class WorkerSettings(BaseSettings):
         default=180, ge=30, le=900, description="Hard time limit for tasks (seconds)"
     )
     preview_row_limit: int = Field(
-        default=100, ge=1, le=10000, description="Max rows for preview queries"
+        default=500, ge=1, le=50000, description="Max rows for preview queries"
     )
     duckdb_memory_limit: str = Field(
-        default="1GB", description="DuckDB memory limit per query"
+        default="2GB", description="DuckDB memory limit per query"
+    )
+    duckdb_threads: int = Field(
+        default=4, ge=1, le=16, description="DuckDB threads per query"
     )
 
     # Health API Server

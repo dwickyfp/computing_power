@@ -107,6 +107,8 @@ services:
         condition: service_started
       rosetta-compute-node:
         condition: service_healthy
+      rosetta-worker:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
@@ -154,7 +156,7 @@ services:
     restart: unless-stopped
 
   # ===========================================================================
-  # WORKER - Celery Background Task Processor
+  # WORKER - Celery Background Task Processor (HIGH PERFORMANCE)
   # ===========================================================================
   rosetta-worker:
     image: rosetta-etl:1.0.0-worker
@@ -165,24 +167,39 @@ services:
     environment:
       # Database (Config DB - same as backend)
       DATABASE_URL: ${DATABASE_URL:-postgresql://postgres:postgres@rosetta-postgres:5432/postgres}
+      # Connection Pool - HIGH PERFORMANCE
+      DB_POOL_SIZE: ${DB_POOL_SIZE:-10}
+      DB_MAX_OVERFLOW: ${DB_MAX_OVERFLOW:-10}
       # Redis
       REDIS_URL: ${REDIS_URL:-redis://rosetta-redis:6379/0}
       CELERY_BROKER_URL: redis://rosetta-redis:6379/1
       CELERY_RESULT_BACKEND: redis://rosetta-redis:6379/2
       # Security (must match backend)
       CREDENTIAL_ENCRYPTION_KEY: Wn5x7y9z1A2B3C4D5E6F7G8H9I0J1K2L3M4N5O6P7Q8=
-      # Worker Settings
-      WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-4}
-      TASK_SOFT_TIME_LIMIT: 120
-      TASK_HARD_TIME_LIMIT: 180
-      PREVIEW_ROW_LIMIT: 100
-      DUCKDB_MEMORY_LIMIT: 1GB
+      # Worker Settings - HIGH PERFORMANCE
+      WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-8}
+      TASK_SOFT_TIME_LIMIT: ${TASK_SOFT_TIME_LIMIT:-120}
+      TASK_HARD_TIME_LIMIT: ${TASK_HARD_TIME_LIMIT:-180}
+      PREVIEW_ROW_LIMIT: ${PREVIEW_ROW_LIMIT:-500}
+      # DuckDB Settings - HIGH PERFORMANCE
+      DUCKDB_MEMORY_LIMIT: ${DUCKDB_MEMORY_LIMIT:-2GB}
+      DUCKDB_THREADS: ${DUCKDB_THREADS:-4}
       # Health Server
       SERVER_HOST: 0.0.0.0
       SERVER_PORT: 8002
       # Logging
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       LOG_FORMAT: json
+      # Timezone
+      TZ: Asia/Jakarta
+    deploy:
+      resources:
+        limits:
+          cpus: "${WORKER_CPU_LIMIT:-4}"
+          memory: ${WORKER_MEMORY_LIMIT:-4G}
+        reservations:
+          cpus: "1"
+          memory: 1G
     depends_on:
       rosetta-postgres:
         condition: service_healthy

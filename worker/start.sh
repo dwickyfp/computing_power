@@ -1,9 +1,9 @@
 #!/bin/bash
-# Start the Rosetta Worker service
+# Start the Rosetta Worker service (HIGH PERFORMANCE)
 # Usage: ./start.sh [options]
 #
 # Options:
-#   --concurrency N    Number of worker processes (default: 4)
+#   --concurrency N    Number of worker threads (default: 8)
 #   --queues Q         Comma-separated queue names (default: preview,default)
 #   --loglevel LEVEL   Log level (default: info)
 #   --beat             Also start Celery Beat scheduler
@@ -12,7 +12,7 @@ set -e
 
 cd "$(dirname "$0")"
 
-CONCURRENCY=${WORKER_CONCURRENCY:-4}
+CONCURRENCY=${WORKER_CONCURRENCY:-8}
 QUEUES="preview,default"
 LOGLEVEL=${LOG_LEVEL:-info}
 RUN_BEAT=false

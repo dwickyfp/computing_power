@@ -1,11 +1,11 @@
-# Start the Rosetta Worker service (Windows PowerShell)
+# Start the Rosetta Worker service (Windows PowerShell - HIGH PERFORMANCE)
 # Usage: .\start.ps1 [-Concurrency N] [-Queues "preview,default"] [-LogLevel "info"] [-Beat]
 #
 # Note: If you get "cannot be loaded because running scripts is disabled", run:
 #   Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
 #
 # Parameters:
-#   -Concurrency N    Number of worker processes (default: 4)
+#   -Concurrency N    Number of worker threads (default: 8)
 #   -Queues Q         Comma-separated queue names (default: preview,default)
 #   -LogLevel LEVEL   Log level (default: info)
 #   -Beat             Also start Celery Beat scheduler
@@ -18,7 +18,7 @@ param(
 )
 
 # Set defaults if not provided
-if (-not $Concurrency) { $Concurrency = 4 }
+if (-not $Concurrency) { $Concurrency = 8 }
 if (-not $LogLevel) { $LogLevel = "info" }
 
 # Change to script directory
