@@ -24,34 +24,45 @@ _health_cache: Optional[dict] = None
 _health_cache_time: float = 0
 _cache_ttl: float = 3.0
 
+# Reuse Celery app instance instead of creating new one each time
+_celery_app: Optional[Celery] = None
+
+
+def get_celery_app() -> Celery:
+    """Get or create reusable Celery app instance for health checks."""
+    global _celery_app
+    if _celery_app is None:
+        _celery_app = Celery(
+            "health_checker",
+            broker=settings.celery_broker_url,
+            backend=settings.celery_result_backend,
+        )
+    return _celery_app
+
 
 @app.get("/health")
 async def health_check():
     """
     Health check endpoint.
-    
+
     Checks if the Celery worker is responding by inspecting active workers.
     Results are cached for 3 seconds to improve response time.
     """
     global _health_cache, _health_cache_time
-    
+
     # Return cached result if fresh
     now = time.time()
     if _health_cache and (now - _health_cache_time) < _cache_ttl:
         return _health_cache
-    
+
     try:
-        # Create temporary Celery app connection
-        celery_app = Celery(
-            "health_checker",
-            broker=settings.celery_broker_url,
-            backend=settings.celery_result_backend,
-        )
-        
-        # Quick ping with 1-second timeout
-        inspector = celery_app.control.inspect(timeout=1.0)
+        # Use reusable Celery app connection
+        celery_app = get_celery_app()
+
+        # Ping with 3-second timeout (increased from 1s for reliability)
+        inspector = celery_app.control.inspect(timeout=3.0)
         ping_result = inspector.ping()
-        
+
         if not ping_result:
             result = {
                 "status": "unhealthy",
@@ -60,25 +71,25 @@ async def health_check():
                 "active_tasks": 0,
                 "reserved_tasks": 0,
                 "timestamp": datetime.now(timezone.utc).isoformat(),
-                "error": "No workers responding"
+                "error": "No workers responding",
             }
             return result
-        
+
         active_workers = len(ping_result)
-        
+
         # Count active and reserved tasks
         active_tasks = 0
         active = inspector.active()
         if active:
             for worker_tasks in active.values():
                 active_tasks += len(worker_tasks)
-        
+
         reserved_tasks = 0
         reserved = inspector.reserved()
         if reserved:
             for worker_tasks in reserved.values():
                 reserved_tasks += len(worker_tasks)
-        
+
         result = {
             "status": "healthy",
             "healthy": True,
@@ -87,12 +98,12 @@ async def health_check():
             "reserved_tasks": reserved_tasks,
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
-        
+
         # Cache the successful result
         _health_cache = result
         _health_cache_time = now
         return result
-        
+
     except Exception as e:
         logger.error(f"Health check failed: {e}")
         result = {
@@ -102,7 +113,7 @@ async def health_check():
             "active_tasks": 0,
             "reserved_tasks": 0,
             "timestamp": datetime.now(timezone.utc).isoformat(),
-            "error": str(e)
+            "error": str(e),
         }
         # Don't cache errors
         return result
@@ -114,10 +125,7 @@ def run_server() -> None:
     """
     try:
         uvicorn.run(
-            app, 
-            host=settings.server_host, 
-            port=settings.server_port, 
-            log_level="info"
+            app, host=settings.server_host, port=settings.server_port, log_level="info"
         )
     except Exception as e:
         logger.error(f"Failed to start health API server: {e}")
