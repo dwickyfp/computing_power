@@ -9,7 +9,7 @@ from typing import List
 from fastapi import APIRouter, Depends, Query, status
 from pydantic import BaseModel
 
-from app.api.deps import get_source_service
+from app.api.deps import get_source_service, get_preset_service
 from app.domain.schemas.source import (
     PublicationCreateRequest,
     SourceCreate,
@@ -21,7 +21,6 @@ from app.domain.schemas.source_detail import SourceDetailResponse, TableSchemaRe
 from app.domain.services.source import SourceService
 from app.domain.services.preset import PresetService
 from app.domain.schemas.preset import PresetCreate, PresetResponse
-from app.api.deps import get_source_service, get_preset_service
 
 router = APIRouter()
 
@@ -110,8 +109,7 @@ def get_source(
 def get_source_details(
     source_id: int,
     force_refresh: bool = Query(
-        False,
-        description="Force refresh from source database (bypasses cache, slower)"
+        False, description="Force refresh from source database (bypasses cache, slower)"
     ),
     service: SourceService = Depends(get_source_service),
 ) -> SourceDetailResponse:

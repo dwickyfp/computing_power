@@ -4,13 +4,10 @@ Backfill endpoints.
 Provides REST API for managing backfill jobs.
 """
 
-from typing import Optional
-
 from fastapi import APIRouter, Depends, Path, Query, status
 
 from app.api.deps import get_backfill_service
 from app.domain.schemas.backfill import (
-    BackfillJobCancelRequest,
     BackfillJobCreate,
     BackfillJobListResponse,
     BackfillJobResponse,

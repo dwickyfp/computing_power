@@ -7,9 +7,8 @@ Provides REST API for managing table synchronization configurations.
 from typing import List
 
 from fastapi import APIRouter, Depends, Path, status, BackgroundTasks, HTTPException
-from sqlalchemy.orm import Session
 
-from app.api.deps import get_db, get_pipeline_service
+from app.api.deps import get_pipeline_service
 from app.domain.schemas.pipeline import (
     TableSyncCreateRequest,
     TableSyncBulkRequest,
@@ -19,8 +18,6 @@ from app.domain.schemas.pipeline import (
     TableValidationResponse,
 )
 from app.domain.services.pipeline import PipelineService
-from app.domain.models.pipeline import PipelineDestination, PipelineDestinationTableSync
-from app.domain.repositories.table_metadata_repo import TableMetadataRepository
 from app.core.exceptions import EntityNotFoundError
 
 router = APIRouter()
@@ -104,7 +101,9 @@ def save_table_syncs_bulk(
     Returns:
         List of created/updated table sync configurations
     """
-    return service.save_table_syncs_bulk(pipeline_id, pipeline_destination_id, bulk_request)
+    return service.save_table_syncs_bulk(
+        pipeline_id, pipeline_destination_id, bulk_request
+    )
 
 
 @router.delete(
@@ -155,7 +154,9 @@ def delete_table_sync_by_id(
         sync_config_id: Sync configuration ID to remove
         service: Pipeline service instance
     """
-    service.delete_table_sync_by_id(pipeline_id, pipeline_destination_id, sync_config_id)
+    service.delete_table_sync_by_id(
+        pipeline_id, pipeline_destination_id, sync_config_id
+    )
 
 
 @router.post(
@@ -186,7 +187,9 @@ def init_snowflake_table(
     Returns:
         Status of initialization
     """
-    return service.init_snowflake_table(pipeline_id, pipeline_destination_id, table_name)
+    return service.init_snowflake_table(
+        pipeline_id, pipeline_destination_id, table_name
+    )
 
 
 @router.post(

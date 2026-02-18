@@ -4,22 +4,18 @@ Pipeline endpoints.
 Provides REST API for managing ETL pipelines.
 """
 
-from typing import List, Optional
+from typing import List
 
-from fastapi import APIRouter, Depends, Query, status, BackgroundTasks
+from fastapi import APIRouter, Depends, Query, status
 
 from app.api.deps import get_pipeline_service
 from app.core.config import get_settings
 from app.domain.schemas.pipeline import (
     PipelineCreate,
     PipelineResponse,
-    PipelineStatusUpdate,
     PipelineUpdate,
 )
-from app.domain.schemas.pipeline_preview import (
-    PipelinePreviewRequest,
-    PipelinePreviewResponse,
-)
+from app.domain.schemas.pipeline_preview import PipelinePreviewRequest
 from app.domain.services.pipeline import PipelineService
 
 router = APIRouter()
@@ -34,7 +30,6 @@ router = APIRouter()
 )
 def create_pipeline(
     pipeline_data: PipelineCreate,
-    background_tasks: BackgroundTasks,
     service: PipelineService = Depends(get_pipeline_service),
 ) -> PipelineResponse:
     """
@@ -48,7 +43,6 @@ def create_pipeline(
         Created pipeline with source and destination details
     """
     pipeline = service.create_pipeline(pipeline_data)
-    # background_tasks.add_task(service.initialize_pipeline, pipeline.id)
     return PipelineResponse.from_orm(pipeline)
 
 
@@ -62,7 +56,6 @@ def create_pipeline(
 def add_pipeline_destination(
     pipeline_id: int,
     destination_id: int = Query(..., description="Destination ID to add"),
-    background_tasks: BackgroundTasks = None,
     service: PipelineService = Depends(get_pipeline_service),
 ) -> PipelineResponse:
     """
@@ -77,12 +70,6 @@ def add_pipeline_destination(
         Updated pipeline with new destination
     """
     pipeline = service.add_pipeline_destination(pipeline_id, destination_id)
-
-    # Trigger initialization for the new destination (and others)
-    # Trigger initialization for the new destination (and others)
-    # if background_tasks:
-    #     background_tasks.add_task(service.initialize_pipeline, pipeline.id)
-
     return PipelineResponse.from_orm(pipeline)
 
 
