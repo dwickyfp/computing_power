@@ -397,14 +397,19 @@ function FlowCanvas({ flowTaskId }: { flowTaskId: number }) {
                             onInit={(inst) => { rfInstance.current = inst }}
                             onNodeClick={onNodeClick}
                             onPaneClick={onPaneClick}
-                            fitView
+                            defaultViewport={{ x: 80, y: 80, zoom: 0.85 }}
+                            minZoom={0.25}
+                            maxZoom={2}
+                            fitView={false}
                             deleteKeyCode="Delete"
                             defaultEdgeOptions={{
                                 animated: true,
+                                style: { stroke: '#6366f1', strokeWidth: 2 },
                                 markerEnd: {
                                     type: MarkerType.ArrowClosed,
                                     width: 18,
                                     height: 18,
+                                    color: '#6366f1',
                                 },
                             }}
                         >
