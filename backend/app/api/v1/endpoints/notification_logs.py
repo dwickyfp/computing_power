@@ -1,4 +1,3 @@
-
 """
 Notification Log API endpoints.
 """
@@ -11,7 +10,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_db
 from app.core.logging import get_logger
 from app.domain.repositories.notification_log_repo import NotificationLogRepository
-from app.domain.schemas.notification_log import NotificationLog, NotificationLogUpdate
+from app.domain.schemas.notification_log import NotificationLog
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/notifications", tags=["Notifications"])
@@ -92,7 +91,9 @@ def mark_all_notifications_as_read(
         count = repo.mark_all_as_read()
         return {"message": "All notifications marked as read", "count": count}
     except Exception as e:
-        logger.error("Failed to mark all notifications as read", extra={"error": str(e)})
+        logger.error(
+            "Failed to mark all notifications as read", extra={"error": str(e)}
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to mark all notifications as read",
