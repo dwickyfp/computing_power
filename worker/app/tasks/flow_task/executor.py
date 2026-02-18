@@ -13,6 +13,7 @@ Responsible for:
 
 from __future__ import annotations
 
+import os
 import time
 from datetime import datetime
 from typing import Any, Dict, List, Optional
@@ -27,22 +28,44 @@ from app.tasks.flow_task.destination_writer import DestinationWriterRegistry
 
 logger = structlog.get_logger(__name__)
 
+# ─── Ensure ADBC Snowflake driver path is set for DuckDB ─────────────────────
+# Per https://github.com/iqea-ai/duckdb-snowflake#adbc-driver-setup,
+# DuckDB auto-finds the driver from ~/.duckdb/extensions/<version>/<platform>/
+# (installed at Docker build time). SNOWFLAKE_ADBC_DRIVER_PATH is an explicit
+# fallback recognized by the extension. Set it from the installed Python package
+# if not already provided via environment.
+if not os.environ.get("SNOWFLAKE_ADBC_DRIVER_PATH"):
+    try:
+        import adbc_driver_snowflake as _adbc_sf
+        _so = os.path.join(os.path.dirname(_adbc_sf.__file__), "libadbc_driver_snowflake.so")
+        if os.path.exists(_so):
+            os.environ["SNOWFLAKE_ADBC_DRIVER_PATH"] = _so
+    except Exception:
+        pass  # ADBC package not installed — driver must be in ~/.duckdb/extensions/
+
 
 # ─── Extension management ──────────────────────────────────────────────────────
 
 _REQUIRED_EXTENSIONS = ["postgres", "httpfs"]
-_OPTIONAL_EXTENSIONS = ["snowflake"]
+_COMMUNITY_EXTENSIONS = ["snowflake"]
 
 
 def _setup_duckdb_connection() -> duckdb.DuckDBPyConnection:
     """Create and configure a DuckDB in-memory connection."""
     conn = duckdb.connect(database=":memory:")
-    # Install and load required extensions
+    # Install and load required extensions (core)
     for ext in _REQUIRED_EXTENSIONS:
         try:
             conn.execute(f"INSTALL {ext}; LOAD {ext};")
         except Exception as e:
             logger.warning(f"Extension {ext} setup warning: {e}")
+    # Install and load community extensions (e.g. snowflake)
+    for ext in _COMMUNITY_EXTENSIONS:
+        try:
+            conn.execute(f"INSTALL {ext} FROM community; LOAD {ext};")
+            logger.info(f"Loaded community extension: {ext}")
+        except Exception as e:
+            logger.warning(f"Community extension {ext} setup warning: {e}")
     return conn
 
 
@@ -109,6 +132,12 @@ def _inject_attach_configs(
             )
             if ext_name == "snowflake":
                 _load_optional_extension(conn, "snowflake")
+            # Inject schema from destination config when not explicitly set on the node.
+            # Snowflake schemas are rarely 'public' — use the configured schema instead.
+            if not data.get("schema_name"):
+                _sf_schema = SourceConnectionFactory.get_destination_schema(destination_id)
+                if _sf_schema:
+                    data["schema_name"] = _sf_schema
         elif source_id:
             attach_sql, setup_sql, ext_name = (
                 SourceConnectionFactory.build_attach_sql_from_source(

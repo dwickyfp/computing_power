@@ -109,7 +109,7 @@ def _build_input_cte(node: dict, _pred_ctes: list) -> str:
     """
     data = node.get("data", {})
     alias = _safe_identifier(data.get("attach_alias", "src"))
-    schema = data.get("schema_name", "public")
+    schema = data.get("schema_name") or None  # None = omit schema part (use connection default)
     table = data.get("table_name", "")
     cols = data.get("columns")
     sample = data.get("sample_limit")
@@ -404,7 +404,7 @@ def _build_output_node_info(node: dict, pred_ctes: list) -> dict:
         "node_id": node["id"],
         "source_cte": pred_ctes[0],
         "target_table": data.get("target_table", ""),
-        "schema_name": data.get("schema_name", "public"),
+        "schema_name": data.get("schema_name") or None,
         "write_mode": data.get("write_mode", "APPEND").upper(),
         "upsert_keys": data.get("upsert_keys", []),
         "destination_id": data.get("destination_id"),

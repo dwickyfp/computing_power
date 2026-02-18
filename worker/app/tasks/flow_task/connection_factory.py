@@ -102,7 +102,6 @@ class SnowflakeAdapter(BaseConnectionAdapter):
         user = config.get("user", "")
         database = config.get("database", "")
         warehouse = config.get("warehouse", "")
-        schema = config.get("schema", "PUBLIC")
 
         # Handle private key — prefer content over path.
         # The config JSON may store it as "private_key_content" (worker standard)
@@ -278,3 +277,26 @@ class SourceConnectionFactory:
         adapter = SourceConnectionFactory.get_adapter(dest_type)
         attach_sql, setup_sql = adapter.get_attach_sql(alias, config_raw, read_only=read_only)
         return attach_sql, setup_sql, adapter.get_extension_name()
+
+    @staticmethod
+    def get_destination_schema(destination_id: int) -> Optional[str]:
+        """
+        Return the schema configured for a destination (e.g. 'BRONZE' for Snowflake).
+        Returns None if not found or not configured.
+        """
+        import json as _json
+
+        from app.core.database import get_db_session
+
+        with get_db_session() as db:
+            from sqlalchemy import text
+            row = db.execute(
+                text("SELECT config FROM destinations WHERE id = :id"),
+                {"id": destination_id},
+            ).fetchone()
+
+        if not row:
+            return None
+
+        config_raw = row.config if isinstance(row.config, dict) else _json.loads(row.config)
+        return config_raw.get("schema") or config_raw.get("schema_name") or None

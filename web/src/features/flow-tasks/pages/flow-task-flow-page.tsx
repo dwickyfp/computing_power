@@ -106,7 +106,13 @@ function FlowCanvas({ flowTaskId }: { flowTaskId: number }) {
         setPreviewResult,
         setPreviewError,
         setRequestPreview,
+        closePreview,
     } = useFlowTaskStore()
+
+    // Always close the preview drawer when entering the flow editor
+    useEffect(() => {
+        closePreview()
+    }, [])  // eslint-disable-line react-hooks/exhaustive-deps
 
     // Load graph from API
     const { data: ftResp } = useQuery({

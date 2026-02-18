@@ -28,6 +28,22 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+# Expose ADBC Snowflake native driver so DuckDB can find it at runtime.
+# Per docs (https://github.com/iqea-ai/duckdb-snowflake#adbc-driver-setup),
+# DuckDB searches ~/.duckdb/extensions/<version>/<platform>/ automatically.
+# The driver is installed there at Docker build time.
+# SNOWFLAKE_ADBC_DRIVER_PATH is an explicit fallback recognized by the extension.
+if [ -z "$SNOWFLAKE_ADBC_DRIVER_PATH" ]; then
+    # Resolve from venv if not already set (local dev)
+    _ADBC_SO="$(python3 -c "import adbc_driver_snowflake, os; print(os.path.join(os.path.dirname(adbc_driver_snowflake.__file__), 'libadbc_driver_snowflake.so'))" 2>/dev/null || true)"
+    if [ -f "$_ADBC_SO" ]; then
+        export SNOWFLAKE_ADBC_DRIVER_PATH="$_ADBC_SO"
+        echo "  ADBC driver: $SNOWFLAKE_ADBC_DRIVER_PATH"
+    fi
+else
+    echo "  ADBC driver: $SNOWFLAKE_ADBC_DRIVER_PATH"
+fi
+
 echo "Starting Rosetta Worker..."
 echo "  Concurrency: $CONCURRENCY"
 echo "  Queues: $QUEUES"
