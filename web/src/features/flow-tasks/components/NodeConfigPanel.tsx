@@ -635,7 +635,7 @@ function CleanConfig({ data, update, nodeId, flowTaskId }: ConfigFormProps) {
                                     setFilterRows(next)
                                 }}
                             >
-                                <SelectTrigger className="h-6 text-[11px] flex-1 min-w-0">
+                                <SelectTrigger className="!h-7 px-2 text-[11px] flex-1 min-w-0">
                                     <SelectValue placeholder="col" />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -660,7 +660,7 @@ function CleanConfig({ data, update, nodeId, flowTaskId }: ConfigFormProps) {
                                     setFilterRows(next)
                                 }}
                             >
-                                <SelectTrigger className="h-6 text-[11px] w-20 shrink-0">
+                                <SelectTrigger className="!h-7 px-2 text-[11px] w-20 shrink-0">
                                     <SelectValue placeholder="op" />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -671,7 +671,7 @@ function CleanConfig({ data, update, nodeId, flowTaskId }: ConfigFormProps) {
                             </Select>
                             {row.op !== 'IS NULL' && row.op !== 'IS NOT NULL' ? (
                                 <Input
-                                    className="h-6 text-[11px] flex-1 min-w-0"
+                                    className="!h-7 !py-0 px-2 text-[11px] flex-1 min-w-0"
                                     value={row.val}
                                     onChange={(e) => {
                                         const next = [...filterRows]
@@ -685,7 +685,7 @@ function CleanConfig({ data, update, nodeId, flowTaskId }: ConfigFormProps) {
                             )}
                             <Button
                                 variant="ghost" size="icon"
-                                className="h-6 w-6 shrink-0 hover:text-destructive"
+                                className="!h-7 !w-7 shrink-0 hover:text-destructive"
                                 onClick={() => setFilterRows(filterRows.filter((_, j) => j !== i))}
                             >
                                 <X className="h-3 w-3" />
