@@ -126,8 +126,8 @@ export interface FlowTaskListResponse {
 export interface FlowTaskGraphResponse {
     id: number
     flow_task_id: number
-    nodes: FlowNode[]
-    edges: FlowEdge[]
+    nodes_json: FlowNode[]
+    edges_json: FlowEdge[]
     version: number
     created_at: string
     updated_at: string

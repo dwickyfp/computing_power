@@ -48,7 +48,7 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 
-import { type FlowGraph, type FlowNode, flowTasksRepo } from '@/repo/flow-tasks'
+import { type FlowGraph, type FlowNode, type FlowEdge, flowTasksRepo } from '@/repo/flow-tasks'
 import { useFlowTaskStore } from '../store/flow-task-store'
 import { useTheme } from '@/context/theme-provider'
 import { NodePalette } from '../components/NodePalette'
@@ -139,8 +139,9 @@ function FlowCanvas({ flowTaskId }: { flowTaskId: number }) {
     useEffect(() => {
         if (graphData) {
             const graph = graphData.data
-            setNodes(graph.nodes)
-            setEdges(graph.edges)
+            // Backend returns nodes_json / edges_json (not nodes / edges)
+            if (Array.isArray(graph.nodes_json)) setNodes(graph.nodes_json as FlowNode[])
+            if (Array.isArray(graph.edges_json)) setEdges(graph.edges_json as FlowEdge[])
             markClean()
         }
     }, [graphData, setNodes, setEdges, markClean])
@@ -210,8 +211,14 @@ function FlowCanvas({ flowTaskId }: { flowTaskId: number }) {
         onSuccess: () => {
             markClean()
             toast.success('Graph saved')
+            // Invalidate only the flow-task detail (status/name), NOT the graph query.
+            // Invalidating the graph query would trigger a refetch that calls setNodes([]),
+            // clearing the canvas with the freshly saved data.
             setTimeout(
-                () => queryClient.invalidateQueries({ queryKey: ['flow-tasks', flowTaskId] }),
+                () => queryClient.invalidateQueries({
+                    queryKey: ['flow-tasks', flowTaskId],
+                    exact: true,
+                }),
                 300
             )
         },
@@ -234,16 +241,18 @@ function FlowCanvas({ flowTaskId }: { flowTaskId: number }) {
     const onDrop = useCallback(
         (event: React.DragEvent) => {
             event.preventDefault()
-            if (!rfInstance.current || !reactFlowRef.current) return
+            if (!rfInstance.current) return
 
             const nodeType = event.dataTransfer.getData('application/reactflow-node-type') as FlowNode['type']
             const nodeLabel = event.dataTransfer.getData('application/reactflow-node-label')
             if (!nodeType) return
 
-            const bounds = reactFlowRef.current.getBoundingClientRect()
-            const position = rfInstance.current!.screenToFlowPosition({
-                x: event.clientX - bounds.left,
-                y: event.clientY - bounds.top,
+            // screenToFlowPosition takes raw viewport (clientX/Y) coords directly —
+            // do NOT subtract container bounds, that causes double-offset and places
+            // the node far off-screen (only visible in the minimap).
+            const position = rfInstance.current.screenToFlowPosition({
+                x: event.clientX,
+                y: event.clientY,
             })
 
             const newNode: FlowNode = {

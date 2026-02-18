@@ -105,7 +105,7 @@ class BackgroundScheduler:
         """
         try:
             if self.credit_monitor:
-                asyncio.run(self.credit_monitor.monitor_all_destinations())
+                self.credit_monitor.monitor_all_destinations()
                 self._record_job_metric("credit_monitor")
         except Exception as e:
             logger.error("Error running credit monitor task", extra={"error": str(e)})

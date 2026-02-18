@@ -33,25 +33,31 @@ class CreditMonitorService:
         """Initialize service."""
         pass
 
-    async def monitor_all_destinations(self) -> None:
+    def monitor_all_destinations(self) -> None:
         """
         Background task to monitor credit usage for all Snowflake destinations.
         """
         logger.info("Starting scheduled credit usage monitoring")
         
         with db_manager.session() as session:
-            # Get all Snowflake destinations
+            # Get all Snowflake destinations that have an account key in config
             destinations = session.execute(
                 select(Destination).where(
-                    Destination.snowflake_account.isnot(None)
+                    Destination.type.ilike('%SNOWFLAKE%')
                 )
             ).scalars().all()
+            
+            # Further filter: only those with an 'account' key present in config JSON
+            destinations = [
+                d for d in destinations
+                if isinstance(d.config, dict) and d.config.get("account")
+            ]
             
             logger.info(f"Found {len(destinations)} destinations to monitor")
             
             for destination in destinations:
                 try:
-                    await self.refresh_credits_for_destination(session, destination)
+                    self.refresh_credits_for_destination(session, destination)
                 except Exception as e:
                     logger.error(
                         f"Failed to monitor credits for destination {destination.name}", 
