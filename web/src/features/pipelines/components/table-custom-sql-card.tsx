@@ -16,6 +16,7 @@ import {
   Type,
   Calendar,
   ToggleLeft,
+  Download,
 } from 'lucide-react'
 import AceEditor from 'react-ace'
 import { toast } from 'sonner'
@@ -74,6 +75,60 @@ export function TableCustomSqlCard({
   const [isPreviewLoading, setIsPreviewLoading] = useState(false)
   const [previewData, setPreviewData] = useState<PreviewData | null>(null)
   const [isPreviewOpen, setIsPreviewOpen] = useState(false)
+
+  // Export preview data to CSV with semicolon delimiter
+  const exportToCSV = () => {
+    if (!previewData || !previewData.data.length) {
+      toast.error('No data to export')
+      return
+    }
+
+    try {
+      const { columns, data } = previewData
+      
+      // Create CSV header
+      const header = columns.join(';')
+      
+      // Create CSV rows
+      const rows = data.map(row => {
+        return columns.map(col => {
+          const value = row[col]
+          if (value === null || value === undefined) return ''
+          
+          // Convert value to string and escape if needed
+          let strValue = String(value)
+          
+          // If value contains semicolon, newline, or quote, wrap in quotes and escape quotes
+          if (strValue.includes(';') || strValue.includes('\n') || strValue.includes('"')) {
+            strValue = '"' + strValue.replace(/"/g, '""') + '"'
+          }
+          
+          return strValue
+        }).join(';')
+      })
+      
+      // Combine header and rows
+      const csv = [header, ...rows].join('\n')
+      
+      // Create blob and download
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+      const link = document.createElement('a')
+      const url = URL.createObjectURL(blob)
+      
+      link.setAttribute('href', url)
+      link.setAttribute('download', `preview_${table?.table_name || 'data'}_${new Date().toISOString().slice(0, 10)}.csv`)
+      link.style.visibility = 'hidden'
+      
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      
+      toast.success('CSV exported successfully')
+    } catch (error) {
+      console.error('Export error:', error)
+      toast.error('Failed to export CSV')
+    }
+  }
 
   // Watch for theme changes
   useEffect(() => {
@@ -556,13 +611,26 @@ export function TableCustomSqlCard({
               align='end'
             >
               <div className='flex flex-col overflow-hidden rounded-lg border bg-popover'>
-                <div className='border-b bg-muted/30 px-4 py-3'>
-                  <h3 className='font-semibold'>Preview Results</h3>
-                  <p className='text-xs text-muted-foreground'>
-                    {previewData?.data
-                      ? `Showing ${previewData.data.length.toLocaleString()} rows`
-                      : 'Loading...'}
-                  </p>
+                <div className='border-b bg-muted/30 px-4 py-3 flex items-center justify-between'>
+                  <div>
+                    <h3 className='font-semibold'>Preview Results</h3>
+                    <p className='text-xs text-muted-foreground'>
+                      {previewData?.data
+                        ? `Showing ${previewData.data.length.toLocaleString()} rows`
+                        : 'Loading...'}
+                    </p>
+                  </div>
+                  {previewData && previewData.data.length > 0 && (
+                    <Button
+                      variant='outline'
+                      size='sm'
+                      onClick={exportToCSV}
+                      className='gap-2'
+                    >
+                      <Download className='h-4 w-4' />
+                      Export CSV
+                    </Button>
+                  )}
                 </div>
                 <div className='p-0'>
                   {isPreviewLoading ? (
