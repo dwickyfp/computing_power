@@ -47,7 +47,6 @@ interface PreviewData {
   columns: string[]
   column_types: string[]
   data: Record<string, any>[]
-  total_count?: number
   error?: string
 }
 
@@ -560,8 +559,8 @@ export function TableCustomSqlCard({
                 <div className='border-b bg-muted/30 px-4 py-3'>
                   <h3 className='font-semibold'>Preview Results</h3>
                   <p className='text-xs text-muted-foreground'>
-                    {previewData?.total_count !== undefined
-                      ? `Showing ${Math.min(previewData.data.length, previewData.total_count)} of ${previewData.total_count.toLocaleString()} total rows`
+                    {previewData?.data
+                      ? `Showing ${previewData.data.length.toLocaleString()} rows`
                       : 'Loading...'}
                   </p>
                 </div>

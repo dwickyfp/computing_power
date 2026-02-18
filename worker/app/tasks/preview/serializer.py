@@ -18,7 +18,6 @@ def serialize_preview_result(
     columns: list[str],
     column_types: list[str],
     data: list[dict[str, Any]],
-    total_count: int = 0,
 ) -> dict[str, Any]:
     """
     Serialize preview results to JSON-safe format.
@@ -27,7 +26,6 @@ def serialize_preview_result(
         columns: Column names
         column_types: Column type labels (number, text, date, boolean)
         data: List of row dicts
-        total_count: Total number of rows in the dataset (before LIMIT)
 
     Returns:
         Serialized result dict ready for JSON encoding
@@ -43,7 +41,6 @@ def serialize_preview_result(
         "columns": columns,
         "column_types": column_types,
         "data": serialized_data,
-        "total_count": total_count,
         "error": None,
     }
 
