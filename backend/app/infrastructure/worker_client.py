@@ -4,6 +4,7 @@ Worker client for submitting Celery tasks from the backend.
 Provides a clean interface to dispatch tasks to the worker service
 and check their status.
 """
+
 import time
 from typing import Any, Optional
 
@@ -37,6 +38,18 @@ class WorkerClient:
             cls._instance._initialize()
         return cls._instance
 
+    @classmethod
+    def reset_instance(cls) -> None:
+        """Reset the singleton instance to force re-initialization."""
+        if cls._instance is not None and cls._instance._celery_app is not None:
+            try:
+                cls._instance._celery_app.close()
+            except Exception:
+                pass
+        cls._instance = None
+        cls._celery_app = None
+        logger.info("WorkerClient instance reset")
+
     def _initialize(self) -> None:
         """Initialize Celery app connection (as producer only)."""
         settings = get_settings()
@@ -65,9 +78,44 @@ class WorkerClient:
             result_serializer="json",
             result_extended=True,
             task_track_started=True,
+            # Disable persistent connection retry to avoid log spam
+            broker_connection_retry_on_startup=False,
+            broker_connection_retry=False,
+            # Result backend settings - don't retry aggressively
+            redis_retry_on_timeout=False,
+            result_backend_transport_options={
+                "retry_policy": {"max_retries": 0},
+            },
         )
 
         logger.info(f"WorkerClient initialized with broker: {broker_url}")
+
+    def _send_task_with_retry(
+        self,
+        task_name: str,
+        args: list,
+        queue: str,
+    ) -> Any:
+        """
+        Send a task with automatic retry on connection errors.
+
+        If the Celery app is in a bad state (e.g., after Redis reconnection failure),
+        reset the instance and retry once.
+        """
+        try:
+            return self._celery_app.send_task(task_name, args=args, queue=queue)
+        except Exception as e:
+            error_msg = str(e).lower()
+            # Check if this is a recoverable connection error
+            if "retry limit exceeded" in error_msg or "connection" in error_msg:
+                logger.warning(f"Celery connection error, resetting client: {e}")
+                # Reset the singleton to get a fresh connection
+                WorkerClient.reset_instance()
+                # Re-initialize
+                self._initialize()
+                # Retry once
+                return self._celery_app.send_task(task_name, args=args, queue=queue)
+            raise
 
     def submit_preview_task(
         self,
@@ -89,23 +137,30 @@ class WorkerClient:
 
         Returns:
             Task ID string for polling
+
+        Raises:
+            ConnectionError: If Redis/worker is not available
         """
-        result = self._celery_app.send_task(
-            "worker.preview.execute",
-            args=[sql, source_id, destination_id, table_name, filter_sql],
-            queue="preview",
-        )
+        try:
+            result = self._send_task_with_retry(
+                "worker.preview.execute",
+                args=[sql, source_id, destination_id, table_name, filter_sql],
+                queue="preview",
+            )
 
-        logger.info(
-            f"Preview task submitted: {result.id}",
-            extra={
-                "task_id": result.id,
-                "source_id": source_id,
-                "table_name": table_name,
-            },
-        )
+            logger.info(
+                f"Preview task submitted: {result.id}",
+                extra={
+                    "task_id": result.id,
+                    "source_id": source_id,
+                    "table_name": table_name,
+                },
+            )
 
-        return result.id
+            return result.id
+        except Exception as e:
+            logger.error(f"Failed to submit preview task: {e}")
+            raise ConnectionError(f"Worker unavailable: {e}") from e
 
     def get_task_status(self, task_id: str) -> dict[str, Any]:
         """
@@ -117,31 +172,42 @@ class WorkerClient:
         Returns:
             Dict with state, result (if complete), and metadata
         """
-        result = AsyncResult(task_id, app=self._celery_app)
+        try:
+            result = AsyncResult(task_id, app=self._celery_app)
 
-        response: dict[str, Any] = {
-            "task_id": task_id,
-            "state": result.state,
-        }
+            response: dict[str, Any] = {
+                "task_id": task_id,
+                "state": result.state,
+            }
 
-        if result.state == "PENDING":
-            response["status"] = "queued"
-        elif result.state == "STARTED" or result.state == "PROGRESS":
-            response["status"] = "running"
-            if result.info and isinstance(result.info, dict):
-                response["meta"] = result.info
-        elif result.state == "SUCCESS":
-            response["status"] = "completed"
-            response["result"] = result.result
-        elif result.state == "FAILURE":
-            response["status"] = "failed"
-            response["error"] = str(result.result) if result.result else "Unknown error"
-        elif result.state == "REVOKED":
-            response["status"] = "cancelled"
-        else:
-            response["status"] = result.state.lower()
+            if result.state == "PENDING":
+                response["status"] = "queued"
+            elif result.state == "STARTED" or result.state == "PROGRESS":
+                response["status"] = "running"
+                if result.info and isinstance(result.info, dict):
+                    response["meta"] = result.info
+            elif result.state == "SUCCESS":
+                response["status"] = "completed"
+                response["result"] = result.result
+            elif result.state == "FAILURE":
+                response["status"] = "failed"
+                response["error"] = (
+                    str(result.result) if result.result else "Unknown error"
+                )
+            elif result.state == "REVOKED":
+                response["status"] = "cancelled"
+            else:
+                response["status"] = result.state.lower()
 
-        return response
+            return response
+        except Exception as e:
+            logger.debug(f"Failed to get task status for {task_id}: {e}")
+            return {
+                "task_id": task_id,
+                "state": "UNKNOWN",
+                "status": "error",
+                "error": f"Worker unavailable: {e}",
+            }
 
     def cancel_task(self, task_id: str) -> bool:
         """
@@ -164,7 +230,7 @@ class WorkerClient:
     def get_worker_health(self) -> dict[str, Any]:
         """
         Check if Celery workers are alive and get stats.
-        
+
         Uses 5-second cache to avoid repeated expensive Celery inspector calls.
 
         Returns:
@@ -173,9 +239,12 @@ class WorkerClient:
         """
         # Return cached result if fresh
         now = time.time()
-        if self._health_cache and (now - self._health_cache_time) < self._health_cache_ttl:
+        if (
+            self._health_cache
+            and (now - self._health_cache_time) < self._health_cache_ttl
+        ):
             return self._health_cache
-        
+
         try:
             # Reduced timeout to 1.5 seconds for faster response
             inspector = self._celery_app.control.inspect(timeout=1.5)
@@ -206,14 +275,19 @@ class WorkerClient:
                 "active_tasks": active_tasks,
                 "reserved_tasks": reserved_tasks,
             }
-            
+
             # Cache the result
             self._health_cache = result
             self._health_cache_time = now
             return result
         except Exception as e:
             logger.warning(f"Worker health check failed: {e}")
-            error_result = {"healthy": False, "active_workers": 0, "active_tasks": 0, "error": str(e)}
+            error_result = {
+                "healthy": False,
+                "active_workers": 0,
+                "active_tasks": 0,
+                "error": str(e),
+            }
             # Don't cache errors - allow retry on next call
             # Only set cache if it was a connection issue to prevent hammering
             if "Connection refused" in str(e) or "timed out" in str(e).lower():

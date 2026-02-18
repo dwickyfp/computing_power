@@ -190,7 +190,9 @@ class BackgroundScheduler:
         try:
             import httpx
             from app.core.database import db_manager
-            from app.domain.repositories.worker_health_repo import WorkerHealthRepository
+            from app.domain.repositories.worker_health_repo import (
+                WorkerHealthRepository,
+            )
 
             session_factory = db_manager.session_factory
             db = session_factory()
@@ -203,9 +205,9 @@ class BackgroundScheduler:
                 url = f"{self.settings.worker_health_url}/health"
                 with httpx.Client(timeout=5.0) as client:
                     response = client.get(url)
-                
+
                 repo = WorkerHealthRepository(db)
-                
+
                 if response.status_code == 200:
                     data = response.json()
                     repo.upsert_status(
@@ -221,15 +223,18 @@ class BackgroundScheduler:
                         healthy=False,
                         error_message=f"HTTP {response.status_code}",
                     )
-                
+
                 self._record_job_metric("worker_health_check")
             finally:
                 db.close()
         except Exception as e:
-            # If HTTP call fails, save unhealthy status
+            # If HTTP call fails, save unhealthy status (quietly - don't spam logs)
             try:
                 from app.core.database import db_manager
-                from app.domain.repositories.worker_health_repo import WorkerHealthRepository
+                from app.domain.repositories.worker_health_repo import (
+                    WorkerHealthRepository,
+                )
+
                 db2 = db_manager.session_factory()
                 try:
                     repo = WorkerHealthRepository(db2)
@@ -241,8 +246,10 @@ class BackgroundScheduler:
                     db2.close()
             except Exception:
                 pass
-            logger.error(
-                "Error running worker health check task", extra={"error": str(e)}
+            # Use debug level to avoid spamming logs when worker is down
+            logger.debug(
+                "Worker health check failed (worker may be offline)",
+                extra={"error": str(e)},
             )
 
     def _run_pipeline_refresh_check(self) -> None:

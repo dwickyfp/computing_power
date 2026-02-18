@@ -26,7 +26,8 @@ worker/
 │   └── services/
 │       └── health_service.py   # Health check & worker stats
 ├── main.py                     # Entry point
-├── start.sh                    # Startup script
+├── start.sh                    # Startup script (Linux/Mac)
+├── start.ps1                   # Startup script (Windows)
 ├── Dockerfile                  # Container image
 ├── pyproject.toml              # Dependencies (uv)
 └── .env.example                # Environment template
@@ -65,12 +66,31 @@ cp .env.example .env
 
 ### Run Worker
 
+**Linux/Mac:**
+
 ```bash
 # Using start script
 ./start.sh
 
-# Or directly with Celery
-celery -A main worker --loglevel=info -Q preview,default -c 4
+# With custom options
+./start.sh --concurrency 8 --loglevel debug --beat
+```
+
+**Windows (PowerShell):**
+
+```powershell
+# Using PowerShell script
+.\start.ps1
+
+# With custom options
+.\start.ps1 -Concurrency 8 -LogLevel debug -Beat
+```
+
+**Direct Celery (all platforms):**
+
+```bash
+# Basic worker
+celery -A main worker --loglevel=info -Q preview,default -c 4 --pool=threads
 
 # With Flower monitoring (optional)
 celery -A main flower --port=5555
@@ -83,24 +103,24 @@ Set these environment variables in the backend's `.env`:
 ```env
 WORKER_ENABLED=true
 CELERY_BROKER_URL=redis://localhost:6379/1
-CELERY_RESULT_BACKEND=db+postgresql://postgres:postgres@localhost:5433/postgres
+CELERY_RESULT_BACKEND=redis://localhost:6379/2
 ```
 
 ## Configuration
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `DATABASE_URL` | `postgresql://...` | Config database URL |
-| `REDIS_URL` | `redis://localhost:6379/0` | Redis cache URL |
-| `CELERY_BROKER_URL` | `redis://localhost:6379/1` | Celery broker (Redis db 1) |
-| `CELERY_RESULT_BACKEND` | `db+postgresql://...` | Task result storage |
-| `CREDENTIAL_ENCRYPTION_KEY` | (required) | AES-256-GCM key (match backend) |
-| `WORKER_CONCURRENCY` | `4` | Worker process count |
-| `WORKER_TASK_SOFT_TIME_LIMIT` | `120` | Soft timeout (seconds) |
-| `WORKER_TASK_HARD_TIME_LIMIT` | `180` | Hard timeout (seconds) |
-| `WORKER_PREVIEW_ROW_LIMIT` | `100` | Max preview rows |
-| `WORKER_DUCKDB_MEMORY_LIMIT` | `1GB` | DuckDB memory limit |
-| `LOG_LEVEL` | `INFO` | Logging level |
+| Variable                      | Default                    | Description                      |
+| ----------------------------- | -------------------------- | -------------------------------- |
+| `DATABASE_URL`                | `postgresql://...`         | Config database URL              |
+| `REDIS_URL`                   | `redis://localhost:6379/0` | Redis cache URL                  |
+| `CELERY_BROKER_URL`           | `redis://localhost:6379/1` | Celery broker (Redis db 1)       |
+| `CELERY_RESULT_BACKEND`       | `redis://localhost:6379/2` | Task result storage (Redis db 2) |
+| `CREDENTIAL_ENCRYPTION_KEY`   | (required)                 | AES-256-GCM key (match backend)  |
+| `WORKER_CONCURRENCY`          | `4`                        | Worker process count             |
+| `WORKER_TASK_SOFT_TIME_LIMIT` | `120`                      | Soft timeout (seconds)           |
+| `WORKER_TASK_HARD_TIME_LIMIT` | `180`                      | Hard timeout (seconds)           |
+| `WORKER_PREVIEW_ROW_LIMIT`    | `100`                      | Max preview rows                 |
+| `WORKER_DUCKDB_MEMORY_LIMIT`  | `1GB`                      | DuckDB memory limit              |
+| `LOG_LEVEL`                   | `INFO`                     | Logging level                    |
 
 ## Docker
 
