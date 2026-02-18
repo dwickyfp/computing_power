@@ -22,6 +22,16 @@ import {
     DialogFooter,
 } from '@/components/ui/dialog'
 import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+import {
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuItem,
@@ -164,6 +174,7 @@ export default function FlowTaskListPage() {
     const [dialogOpen, setDialogOpen] = useState(false)
     const [editTarget, setEditTarget] = useState<FlowTask | undefined>()
     const [filter, setFilter] = useState('')
+    const [deleteTarget, setDeleteTarget] = useState<FlowTask | undefined>()
 
     useEffect(() => {
         document.title = 'Flow Tasks'
@@ -340,10 +351,7 @@ export default function FlowTaskListPage() {
                                                 <DropdownMenuSeparator />
                                                 <DropdownMenuItem
                                                     className="text-destructive flex items-center gap-2"
-                                                    onClick={() => {
-                                                        if (confirm(`Delete "${ft.name}"?`))
-                                                            deleteMutation.mutate(ft.id)
-                                                    }}
+                                                    onClick={() => setDeleteTarget(ft)}
                                                 >
                                                     <Trash2 className="h-4 w-4" />
                                                     Delete
@@ -367,6 +375,39 @@ export default function FlowTaskListPage() {
                 onSaved={() => refetch()}
                 existing={editTarget}
             />
+
+            <AlertDialog
+                open={!!deleteTarget}
+                onOpenChange={(open) => !open && setDeleteTarget(undefined)}
+            >
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Delete Flow Task</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            Are you sure you want to delete{' '}
+                            <span className="font-semibold text-foreground">"{deleteTarget?.name}"</span>?
+                            This action cannot be undone and will permanently remove the
+                            flow task and all associated run history.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction
+                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                            onClick={() => {
+                                if (deleteTarget) deleteMutation.mutate(deleteTarget.id)
+                                setDeleteTarget(undefined)
+                            }}
+                        >
+                            {deleteMutation.isPending
+                                ? <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                                : <Trash2 className="h-4 w-4 mr-2" />
+                            }
+                            Delete
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </>
     )
 }
