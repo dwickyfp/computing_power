@@ -6,19 +6,29 @@ import 'ace-builds/src-noconflict/ext-language_tools'
 import 'ace-builds/src-noconflict/mode-mysql'
 import 'ace-builds/src-noconflict/theme-tomorrow'
 import 'ace-builds/src-noconflict/theme-tomorrow_night'
-import { Loader2, Save, X, Eye, AlertCircle, Hash, Type, Calendar, ToggleLeft } from 'lucide-react'
+import {
+  Loader2,
+  Save,
+  X,
+  Eye,
+  AlertCircle,
+  Hash,
+  Type,
+  Calendar,
+  ToggleLeft,
+} from 'lucide-react'
 import AceEditor from 'react-ace'
 import { toast } from 'sonner'
-import { Checkbox } from '@/components/ui/checkbox'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
-import { createSqlCompleter } from '@/features/pipelines/utils/sql-completer'
+import { Checkbox } from '@/components/ui/checkbox'
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover'
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area'
+import { createSqlCompleter } from '@/features/pipelines/utils/sql-completer'
 
 interface TableCustomSqlCardProps {
   table: (TableWithSyncInfo & { sync_config?: TableSyncConfig }) | null
@@ -92,7 +102,9 @@ export function TableCustomSqlCard({
 
   // Clear preview data when card opens/reopens or when filter_sql changes
   // so stale results are never shown after a filter change
-  const currentFilterSql = (table as any)?.sync_config?.filter_sql ?? table?.sync_configs?.[0]?.filter_sql
+  const currentFilterSql =
+    (table as any)?.sync_config?.filter_sql ??
+    table?.sync_configs?.[0]?.filter_sql
   useEffect(() => {
     if (!open) return
     setPreviewData(null)
@@ -228,15 +240,26 @@ export function TableCustomSqlCard({
     // List of forbidden keywords for custom SQL
     // We strictly block destructive operations
     const forbiddenKeywords = [
-      'UPDATE', 'DELETE', 'TRUNCATE', 'DROP', 'ALTER', 'GRANT', 'REVOKE',
-      'INSERT', 'CREATE', 'REPLACE', 'MERGE'
+      'UPDATE',
+      'DELETE',
+      'TRUNCATE',
+      'DROP',
+      'ALTER',
+      'GRANT',
+      'REVOKE',
+      'INSERT',
+      'CREATE',
+      'REPLACE',
+      'MERGE',
     ]
 
     for (const keyword of forbiddenKeywords) {
       // Check for whole word match, case insensitive
       const regex = new RegExp(`\\b${keyword}\\b`, 'i')
       if (regex.test(sqlText)) {
-        toast.error(`Operation '${keyword}' is not allowed. Only SELECT statements are permitted.`)
+        toast.error(
+          `Operation '${keyword}' is not allowed. Only SELECT statements are permitted.`
+        )
         return false
       }
     }
@@ -277,7 +300,8 @@ export function TableCustomSqlCard({
         columns: [],
         column_types: [],
         data: [],
-        error: e.response?.data?.detail || e.message || 'Failed to preview data',
+        error:
+          e.response?.data?.detail || e.message || 'Failed to preview data',
       })
       setIsPreviewLoading(false)
     }
@@ -295,7 +319,7 @@ export function TableCustomSqlCard({
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
       try {
         const res = await api.get(`/pipelines/${pipelineId}/preview/${taskId}`)
-        const { state, status, result, error } = res.data
+        const { state, result, error } = res.data
 
         if (state === 'SUCCESS' && result) {
           setPreviewData(result)
@@ -527,7 +551,7 @@ export function TableCustomSqlCard({
               </Button>
             </PopoverTrigger>
             <PopoverContent
-              className='w-[800px] border-none p-0 shadow-2xl z-[200]'
+              className='z-[200] w-[800px] border-none p-0 shadow-2xl'
               side='top'
               align='end'
             >
@@ -551,7 +575,10 @@ export function TableCustomSqlCard({
                   ) : previewData?.error ? (
                     <div className='flex h-[200px] flex-col items-center justify-center p-6 text-center'>
                       <AlertCircle className='mb-2 h-8 w-8 text-destructive' />
-                      <p className='font-medium text-destructive'> Preview Failed</p>
+                      <p className='font-medium text-destructive'>
+                        {' '}
+                        Preview Failed
+                      </p>
                       <p className='mt-1 text-sm text-muted-foreground'>
                         {previewData.error}
                       </p>
@@ -560,17 +587,21 @@ export function TableCustomSqlCard({
                     <ScrollArea className='h-[400px] w-full rounded-md border'>
                       <div className='w-max min-w-full'>
                         <table className='w-full caption-bottom text-sm'>
-                          <thead className='sticky top-0 z-10 bg-muted [&_tr]:border-b border-border/50'>
+                          <thead className='sticky top-0 z-10 border-border/50 bg-muted [&_tr]:border-b'>
                             <tr className='border-b border-border/50 transition-colors duration-150 hover:bg-muted/50 data-[state=selected]:bg-muted'>
                               {previewData.columns.map((col, idx) => {
-                                const type = previewData.column_types?.[idx] || 'text'
+                                const type =
+                                  previewData.column_types?.[idx] || 'text'
                                 let Icon = Type
                                 if (type === 'number') Icon = Hash
                                 if (type === 'date') Icon = Calendar
                                 if (type === 'boolean') Icon = ToggleLeft
 
                                 return (
-                                  <th key={col} className='h-10 px-3 text-left align-middle font-medium text-xs uppercase tracking-wider text-muted-foreground [&>[role=checkbox]]:translate-y-[2px] whitespace-nowrap'>
+                                  <th
+                                    key={col}
+                                    className='h-10 px-3 text-left align-middle text-xs font-medium tracking-wider whitespace-nowrap text-muted-foreground uppercase [&>[role=checkbox]]:translate-y-[2px]'
+                                  >
                                     <div className='flex items-center gap-1.5'>
                                       <Icon className='h-3.5 w-3.5 text-muted-foreground/70' />
                                       {col}
@@ -582,28 +613,41 @@ export function TableCustomSqlCard({
                           </thead>
                           <tbody className='[&_tr:last-child]:border-0'>
                             {previewData.data.map((row, i) => (
-                              <tr key={i} className='border-b border-border/50 transition-colors duration-150 hover:bg-muted/50 data-[state=selected]:bg-muted'>
+                              <tr
+                                key={i}
+                                className='border-b border-border/50 transition-colors duration-150 hover:bg-muted/50 data-[state=selected]:bg-muted'
+                              >
                                 {previewData.columns.map((col, idx) => {
                                   const val = row[col]
-                                  const type = previewData.column_types?.[idx] || 'text'
+                                  const type =
+                                    previewData.column_types?.[idx] || 'text'
                                   const isBool = type === 'boolean'
 
                                   return (
-                                    <td key={col} className='px-3 py-2.5 align-middle whitespace-nowrap [&>[role=checkbox]]:translate-y-[2px]'>
+                                    <td
+                                      key={col}
+                                      className='px-3 py-2.5 align-middle whitespace-nowrap [&>[role=checkbox]]:translate-y-[2px]'
+                                    >
                                       {isBool ? (
                                         val === null ? (
-                                          <span className='italic text-muted-foreground'>Null</span>
+                                          <span className='text-muted-foreground italic'>
+                                            Null
+                                          </span>
                                         ) : (
                                           <div className='flex items-center'>
-                                            <Checkbox checked={!!val} disabled className='data-[state=checked]:bg-primary data-[state=checked]:text-primary-foreground opacity-100 disabled:cursor-default disabled:opacity-100' />
+                                            <Checkbox
+                                              checked={!!val}
+                                              disabled
+                                              className='opacity-100 disabled:cursor-default disabled:opacity-100 data-[state=checked]:bg-primary data-[state=checked]:text-primary-foreground'
+                                            />
                                           </div>
                                         )
                                       ) : (
-                                        val?.toString() ?? (
-                                          <span className='italic text-muted-foreground'>
+                                        (val?.toString() ?? (
+                                          <span className='text-muted-foreground italic'>
                                             null
                                           </span>
-                                        )
+                                        ))
                                       )}
                                     </td>
                                   )
