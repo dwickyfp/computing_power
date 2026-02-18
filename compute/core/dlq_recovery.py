@@ -17,7 +17,11 @@ from core.models import (
     PipelineDestinationTableSync,
 )
 from core.exceptions import DestinationException
-from core.repository import PipelineDestinationRepository, TableSyncRepository
+from core.repository import (
+    PipelineDestinationRepository,
+    TableSyncRepository,
+    TableMetadataRepository,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -125,6 +129,15 @@ class DLQRecoveryWorker:
                 # Get all queue identifiers from DLQ
                 queues = self._dlq_manager.list_queues()
 
+                # On startup: Clean up unused queues FIRST before attempting recovery
+                if self._first_iteration and queues:
+                    self._logger.info(
+                        "STARTUP: Cleaning up unused DLQ queues before recovery"
+                    )
+                    self._cleanup_orphaned_queues(queues)
+                    # Refresh queue list after cleanup
+                    queues = self._dlq_manager.list_queues()
+
                 if queues:
                     if self._first_iteration:
                         self._logger.info(
@@ -162,6 +175,14 @@ class DLQRecoveryWorker:
                                 max_retry_count=self._max_retry_count,
                                 max_age_days=self._max_age_days,
                             )
+
+                # Periodic cleanup: remove unused DLQ queues for removed destinations/tables
+                if iteration_count % cleanup_interval == 0:
+                    if queues:
+                        self._logger.debug(
+                            f"Running DLQ cleanup check for {len(queues)} queue(s)"
+                        )
+                    self._cleanup_orphaned_queues(queues)
 
                 # Mark first iteration complete
                 if self._first_iteration:
@@ -297,7 +318,11 @@ class DLQRecoveryWorker:
         """
         destination = self._destinations.get(destination_id)
         if not destination:
-            self._logger.warning(f"Destination {destination_id} not found in pipeline")
+            self._logger.warning(
+                f"Destination {destination_id} not found in pipeline "
+                f"(orphaned DLQ - destination may have been removed). "
+                f"Messages will auto-purge after {self._max_age_days} days."
+            )
             return False
 
         try:
@@ -328,6 +353,79 @@ class DLQRecoveryWorker:
             with self._health_check_lock:
                 self._destination_health[destination_id] = False
             return False
+
+    def _cleanup_orphaned_queues(self, queues: list[tuple[int, str, int]]) -> None:
+        """
+        Clean up unused DLQ queues for destinations or tables no longer in pipeline.
+
+        A DLQ queue is considered unused if:
+        - Destination was removed from pipeline
+        - Table was removed from table_metadata_list
+        - Source ID doesn't match pipeline source
+
+        Args:
+            queues: List of (source_id, table_name, destination_id) tuples
+        """
+        try:
+            # Get valid destination IDs from pipeline configuration
+            valid_destination_ids = {
+                pd.destination_id
+                for pd in self._pipeline.destinations
+                if pd.destination_id is not None
+            }
+
+            # Get valid table names from table_metadata_list for this source
+            valid_tables = set(
+                TableMetadataRepository.get_table_names_for_source(
+                    self._pipeline.source_id
+                )
+            )
+
+            pipeline_source_id = self._pipeline.source_id
+
+            for source_id, table_name, destination_id in queues:
+                should_delete = False
+                reason = ""
+
+                # Check if source_id matches pipeline
+                if source_id != pipeline_source_id:
+                    should_delete = True
+                    reason = f"source_id {source_id} doesn't match pipeline source {pipeline_source_id}"
+
+                # Check if destination is still in pipeline
+                elif destination_id not in valid_destination_ids:
+                    should_delete = True
+                    reason = "destination removed from pipeline"
+
+                # Check if table is still configured in table_metadata_list
+                elif table_name not in valid_tables:
+                    should_delete = True
+                    reason = "table removed from pipeline configuration"
+
+                if should_delete:
+                    # Get queue size before deleting
+                    queue_size = self._dlq_manager.get_queue_size(
+                        source_id, table_name, destination_id
+                    )
+
+                    if queue_size > 0:
+                        self._logger.warning(
+                            f"Deleting unused DLQ queue ({reason}): "
+                            f"s{source_id}:t{table_name}:d{destination_id} "
+                            f"- discarding {queue_size} message(s)"
+                        )
+                    else:
+                        self._logger.info(
+                            f"Deleting empty unused DLQ queue ({reason}): "
+                            f"s{source_id}:t{table_name}:d{destination_id}"
+                        )
+
+                    self._dlq_manager.delete_queue(
+                        source_id, table_name, destination_id
+                    )
+
+        except Exception as e:
+            self._logger.error(f"Error cleaning up orphaned queues: {e}", exc_info=True)
 
     def _replay_messages_with_ids(
         self,
