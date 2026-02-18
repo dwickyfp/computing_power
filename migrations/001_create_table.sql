@@ -435,8 +435,10 @@ ON history_schema_evolution(table_metadata_list_id, version_schema DESC);
 
 -- Additional optimization: covering index for the query
 -- This allows index-only scans without touching the table
-CREATE INDEX IF NOT EXISTS idx_table_metadata_list_source_id_covering 
-ON table_metadata_list(source_id, id) INCLUDE (table_name, schema_table);
+-- Note: Cannot include schema_table (JSONB) as it can exceed btree index size limit (2704 bytes)
+DROP INDEX IF EXISTS idx_table_metadata_list_source_id_covering;
+CREATE INDEX idx_table_metadata_list_source_id_covering 
+ON table_metadata_list(source_id, id) INCLUDE (table_name);
 
 -- Optimize pipelines_destination queries for source details
 -- This composite index helps with the join: pipeline → pipeline_destination → destination
@@ -448,7 +450,7 @@ COMMENT ON INDEX idx_history_schema_evolution_table_version_composite IS
 'Optimizes source details page query that fetches table version counts with LEFT JOIN and MAX(version_schema)';
 
 COMMENT ON INDEX idx_table_metadata_list_source_id_covering IS 
-'Covering index for source details table metadata fetch - enables index-only scans';
+'Covering index for source details table metadata fetch - includes table_name but not schema_table (JSONB too large for btree)';
 
 COMMENT ON INDEX idx_pipelines_destination_composite IS 
 'Composite index for pipeline-destination joins in source details page';
