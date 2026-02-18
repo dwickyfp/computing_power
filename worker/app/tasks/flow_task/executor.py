@@ -311,6 +311,11 @@ def execute_flow_task(
                     error_message=error_msg,
                     duration_ms=int((time.time() - node_start) * 1000),
                 )
+                _notify_flow_task_error(
+                    flow_task_id=flow_task_id,
+                    error_msg=error_msg,
+                    node_id=node_id,
+                )
 
             node_logs.append(node_log)
 
@@ -356,6 +361,11 @@ def execute_flow_task(
         error_msg = str(e)
         logger.error(f"Flow task execution failed: {error_msg}", exc_info=True)
 
+        _notify_flow_task_error(
+            flow_task_id=flow_task_id,
+            error_msg=error_msg,
+        )
+
         _persist_run_results(
             run_history_id=run_history_id,
             flow_task_id=flow_task_id,
@@ -392,6 +402,90 @@ def _get_destination_type(destination_id: Optional[int]) -> str:
         return row.type.upper() if row else "POSTGRES"
     except Exception:
         return "POSTGRES"
+
+
+def _notify_flow_task_error(
+    flow_task_id: int,
+    error_msg: str,
+    node_id: Optional[str] = None,
+) -> None:
+    """Upsert an ERROR notification into notification_log for a flow task failure.
+
+    Uses the same upsert logic as compute/core/notification.py:
+    - If the key exists and iteration_check < limit → UPDATE (increment iteration)
+    - Otherwise → INSERT a new row
+    """
+    try:
+        from app.core.database import get_db_session
+        from sqlalchemy import text
+
+        key = (
+            f"flow_task_error_{flow_task_id}_{node_id}"
+            if node_id
+            else f"flow_task_error_{flow_task_id}"
+        )
+        title = (
+            f"Flow Task {flow_task_id} Node Failed"
+            if node_id
+            else f"Flow Task {flow_task_id} Failed"
+        )
+        message = error_msg[:2000]  # guard against excessively long messages
+        now = datetime.now(ZoneInfo("Asia/Jakarta"))
+
+        with get_db_session() as db:
+            # Fetch iteration limit from settings (default 3)
+            # Column names are config_key / config_value (matches rosetta_setting_configuration DDL)
+            limit_row = db.execute(
+                text(
+                    "SELECT config_value FROM rosetta_setting_configuration "
+                    "WHERE config_key = 'NOTIFICATION_ITERATION_DEFAULT' LIMIT 1"
+                )
+            ).fetchone()
+            max_iter = int(limit_row.config_value) if limit_row else 3
+
+            # Fetch latest regardless of is_deleted (matches backend upsert_notification_by_key)
+            existing = db.execute(
+                text(
+                    "SELECT id, iteration_check FROM notification_log "
+                    "WHERE key_notification = :key "
+                    "ORDER BY created_at DESC LIMIT 1"
+                ),
+                {"key": key},
+            ).fetchone()
+
+            if existing and existing.iteration_check < max_iter:
+                # Update: increment iteration, reset flags, mirror backend logic
+                db.execute(
+                    text("""
+                        UPDATE notification_log
+                        SET iteration_check = iteration_check + 1,
+                            title           = :title,
+                            message         = :message,
+                            type            = 'ERROR',
+                            is_read         = FALSE,
+                            is_deleted      = FALSE,
+                            is_sent         = FALSE,
+                            updated_at      = :now
+                        WHERE id = :id
+                    """),
+                    {"title": title, "message": message, "now": now, "id": existing.id},
+                )
+            else:
+                db.execute(
+                    text("""
+                        INSERT INTO notification_log
+                            (key_notification, title, message, type,
+                             is_read, is_deleted, iteration_check,
+                             is_sent, is_force_sent, created_at, updated_at)
+                        VALUES
+                            (:key, :title, :message, 'ERROR',
+                             FALSE, FALSE, 1,
+                             FALSE, FALSE, :now, :now)
+                    """),
+                    {"key": key, "title": title, "message": message, "now": now},
+                )
+    except Exception as e:
+        logger.warning(f"Failed to write error notification for flow_task {flow_task_id}: {e}")
 
 
 def _persist_run_results(

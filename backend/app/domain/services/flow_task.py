@@ -365,7 +365,7 @@ class FlowTaskService:
         self,
         flow_task_id: int,
         skip: int = 0,
-        limit: int = 20,
+        limit: int = 100,
     ) -> Tuple[List[FlowTaskRunHistory], int]:
         """Return paginated run history for a flow task."""
         self.get_flow_task(flow_task_id)

@@ -362,7 +362,7 @@ def get_node_schema(
 def list_run_history(
     flow_task_id: int,
     page: int = Query(default=1, ge=1),
-    page_size: int = Query(default=20, ge=1, le=100),
+    page_size: int = Query(default=100, ge=1, le=100),
     service: FlowTaskService = Depends(get_flow_task_service),
 ) -> FlowTaskRunHistoryListResponse:
     """List execution history for a flow task with pagination."""

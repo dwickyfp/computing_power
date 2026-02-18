@@ -272,7 +272,7 @@ export default function FlowTaskDetailPage() {
 
     const { data: runsResp, isLoading: runsLoading } = useQuery({
         queryKey: ['flow-tasks', id, 'runs'],
-        queryFn: () => flowTasksRepo.getRuns(id, 1, 100),
+        queryFn: () => flowTasksRepo.getRuns(id),
         refetchInterval: pollingTaskId ? 3000 : false,
     })
 
