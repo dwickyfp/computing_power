@@ -233,6 +233,25 @@ def trigger_run(
         )
 
 
+# ─── Cancel ───────────────────────────────────────────────────────────────────
+
+@router.post(
+    "/{flow_task_id}/cancel",
+    summary="Cancel a running flow task",
+)
+def cancel_run(
+    flow_task_id: int,
+    service: FlowTaskService = Depends(get_flow_task_service),
+) -> dict:
+    """Cancel the currently running execution of a flow task."""
+    try:
+        return service.cancel_run(flow_task_id)
+    except EntityNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
 # ─── Preview ───────────────────────────────────────────────────────────────────
 
 @router.post(

@@ -246,7 +246,7 @@ def execute_flow_task(
             node_id = output_info["node_id"]
             source_cte = output_info["source_cte"]
             target_table = output_info["target_table"]
-            schema_name = output_info.get("schema_name", "public")
+            schema_name = output_info.get("schema_name") or "public"
             write_mode = output_info.get("write_mode", "APPEND")
             upsert_keys = output_info.get("upsert_keys", [])
             destination_id = output_info.get("destination_id")
@@ -314,14 +314,23 @@ def execute_flow_task(
 
             node_logs.append(node_log)
 
-        # Step 5: Persist node logs and update run history
+        # Step 5: Determine overall status — FAILED if any output node failed
+        failed_nodes = [nl for nl in node_logs if nl.get("status") == "FAILED"]
+        overall_status = "FAILED" if failed_nodes else "SUCCESS"
+        overall_error = (
+            "; ".join(nl.get("error_message", "") for nl in failed_nodes)
+            if failed_nodes
+            else None
+        )
+
         _persist_run_results(
             run_history_id=run_history_id,
             flow_task_id=flow_task_id,
-            status="SUCCESS",
+            status=overall_status,
             total_input_records=total_input_records,
             total_output_records=total_output_records,
             node_logs=node_logs,
+            error_message=overall_error,
         )
 
         elapsed = int((time.time() - start_time) * 1000)
@@ -332,10 +341,11 @@ def execute_flow_task(
             total_input=total_input_records,
             total_output=total_output_records,
             elapsed_ms=elapsed,
+            status=overall_status,
         )
 
         return {
-            "status": "SUCCESS",
+            "status": overall_status,
             "total_input_records": total_input_records,
             "total_output_records": total_output_records,
             "elapsed_ms": elapsed,
@@ -396,41 +406,83 @@ def _persist_run_results(
     """Persist run results back to the config database."""
     try:
         from app.core.database import get_db_session
-        from app.domain.repositories.flow_task import (
-            FlowTaskRepository,
-            FlowTaskRunHistoryRepository,
-            FlowTaskRunNodeLogRepository,
-        )
+        from sqlalchemy import text
+
+        now = datetime.now(ZoneInfo("Asia/Jakarta"))
 
         with get_db_session() as db:
-            run_repo = FlowTaskRunHistoryRepository(db)
-            node_log_repo = FlowTaskRunNodeLogRepository(db)
-            flow_task_repo = FlowTaskRepository(db)
-
-            run_repo.complete_run(
-                run_id=run_history_id,
-                status=status,
-                finished_at=datetime.now(ZoneInfo("Asia/Jakarta")),
-                total_input_records=total_input_records,
-                total_output_records=total_output_records,
-                error_message=error_message,
+            # Update run history record
+            db.execute(
+                text("""
+                    UPDATE flow_task_run_history
+                    SET status = :status,
+                        finished_at = :finished_at,
+                        total_input_records = :total_input_records,
+                        total_output_records = :total_output_records,
+                        error_message = :error_message,
+                        updated_at = :now
+                    WHERE id = :run_history_id
+                """),
+                {
+                    "status": status,
+                    "finished_at": now,
+                    "total_input_records": total_input_records,
+                    "total_output_records": total_output_records,
+                    "error_message": error_message,
+                    "now": now,
+                    "run_history_id": run_history_id,
+                },
             )
 
+            # Insert per-node logs
             if node_logs:
-                node_log_repo.bulk_create_for_run(
-                    run_history_id=run_history_id,
-                    flow_task_id=flow_task_id,
-                    node_logs=node_logs,
-                )
+                for nl in node_logs:
+                    db.execute(
+                        text("""
+                            INSERT INTO flow_task_run_node_log
+                                (run_history_id, flow_task_id, node_id, node_type, node_label,
+                                 row_count_in, row_count_out, duration_ms, status, error_message,
+                                 created_at, updated_at)
+                            VALUES
+                                (:run_history_id, :flow_task_id, :node_id, :node_type, :node_label,
+                                 :row_count_in, :row_count_out, :duration_ms, :status, :error_message,
+                                 :now, :now)
+                        """),
+                        {
+                            "run_history_id": run_history_id,
+                            "flow_task_id": flow_task_id,
+                            "node_id": nl.get("node_id", ""),
+                            "node_type": nl.get("node_type", "unknown"),
+                            "node_label": nl.get("node_label"),
+                            "row_count_in": nl.get("row_count_in", 0),
+                            "row_count_out": nl.get("row_count_out", 0),
+                            "duration_ms": nl.get("duration_ms"),
+                            "status": nl.get("status", "SUCCESS"),
+                            "error_message": nl.get("error_message"),
+                            "now": now,
+                        },
+                    )
 
-            flow_task_repo.update_run_summary(
-                flow_task_id=flow_task_id,
-                status=status,  # maps to FlowTaskStatus
-                last_run_at=datetime.now(ZoneInfo("Asia/Jakarta")),
-                last_run_status=status,
-                last_run_record_count=total_output_records,
+            # Update flow_tasks summary columns + reset status
+            db.execute(
+                text("""
+                    UPDATE flow_tasks
+                    SET status = :flow_task_status,
+                        last_run_at = :last_run_at,
+                        last_run_status = :last_run_status,
+                        last_run_record_count = :last_run_record_count,
+                        updated_at = :now
+                    WHERE id = :flow_task_id
+                """),
+                {
+                    "flow_task_status": status,  # SUCCESS or FAILED → resets from RUNNING
+                    "last_run_at": now,
+                    "last_run_status": status,
+                    "last_run_record_count": total_output_records,
+                    "now": now,
+                    "flow_task_id": flow_task_id,
+                },
             )
-            db.commit()
 
     except Exception as e:
         logger.error(f"Failed to persist run results: {e}", exc_info=True)

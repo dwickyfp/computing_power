@@ -145,6 +145,19 @@ class FlowTaskRunHistoryRepository(BaseRepository[FlowTaskRunHistory]):
         )
         return self.db.execute(stmt).scalars().first()
 
+    def get_latest_running(self, flow_task_id: int) -> Optional[FlowTaskRunHistory]:
+        """Get the most recent RUNNING run record for a flow task."""
+        stmt = (
+            select(FlowTaskRunHistory)
+            .where(
+                FlowTaskRunHistory.flow_task_id == flow_task_id,
+                FlowTaskRunHistory.status == "RUNNING",
+            )
+            .order_by(desc(FlowTaskRunHistory.started_at))
+            .limit(1)
+        )
+        return self.db.execute(stmt).scalars().first()
+
     def complete_run(
         self,
         run_id: int,

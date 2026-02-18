@@ -265,6 +265,10 @@ export const flowTasksRepo = {
         return api.post<FlowTaskTriggerResponse>(`/flow-tasks/${id}/run`)
     },
 
+    cancelRun(id: number) {
+        return api.post<{ status: string; message: string }>(`/flow-tasks/${id}/cancel`)
+    },
+
     // Preview
     previewNode(id: number, payload: NodePreviewRequest) {
         return api.post<NodePreviewTaskResponse>(`/flow-tasks/${id}/preview`, payload)

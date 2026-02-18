@@ -244,6 +244,64 @@ class FlowTaskService:
             "message": "Flow task execution started",
         }
 
+    # ─── Cancel Run ───────────────────────────────────────────────────────────
+
+    def cancel_run(self, flow_task_id: int) -> Dict[str, Any]:
+        """
+        Cancel the currently running flow task execution.
+
+        Revokes the Celery task, marks run history as CANCELLED,
+        and resets flow_task.status back to FAILED.
+        """
+        from app.infrastructure.worker_client import get_worker_client
+
+        task = self.get_flow_task(flow_task_id)
+        if task.status != FlowTaskStatus.RUNNING:
+            raise ValueError(
+                f"FlowTask {flow_task_id} is not currently running (status={task.status})"
+            )
+
+        # Find the latest RUNNING run record to get the celery_task_id
+        run = self.run_history_repo.get_latest_running(flow_task_id)
+
+        revoked = False
+        if run and run.celery_task_id:
+            try:
+                worker_client = get_worker_client()
+                revoked = worker_client.cancel_task(run.celery_task_id)
+            except Exception as e:
+                logger.warning(f"Could not revoke Celery task: {e}")
+
+        now = datetime.now(ZoneInfo("Asia/Jakarta"))
+
+        # Mark run history as CANCELLED
+        if run:
+            self.run_history_repo.complete_run(
+                run_id=run.id,
+                status=FlowTaskRunStatus.CANCELLED,
+                finished_at=now,
+                error_message="Cancelled by user",
+            )
+
+        # Reset flow_task status
+        self.flow_task_repo.update(
+            flow_task_id,
+            status=FlowTaskStatus.FAILED,
+            last_run_at=now,
+            last_run_status=FlowTaskRunStatus.CANCELLED,
+        )
+        self.db.commit()
+
+        logger.info(
+            f"FlowTask run cancelled: flow_task_id={flow_task_id} revoked={revoked}"
+        )
+        return {
+            "flow_task_id": flow_task_id,
+            "revoked": revoked,
+            "status": "CANCELLED",
+            "message": "Run cancelled",
+        }
+
     # ─── Node Preview ──────────────────────────────────────────────────────────
 
     def preview_node(

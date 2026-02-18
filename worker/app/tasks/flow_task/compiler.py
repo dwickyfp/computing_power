@@ -425,7 +425,8 @@ def _build_output_node_info(node: dict, pred_ctes: list) -> dict:
     return {
         "node_id": node["id"],
         "source_cte": pred_ctes[0],
-        "target_table": data.get("target_table", ""),
+        # UI stores as 'table_name'; fall back to 'target_table' for backward compat
+        "target_table": data.get("table_name") or data.get("target_table") or "",
         "schema_name": data.get("schema_name") or None,
         "write_mode": data.get("write_mode", "APPEND").upper(),
         "upsert_keys": data.get("upsert_keys", []),

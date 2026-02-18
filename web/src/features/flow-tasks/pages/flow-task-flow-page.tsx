@@ -47,6 +47,7 @@ import {
     Loader2,
     ChevronLeft,
     AlertCircle,
+    Square,
 } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -281,6 +282,18 @@ function FlowCanvas({ flowTaskId }: { flowTaskId: number }) {
         onError: () => toast.error('Failed to trigger run'),
     })
 
+    const cancelMutation = useMutation({
+        mutationFn: () => flowTasksRepo.cancelRun(flowTaskId),
+        onSuccess: () => {
+            setPollingTaskId(null)
+            toast.info('Run cancelled')
+            setTimeout(() => {
+                queryClient.invalidateQueries({ queryKey: ['flow-tasks', flowTaskId], exact: true })
+            }, 300)
+        },
+        onError: () => toast.error('Failed to cancel run'),
+    })
+
     // ─── Drag-and-drop new nodes onto canvas ───────────────────────────────────
 
     const onDrop = useCallback(
@@ -465,6 +478,21 @@ function FlowCanvas({ flowTaskId }: { flowTaskId: number }) {
                         )}
                         Run
                     </Button>
+                    {isRunning && (
+                        <Button
+                            size="sm"
+                            variant="destructive"
+                            onClick={() => cancelMutation.mutate()}
+                            disabled={cancelMutation.isPending}
+                        >
+                            {cancelMutation.isPending ? (
+                                <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
+                            ) : (
+                                <Square className="h-3.5 w-3.5 mr-1.5" />
+                            )}
+                            Cancel
+                        </Button>
+                    )}
                     <div className="w-px h-5 bg-border" />
                     <Search />
                     <ThemeSwitch />

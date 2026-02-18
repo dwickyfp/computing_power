@@ -95,6 +95,12 @@ class PostgresDestinationWriter(BaseDestinationWriter):
         fqt = f"{output_alias}.{schema_name}.{target_table}"
         row_count = self.get_row_count(conn, cte_prefix, source_cte)
 
+        if not target_table:
+            raise ValueError(
+                "Output node has no target table name configured. "
+                "Please set the 'Target Table' field and save the graph before running."
+            )
+
         if write_mode == "UPSERT":
             if not upsert_keys:
                 raise ValueError(
