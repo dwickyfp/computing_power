@@ -88,7 +88,10 @@ export const useFlowTaskStore = create<FlowTaskStore>((set) => ({
 
     onConnect: (connection) =>
         set((state) => ({
-            edges: addEdge(connection, state.edges) as FlowEdge[],
+            edges: addEdge(
+                { ...connection, animated: true, markerEnd: { type: 'arrowclosed' } },
+                state.edges
+            ) as FlowEdge[],
             isDirty: true,
         })),
 

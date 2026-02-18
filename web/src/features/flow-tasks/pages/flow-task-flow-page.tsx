@@ -23,6 +23,7 @@ import {
     Controls,
     MiniMap,
     ReactFlowProvider,
+    MarkerType,
     type OnConnect,
     type NodeMouseHandler,
 } from '@xyflow/react'
@@ -398,6 +399,14 @@ function FlowCanvas({ flowTaskId }: { flowTaskId: number }) {
                             onPaneClick={onPaneClick}
                             fitView
                             deleteKeyCode="Delete"
+                            defaultEdgeOptions={{
+                                animated: true,
+                                markerEnd: {
+                                    type: MarkerType.ArrowClosed,
+                                    width: 18,
+                                    height: 18,
+                                },
+                            }}
                         >
                             <Background gap={16} />
                             <Controls />
