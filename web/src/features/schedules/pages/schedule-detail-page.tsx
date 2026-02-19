@@ -624,12 +624,6 @@ export default function ScheduleDetailPage() {
                 <TabsList>
                     <TabsTrigger value="overview">Overview</TabsTrigger>
                     <TabsTrigger value="runs">Runs</TabsTrigger>
-                    <TabsTrigger value="tasks">Tasks</TabsTrigger>
-                    <TabsTrigger value="calendar">Calendar</TabsTrigger>
-                    <TabsTrigger value="backfills">Backfills</TabsTrigger>
-                    <TabsTrigger value="audit">Audit Log</TabsTrigger>
-                    <TabsTrigger value="code">Code</TabsTrigger>
-                    <TabsTrigger value="details">Details</TabsTrigger>
                 </TabsList>
                 
                 <TabsContent value="overview">
