@@ -28,12 +28,14 @@ from app.domain.repositories.flow_task import (
     FlowTaskRunHistoryRepository,
     FlowTaskRunNodeLogRepository,
 )
+from app.domain.repositories.notification_log_repo import NotificationLogRepository
 from app.domain.schemas.flow_task import (
     FlowTaskCreate,
     FlowTaskGraphSave,
     FlowTaskUpdate,
     NodePreviewRequest,
 )
+from app.domain.schemas.notification_log import NotificationLogCreate
 
 logger = get_logger(__name__)
 
@@ -52,6 +54,41 @@ class FlowTaskService:
         self.graph_repo = FlowTaskGraphRepository(db)
         self.run_history_repo = FlowTaskRunHistoryRepository(db)
         self.node_log_repo = FlowTaskRunNodeLogRepository(db)
+        self.notification_repo = NotificationLogRepository(db)
+
+    # ─── Notification helper ───────────────────────────────────────────────
+
+    def _push_notification(
+        self,
+        key: str,
+        title: str,
+        message: str,
+        notif_type: str = "ERROR",
+    ) -> None:
+        """Upsert a notification into notification_log.
+
+        Uses upsert_notification_by_key which increments iteration_check
+        on repeated same-key entries, triggering dispatch once it reaches
+        NOTIFICATION_ITERATION_DEFAULT (default 3).
+        Swallows exceptions so notification failures never break the caller.
+        """
+        try:
+            self.notification_repo.upsert_notification_by_key(
+                NotificationLogCreate(
+                    key_notification=key,
+                    title=title,
+                    message=message[:2000],
+                    type=notif_type,
+                    is_read=False,
+                    is_deleted=False,
+                    iteration_check=1,
+                    is_sent=False,
+                )
+            )
+        except Exception as exc:
+            logger.warning(
+                f"Failed to push notification key={key}: {exc}"
+            )
 
     # ─── CRUD ─────────────────────────────────────────────────────────────────
 
@@ -267,6 +304,12 @@ class FlowTaskService:
                 last_run_status=FlowTaskRunStatus.FAILED,
             )
             self.db.commit()
+            # Notify on dispatch failure
+            self._push_notification(
+                key=f"flow_task_dispatch_error_{flow_task_id}",
+                title=f"Flow Task {flow_task_id} Failed to Start",
+                message=f"Flow Task ‘{task.name}’ (ID: {flow_task_id}) could not be dispatched to the worker. Error: {e}",
+            )
             raise ConnectionError(f"Worker task dispatch failed: {e}") from e
 
         logger.info(
@@ -449,5 +492,18 @@ class FlowTaskService:
                     last_run_record_count=result_data.get("total_output_records"),
                 )
                 self.db.commit()
+                # Notify on run failure
+                if not is_success:
+                    task = self.flow_task_repo.get_by_id(run.flow_task_id)
+                    task_name = task.name if task else str(run.flow_task_id)
+                    error_msg = status.get("error") or "Unknown error"
+                    self._push_notification(
+                        key=f"flow_task_run_failed_{run.flow_task_id}",
+                        title=f"Flow Task ‘{task_name}’ Run Failed",
+                        message=(
+                            f"Flow Task ‘{task_name}’ (ID: {run.flow_task_id}) finished with status FAILED. "
+                            f"Run ID: {run.id}. Error: {error_msg}"
+                        ),
+                    )
 
         return status

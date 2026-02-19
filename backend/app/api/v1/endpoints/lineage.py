@@ -14,6 +14,8 @@ from app.api.deps import get_db, get_db_readonly, get_pipeline_service, get_pipe
 from app.core.config import get_settings
 from app.core.logging import get_logger
 from app.domain.models.pipeline import PipelineDestinationTableSync
+from app.domain.repositories.notification_log_repo import NotificationLogRepository
+from app.domain.schemas.notification_log import NotificationLogCreate
 from app.domain.services.pipeline import PipelineService
 
 router = APIRouter()
@@ -221,6 +223,25 @@ def generate_table_lineage(
             sync.lineage_status = "FAILED"
             sync.lineage_error = f"Worker error: {str(e)}"
             db.commit()
+            # Push notification for lineage dispatch failure
+            try:
+                NotificationLogRepository(db).upsert_notification_by_key(
+                    NotificationLogCreate(
+                        key_notification=f"lineage_error_sync_{sync_id}",
+                        title=f"Lineage Generation Failed — {sync.table_name}",
+                        message=(
+                            f"Table sync ID {sync_id} (table: {sync.table_name}) lineage could not be "
+                            f"dispatched to the worker. Error: {e}"
+                        ),
+                        type="ERROR",
+                        is_read=False,
+                        is_deleted=False,
+                        iteration_check=1,
+                        is_sent=False,
+                    )
+                )
+            except Exception:
+                pass
             raise HTTPException(status_code=500, detail=str(e))
     else:
         # Generate synchronously
@@ -245,6 +266,25 @@ def generate_table_lineage(
             sync.lineage_status = "FAILED"
             sync.lineage_error = str(e)
             db.commit()
+            # Push notification for sync lineage generation failure
+            try:
+                NotificationLogRepository(db).upsert_notification_by_key(
+                    NotificationLogCreate(
+                        key_notification=f"lineage_error_sync_{sync_id}",
+                        title=f"Lineage Generation Failed — {sync.table_name}",
+                        message=(
+                            f"Table sync ID {sync_id} (table: {sync.table_name}) lineage generation failed. "
+                            f"Error: {e}"
+                        ),
+                        type="ERROR",
+                        is_read=False,
+                        is_deleted=False,
+                        iteration_check=1,
+                        is_sent=False,
+                    )
+                )
+            except Exception:
+                pass
             raise HTTPException(status_code=500, detail=str(e))
 
 
