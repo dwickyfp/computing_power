@@ -1,4 +1,4 @@
-import { formatDistanceToNow } from 'date-fns'
+import { formatDistanceToNow, format } from 'date-fns'
 import { type ColumnDef } from '@tanstack/react-table'
 import {
   type ScheduleRunHistory,
@@ -106,6 +106,21 @@ export const historyColumns: ColumnDef<ScheduleRunHistory>[] = [
       )
     },
     meta: { className: 'w-[140px]' },
+  },
+  {
+    accessorKey: 'running_at', // Virtual accessor, we'll use triggered_at in cell
+    header: () => (
+      <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/70">Running</div>
+    ),
+    cell: ({ row }) => {
+      const date = new Date(row.original.triggered_at)
+      return (
+        <span className='text-xs font-medium text-foreground font-mono'>
+          {format(date, 'dd-MM-yyyy HH:mm:ss')}
+        </span>
+      )
+    },
+    meta: { className: 'w-[160px]' },
   },
   {
     accessorKey: 'duration_ms',
