@@ -9,6 +9,8 @@ DuckDB's Postgres extension.
 import hashlib
 import json
 import re
+import threading
+import time as _time_mod
 from typing import Any
 
 import duckdb
@@ -28,6 +30,25 @@ from app.tasks.preview.validator import validate_preview_sql
 import structlog
 
 logger = structlog.get_logger(__name__)
+
+# ─── orjson for fast JSON serialization ────────────────────────────────────────
+try:
+    import orjson
+
+    def _json_dumps(obj: Any) -> str:
+        return orjson.dumps(obj).decode("utf-8")
+
+    def _json_loads(s: str | bytes) -> Any:
+        return orjson.loads(s)
+except ImportError:
+    _json_dumps = json.dumps  # type: ignore[assignment]
+    _json_loads = json.loads  # type: ignore[assignment]
+
+
+# ─── Connection config TTL cache ──────────────────────────────────────────────
+_conn_cache: dict[tuple[int, int], tuple[float, tuple[dict, dict]]] = {}
+_conn_cache_lock = threading.Lock()
+_CONN_CACHE_TTL = 60.0  # seconds
 
 
 def execute_preview(
@@ -103,7 +124,7 @@ def execute_preview(
                         "Preview cache hit - returning cached result",
                         cache_key=cache_key[:16] + "...",
                     )
-                    return json.loads(cached)
+                    return _json_loads(cached)
                 else:
                     logger.info(
                         "Preview cache miss - will regenerate data",
@@ -166,7 +187,7 @@ def execute_preview(
             # Configure DuckDB for performance
             con.execute(f"SET memory_limit='{settings.duckdb_memory_limit}'")
             con.execute(f"SET threads={getattr(settings, 'duckdb_threads', 4)}")
-            con.execute("INSTALL postgres;")
+            # Extensions are pre-installed at worker startup — only LOAD here
             con.execute("LOAD postgres;")
 
             # Attach source
@@ -202,7 +223,7 @@ def execute_preview(
         # 7. Cache result (5 minute TTL)
         try:
             if redis_client:
-                redis_client.setex(cache_key, 300, json.dumps(response))
+                redis_client.setex(cache_key, 300, _json_dumps(response))
                 logger.info(
                     "Preview result cached successfully",
                     cache_key=cache_key[:16] + "...",
@@ -227,11 +248,33 @@ def _fetch_connection_configs(
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     """
     Fetch source and destination connection details from config DB.
+    Results are cached for 60s to avoid repeated DB queries within the same
+    worker process (connection details rarely change mid-run).
 
     Returns:
         Tuple of (source_config, dest_config) dicts with keys:
         name, conn_str
     """
+    cache_key = (source_id, destination_id)
+    now = _time_mod.monotonic()
+
+    with _conn_cache_lock:
+        entry = _conn_cache.get(cache_key)
+        if entry and (now - entry[0]) < _CONN_CACHE_TTL:
+            return entry[1]
+
+    # Cache miss — fetch from DB
+    result = _fetch_connection_configs_from_db(source_id, destination_id)
+
+    with _conn_cache_lock:
+        _conn_cache[cache_key] = (now, result)
+    return result
+
+
+def _fetch_connection_configs_from_db(
+    source_id: int, destination_id: int
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Raw DB fetch for connection configs."""
     from sqlalchemy import text
 
     with get_db_session() as session:

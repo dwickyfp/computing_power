@@ -95,6 +95,7 @@ class PostgresDestinationWriter(BaseDestinationWriter):
         destination_id: Optional[int] = None,
     ) -> int:
         fqt = f"{output_alias}.{schema_name}.{target_table}"
+        # Count rows once upfront — reuse for the return value
         row_count = self.get_row_count(conn, cte_prefix, source_cte)
 
         if not target_table:
@@ -103,31 +104,33 @@ class PostgresDestinationWriter(BaseDestinationWriter):
                 "Please set the 'Target Table' field and save the graph before running."
             )
 
+        if row_count == 0:
+            logger.info("Source CTE is empty — skipping write", target_table=target_table)
+            return 0
+
         if write_mode == "UPSERT":
             if not upsert_keys:
                 raise ValueError(
                     f"UPSERT mode requires at least one upsert_key for table {target_table}"
                 )
-            rows_written = self._upsert(
-                conn, cte_prefix, source_cte, fqt, upsert_keys
-            )
+            self._upsert(conn, cte_prefix, source_cte, fqt, upsert_keys)
         elif write_mode == "REPLACE":
             # REPLACE mode: truncate + insert
             logger.info("Truncating table", table=fqt)
             conn.execute(f"TRUNCATE TABLE {fqt}")
-            rows_written = self._append(conn, cte_prefix, source_cte, fqt)
+            self._append(conn, cte_prefix, source_cte, fqt)
         else:
             # APPEND mode
-            rows_written = self._append(conn, cte_prefix, source_cte, fqt)
+            self._append(conn, cte_prefix, source_cte, fqt)
 
         logger.info(
             "Destination write complete",
             target_table=target_table,
             schema=schema_name,
             write_mode=write_mode,
-            rows_written=rows_written,
+            rows_written=row_count,
         )
-        return rows_written
+        return row_count
 
     def _append(
         self,
@@ -135,7 +138,7 @@ class PostgresDestinationWriter(BaseDestinationWriter):
         cte_prefix: str,
         source_cte: str,
         fqt: str,
-    ) -> int:
+    ) -> None:
         """INSERT INTO ... SELECT * FROM cte."""
         # Get columns
         cols_result = conn.execute(
@@ -145,7 +148,7 @@ class PostgresDestinationWriter(BaseDestinationWriter):
 
         if not cols:
             logger.warning("No columns found in source CTE — skipping append")
-            return 0
+            return
 
         col_list = ", ".join(cols)
         insert_sql = (
@@ -155,10 +158,6 @@ class PostgresDestinationWriter(BaseDestinationWriter):
         )
         conn.execute(insert_sql)
 
-        # DuckDB postgres extension doesn't return row count from INSERT;
-        # we already captured it above
-        return self.get_row_count(conn, cte_prefix, source_cte)
-
     def _upsert(
         self,
         conn: duckdb.DuckDBPyConnection,
@@ -166,7 +165,7 @@ class PostgresDestinationWriter(BaseDestinationWriter):
         source_cte: str,
         fqt: str,
         upsert_keys: List[str],
-    ) -> int:
+    ) -> None:
         """
         MERGE INTO target USING source ON key_conditions
         WHEN MATCHED THEN UPDATE ...
@@ -182,7 +181,7 @@ class PostgresDestinationWriter(BaseDestinationWriter):
 
         if not cols:
             logger.warning("No columns found in source CTE — skipping upsert")
-            return 0
+            return
 
         # Build ON clause
         on_clause = " AND ".join(
@@ -211,7 +210,6 @@ class PostgresDestinationWriter(BaseDestinationWriter):
         )
 
         conn.execute(merge_sql)
-        return self.get_row_count(conn, cte_prefix, source_cte)
 
 
 # ─── Snowflake Writer ─────────────────────────────────────────────────────────
@@ -257,13 +255,17 @@ class SnowflakeDestinationWriter(BaseDestinationWriter):
         from app.core.database import get_db_session
         from app.core.security import decrypt_value
 
-        # Fetch data from DuckDB CTE as pandas DataFrame
+        # Fetch data from DuckDB CTE as Arrow table (avoid premature Pandas conversion)
         fetch_sql = f"{cte_prefix}\nSELECT * FROM {source_cte}"
         arrow_table = conn.execute(fetch_sql).fetch_arrow_table()
-        df = arrow_table.to_pandas()
 
-        if df.empty:
+        if arrow_table.num_rows == 0:
             return 0
+
+        # Convert to pandas only when needed for write_pandas()
+        # This defers the costly Arrow→Pandas conversion until the last moment
+        df = arrow_table.to_pandas(self_destruct=True)  # self_destruct frees Arrow buffers early
+        del arrow_table  # release Arrow memory immediately
 
         if destination_id is None:
             raise ValueError("SnowflakeDestinationWriter requires destination_id")

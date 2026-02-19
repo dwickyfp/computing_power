@@ -75,6 +75,26 @@ class WorkerSettings(BaseSettings):
         default=4, ge=1, le=16, description="DuckDB threads per query"
     )
 
+    # DuckDB Concurrency
+    duckdb_max_concurrent: int = Field(
+        default=4, ge=1, le=16, description="Max concurrent DuckDB connections"
+    )
+
+    # Redis Connection Pool
+    redis_max_connections: int = Field(
+        default=20, ge=5, le=50, description="Redis connection pool max connections"
+    )
+
+    # Memory Management
+    memory_warning_mb: int = Field(
+        default=4096, ge=512, description="Memory warning threshold in MB"
+    )
+
+    # Linked Task
+    linked_task_max_parallel_steps: int = Field(
+        default=3, ge=1, le=8, description="Max parallel steps in linked task"
+    )
+
     # Health API Server
     server_host: str = Field(default="0.0.0.0", description="Health API server host")
     server_port: int = Field(

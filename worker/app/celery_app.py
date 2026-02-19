@@ -5,6 +5,7 @@ Configures Celery with Redis broker and PostgreSQL result backend.
 """
 
 from celery import Celery
+from celery.signals import worker_init
 
 from app.config.settings import get_settings
 from app.core.logging import setup_logging
@@ -74,3 +75,34 @@ celery_app.autodiscover_tasks([
     "app.tasks.destination_table_list",
     "app.tasks.linked_task",
 ])
+
+
+# ─── Pre-install DuckDB extensions once at worker startup ─────────────────────
+
+@worker_init.connect
+def _preinstall_duckdb_extensions(**kwargs):
+    """
+    Install DuckDB extensions once when the worker process starts,
+    so individual tasks only need LOAD (fast) instead of INSTALL+LOAD.
+    """
+    import structlog
+    _logger = structlog.get_logger("celery.worker_init")
+
+    try:
+        import duckdb
+        con = duckdb.connect(":memory:")
+        for ext in ("postgres", "httpfs"):
+            try:
+                con.execute(f"INSTALL {ext};")
+                _logger.info("duckdb_extension_installed", ext=ext)
+            except Exception as e:
+                _logger.warning("duckdb_extension_install_skipped", ext=ext, err=str(e))
+        for ext in ("snowflake",):
+            try:
+                con.execute(f"INSTALL {ext} FROM community;")
+                _logger.info("duckdb_community_extension_installed", ext=ext)
+            except Exception as e:
+                _logger.warning("duckdb_community_extension_install_skipped", ext=ext, err=str(e))
+        con.close()
+    except Exception as e:
+        _logger.error("duckdb_preinstall_failed", err=str(e))

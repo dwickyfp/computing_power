@@ -18,10 +18,6 @@ class WorkerConnectionError(WorkerError):
     pass
 
 
-# Backward-compatible alias (avoid shadowing built-in ConnectionError)
-ConnectionError = WorkerConnectionError
-
-
 class ValidationError(WorkerError):
     """SQL validation error."""
     pass
@@ -29,4 +25,9 @@ class ValidationError(WorkerError):
 
 class TaskTimeoutError(WorkerError):
     """Task exceeded time limit."""
+    pass
+
+
+class MemoryPressureError(WorkerError):
+    """Worker memory usage exceeded safe threshold."""
     pass

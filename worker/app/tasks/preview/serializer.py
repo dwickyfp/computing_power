@@ -2,6 +2,8 @@
 Result serialization for preview data.
 
 Handles conversion of DuckDB/Arrow results to JSON-safe formats.
+Optimized for speed: orjson handles datetime, bytes, Decimal natively
+when used downstream — but we still normalize for the JSON dict layer.
 """
 
 import base64
@@ -30,12 +32,10 @@ def serialize_preview_result(
     Returns:
         Serialized result dict ready for JSON encoding
     """
-    serialized_data = []
-    for row in data:
-        new_row = {}
-        for k, v in row.items():
-            new_row[k] = _serialize_value(v)
-        serialized_data.append(new_row)
+    serialized_data = [
+        {k: _serialize_value(v) for k, v in row.items()}
+        for row in data
+    ]
 
     return {
         "columns": columns,

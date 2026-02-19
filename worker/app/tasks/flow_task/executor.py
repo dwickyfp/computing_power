@@ -51,27 +51,31 @@ _COMMUNITY_EXTENSIONS = ["snowflake"]
 
 
 def _setup_duckdb_connection() -> duckdb.DuckDBPyConnection:
-    """Create and configure a DuckDB in-memory connection."""
+    """Create and configure a DuckDB in-memory connection.
+
+    Extensions are INSTALL-ed once at worker startup (see celery_app.py
+    worker_init signal). Here we only LOAD them, which is fast.
+    """
     conn = duckdb.connect(database=":memory:")
-    # Install and load required extensions (core)
+    # Load required extensions (already installed at worker startup)
     for ext in _REQUIRED_EXTENSIONS:
         try:
-            conn.execute(f"INSTALL {ext}; LOAD {ext};")
+            conn.execute(f"LOAD {ext};")
         except Exception as e:
-            logger.warning(f"Extension {ext} setup warning: {e}")
-    # Install and load community extensions (e.g. snowflake)
+            logger.warning(f"Extension {ext} load warning: {e}")
+    # Load community extensions
     for ext in _COMMUNITY_EXTENSIONS:
         try:
-            conn.execute(f"INSTALL {ext} FROM community; LOAD {ext};")
+            conn.execute(f"LOAD {ext};")
             logger.info(f"Loaded community extension: {ext}")
         except Exception as e:
-            logger.warning(f"Community extension {ext} setup warning: {e}")
+            logger.warning(f"Community extension {ext} load warning: {e}")
     return conn
 
 
 def _load_optional_extension(conn: duckdb.DuckDBPyConnection, ext: str) -> None:
     try:
-        conn.execute(f"INSTALL {ext} FROM community; LOAD {ext};")
+        conn.execute(f"LOAD {ext};")
         logger.info(f"Loaded optional extension: {ext}")
     except Exception as e:
         logger.warning(f"Optional extension {ext} not available: {e}")
@@ -396,9 +400,29 @@ def execute_flow_task(
 
 
 def _get_destination_type(destination_id: Optional[int]) -> str:
-    """Look up the destination type from the config DB."""
+    """Look up the destination type from the config DB (cached 60s)."""
     if destination_id is None:
         return "POSTGRES"
+    return _get_destination_type_cached(destination_id)
+
+
+# ── simple TTL cache for destination type lookups ──
+import threading as _th
+_dest_type_cache: dict[int, tuple[float, str]] = {}
+_dest_type_lock = _th.Lock()
+_DEST_TYPE_TTL = 60.0  # seconds
+
+
+def _get_destination_type_cached(destination_id: int) -> str:
+    import time as _time
+    now = _time.monotonic()
+
+    with _dest_type_lock:
+        entry = _dest_type_cache.get(destination_id)
+        if entry and (now - entry[0]) < _DEST_TYPE_TTL:
+            return entry[1]
+
+    # Cache miss — query DB outside lock
     try:
         from app.core.database import get_db_session
         from sqlalchemy import text
@@ -408,9 +432,13 @@ def _get_destination_type(destination_id: Optional[int]) -> str:
                 text("SELECT type FROM destinations WHERE id = :id"),
                 {"id": destination_id},
             ).fetchone()
-        return row.type.upper() if row else "POSTGRES"
+        result = row.type.upper() if row else "POSTGRES"
     except Exception:
-        return "POSTGRES"
+        result = "POSTGRES"
+
+    with _dest_type_lock:
+        _dest_type_cache[destination_id] = (now, result)
+    return result
 
 
 def _notify_flow_task_error(

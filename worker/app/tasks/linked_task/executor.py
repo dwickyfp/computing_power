@@ -22,6 +22,7 @@ import structlog
 from sqlalchemy import text
 
 from app.core.database import get_db_session
+from app.config.settings import get_settings
 
 logger = structlog.get_logger(__name__)
 
@@ -259,8 +260,9 @@ def execute_linked_task(linked_task_id: int, run_history_id: int) -> dict:
     overall_status = STATUS_SUCCESS
 
     while queue:
-        log.info("executing layer", step_ids=queue)
-        with concurrent.futures.ThreadPoolExecutor(max_workers=min(len(queue), 8)) as pool:
+        max_parallel = get_settings().linked_task_max_parallel_steps
+        log.info("executing layer", step_ids=queue, max_parallel=max_parallel)
+        with concurrent.futures.ThreadPoolExecutor(max_workers=min(len(queue), max_parallel)) as pool:
             future_to_step = {
                 pool.submit(
                     _execute_single_step,

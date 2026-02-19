@@ -61,6 +61,10 @@ class WorkerDatabaseManager:
                 pool_recycle=settings.db_pool_recycle,
                 pool_pre_ping=True,
                 echo=False,
+                connect_args={
+                    "connect_timeout": 5,
+                    "options": "-c statement_timeout=30000",
+                },
             )
 
             self._session_factory = sessionmaker(
