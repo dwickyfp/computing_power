@@ -145,11 +145,17 @@ export function PreviewDrawer() {
     const [height, setHeight]   = useState(DEFAULT_HEIGHT)
     const [visible, setVisible] = useState(false)
     const [tab, setTab]         = useState<'table' | 'chart'>('table')
+    
+    // Lift state to persist across tab switches
+    const [chartCfg, setChartCfg] = useState<ChartConfig>(() => defaultConfig([]))
+    // Track columns to detect node changes
+    const lastColsParams = useRef<string>('')
+
     const dragging  = useRef(false)
     const startY    = useRef(0)
     const startH    = useRef(0)
 
-    // Trigger enter animation
+    // Trigger enter animation & reset state on close
     useEffect(() => {
         if (preview.isOpen) {
             setHeight(DEFAULT_HEIGHT)
@@ -157,8 +163,22 @@ export function PreviewDrawer() {
             requestAnimationFrame(() => setVisible(true))
         } else {
             setVisible(false)
+            // Reset chart config when drawer closes
+            setChartCfg(defaultConfig([]))
+            lastColsParams.current = ''
         }
     }, [preview.isOpen])
+
+    // Update chart config when columns change (e.g. new node preview)
+    useEffect(() => {
+        if (!preview.result) return
+        const cols = preview.result.columns
+        const key = JSON.stringify(cols)
+        if (key !== lastColsParams.current) {
+            lastColsParams.current = key
+            setChartCfg(defaultConfig(cols))
+        }
+    }, [preview.result])
 
     const onMouseDown = useCallback((e: React.MouseEvent) => {
         e.preventDefault()
@@ -282,7 +302,13 @@ export function PreviewDrawer() {
                             </div>
                         )}
                         {tab === 'chart' && (
-                            <ChartBuilder columns={cols} rows={rows} height={height} />
+                            <ChartBuilder
+                                columns={cols}
+                                rows={rows}
+                                height={height}
+                                cfg={chartCfg}
+                                onUpdate={setChartCfg}
+                            />
                         )}
                     </>
                 )}
@@ -355,6 +381,8 @@ interface ChartBuilderProps {
     columns: string[]
     rows: unknown[][]
     height: number
+    cfg: ChartConfig
+    onUpdate: (cfg: ChartConfig) => void
 }
 
 function defaultConfig(columns: string[]): ChartConfig {
@@ -450,16 +478,11 @@ function buildChartData(
     return data
 }
 
-function ChartBuilder({ columns, rows, height }: ChartBuilderProps) {
-    const [cfg, setCfg] = useState<ChartConfig>(() => defaultConfig(columns))
-
-    // Reset when columns change (new node preview)
-    useEffect(() => {
-        setCfg(defaultConfig(columns))
-    }, [columns])
+function ChartBuilder({ columns, rows, height, cfg, onUpdate }: ChartBuilderProps) {
+    // Reset when columns change handled by parent now
 
     const update = (patch: Partial<ChartConfig>) =>
-        setCfg((prev) => ({ ...prev, ...patch }))
+        onUpdate({ ...cfg, ...patch })
 
     const chartData = useMemo(
         () => buildChartData(columns, rows, cfg),
