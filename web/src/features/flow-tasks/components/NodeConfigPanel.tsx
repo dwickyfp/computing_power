@@ -1146,7 +1146,11 @@ function UnionConfig({ data, update, nodeId: _nodeId, flowTaskId: _flowTaskId }:
 // ─── Pivot ─────────────────────────────────────────────────────────────────────
 
 function PivotConfig({ data, update, nodeId, flowTaskId }: ConfigFormProps) {
-    const { columns, isLoading } = useNodeSchema(flowTaskId, nodeId)
+    const { edges } = useFlowTaskStore()
+    const parentId = edges?.find((e) => e.target === nodeId)?.source
+    // Use the parent's output schema as our input schema.
+    // If no parent, we default to current node (which likely returns empty if invalid) or just empty.
+    const { columns, isLoading } = useNodeSchema(flowTaskId, parentId)
     const pivotType = (data.pivot_type as string) || 'PIVOT'
 
     return (
