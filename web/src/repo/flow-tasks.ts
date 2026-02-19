@@ -20,6 +20,7 @@ export type FlowNodeType =
     | 'pivot'
     | 'new_rows'
     | 'output'
+    | 'note'
 
 export interface NodePosition {
     x: number
@@ -69,6 +70,8 @@ export interface FlowNodeData {
     // output node
     write_mode?: WriteMode
     upsert_keys?: string[]
+    // note node
+    note_content?: string
     // generic
     [key: string]: unknown
 }
@@ -78,6 +81,8 @@ export interface FlowNode {
     type: FlowNodeType
     position: NodePosition
     data: FlowNodeData
+    width?: number
+    height?: number
 }
 
 // FlowEdge is a ReactFlow Edge — gives us animated, style, markerEnd etc. for free

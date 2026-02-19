@@ -71,6 +71,7 @@ import { UnionNode } from '../components/nodes/UnionNode'
 import { PivotNode } from '../components/nodes/PivotNode'
 import { NewRowsNode } from '../components/nodes/NewRowsNode'
 import { OutputNode } from '../components/nodes/OutputNode'
+import { NoteNode } from '../components/nodes/NoteNode'
 
 const nodeTypes = {
     input: InputNode,
@@ -81,6 +82,7 @@ const nodeTypes = {
     pivot: PivotNode,
     new_rows: NewRowsNode,
     output: OutputNode,
+    note: NoteNode,
 }
 
 const edgeTypes = {
@@ -330,11 +332,13 @@ function FlowCanvas({ flowTaskId }: { flowTaskId: number }) {
                 y: event.clientY,
             })
 
+            const isNote = nodeType === 'note'
             const newNode: FlowNode = {
                 id: generateNodeId(nodeType),
                 type: nodeType,
                 position,
                 data: { label: nodeLabel },
+                ...(isNote ? { width: 220, height: 130 } : {}),
             }
             addNode(newNode)
         },

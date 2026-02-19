@@ -18,6 +18,7 @@ import {
     Table2,
     PlusCircle,
     HardDriveDownload,
+    StickyNote,
 } from 'lucide-react'
 import type { FlowNodeType } from '@/repo/flow-tasks'
 
@@ -94,6 +95,16 @@ const OUTPUT_NODES: NodeDef[] = [
     },
 ]
 
+const UTILITY_NODES: NodeDef[] = [
+    {
+        type: 'note',
+        label: 'Note',
+        description: 'Add a free-text annotation to the canvas',
+        icon: <StickyNote className="h-3.5 w-3.5" />,
+        accentClass: 'border-l-amber-400',
+    },
+]
+
 function DraggableNode({ node }: { node: NodeDef }) {
     const onDragStart = (event: React.DragEvent) => {
         event.dataTransfer.setData('application/reactflow-node-type', node.type)
@@ -128,7 +139,7 @@ export function NodePalette() {
 
             <Accordion
                 type="multiple"
-                defaultValue={['input', 'transform', 'output']}
+                defaultValue={['input', 'transform', 'output', 'utilities']}
                 className="px-2 py-2"
             >
                 <AccordionItem value="input" className="border-none">
@@ -159,6 +170,17 @@ export function NodePalette() {
                     </AccordionTrigger>
                     <AccordionContent className="pb-2 pt-0">
                         {OUTPUT_NODES.map((n) => (
+                            <DraggableNode key={n.type} node={n} />
+                        ))}
+                    </AccordionContent>
+                </AccordionItem>
+
+                <AccordionItem value="utilities" className="border-none">
+                    <AccordionTrigger className="py-1.5 text-xs font-semibold hover:no-underline">
+                        Utilities
+                    </AccordionTrigger>
+                    <AccordionContent className="pb-2 pt-0">
+                        {UTILITY_NODES.map((n) => (
                             <DraggableNode key={n.type} node={n} />
                         ))}
                     </AccordionContent>

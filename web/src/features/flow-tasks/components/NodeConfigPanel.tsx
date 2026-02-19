@@ -242,9 +242,10 @@ export function NodeConfigPanel() {
             {/* Header */}
             <div className="flex items-center justify-between px-3 py-2 border-b border-border/50">
                 <p className="text-sm font-semibold capitalize">
-                    {selectedNode.type} Config
+                    {selectedNode.type === 'note' ? 'Note' : `${selectedNode.type} Config`}
                 </p>
                 <div className="flex gap-1">
+                    {selectedNode.type !== 'note' && (
                     <Button
                         variant="ghost"
                         size="icon"
@@ -259,6 +260,7 @@ export function NodeConfigPanel() {
                     >
                         <Eye className="h-3.5 w-3.5" />
                     </Button>
+                    )}
                     <Button
                         variant="ghost"
                         size="icon"
@@ -280,6 +282,8 @@ export function NodeConfigPanel() {
             </div>
 
             {/* Common: Label */}
+            {/* Common: Label — hidden for note nodes (they use note_content) */}
+            {selectedNode.type !== 'note' && (
             <div className="px-3 py-3 space-y-3">
                 <Field label="Label">
                     <Input
@@ -290,8 +294,9 @@ export function NodeConfigPanel() {
                     />
                 </Field>
             </div>
+            )}
 
-            <Separator />
+            {selectedNode.type !== 'note' && <Separator />}
 
             {/* Type-specific config */}
             <div className="px-3 py-3 space-y-3">
@@ -347,6 +352,8 @@ function NodeTypeConfig({
             return <PivotConfig data={data} update={update} nodeId={nodeId} flowTaskId={flowTaskId} />
         case 'output':
             return <OutputConfig data={data} update={update} nodeId={nodeId} flowTaskId={flowTaskId} />
+        case 'note':
+            return <NoteConfig data={data} update={update} nodeId={nodeId} flowTaskId={flowTaskId} />
         default:
             return (
                 <p className="text-xs text-muted-foreground">No config for this node type.</p>
@@ -1379,6 +1386,25 @@ function OutputConfig({ data, update }: ConfigFormProps) {
                 </p>
             </Field>
         </>
+    )
+}
+
+// ─── Note ──────────────────────────────────────────────────────────────────────
+
+function NoteConfig({ data, update }: ConfigFormProps) {
+    const content = (data.note_content as string) ?? ''
+    return (
+        <Field label="Note content">
+            <textarea
+                className="w-full min-h-[120px] resize-y rounded-md border border-input bg-background px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                value={content}
+                onChange={(e) => update({ note_content: e.target.value })}
+                placeholder="Type your note here…"
+            />
+            <p className="text-[10px] text-muted-foreground">
+                This text is also editable directly on the canvas.
+            </p>
+        </Field>
     )
 }
 
