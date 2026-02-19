@@ -5,8 +5,6 @@ import { useQuery } from '@tanstack/react-query'
 import { flowTasksRepo } from '@/repo/flow-tasks'
 import { linkedTasksRepo } from '@/repo/linked-tasks'
 import {
-    type ScheduleCreate,
-    type ScheduleUpdate,
     type ScheduleListItem,
 } from '@/repo/schedules'
 import cronstrue from 'cronstrue'
@@ -20,13 +18,6 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
-import {
-    Card,
-    CardContent,
-    CardDescription,
-    CardHeader,
-    CardTitle,
-} from '@/components/ui/card'
 import {
     Form,
     FormControl,
@@ -80,12 +71,11 @@ const DAYS_OF_WEEK = [
 
 interface ScheduleFormProps {
     schedule?: ScheduleListItem | null
-    isNew: boolean
     onSubmit: (values: ScheduleFormValues) => void
     isSubmitting: boolean
 }
 
-export function ScheduleForm({ schedule, isNew, onSubmit, isSubmitting }: ScheduleFormProps) {
+export function ScheduleForm({ schedule, onSubmit, isSubmitting }: ScheduleFormProps) {
     const [cronMode, setCronMode] = useState<'preset' | 'manual'>('preset')
     const [presetType, setPresetType] = useState<
         'simple' | 'DAILY' | 'WEEKLY' | 'MONTHLY'

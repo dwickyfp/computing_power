@@ -253,7 +253,7 @@ export default function ScheduleDetailPage() {
         {/* Content Tabs */}
         {isNew ? (
           <div className="max-w-3xl">
-            <ScheduleForm isNew={true} onSubmit={onSubmit} isSubmitting={createMutation.isPending} />
+            <ScheduleForm onSubmit={onSubmit} isSubmitting={createMutation.isPending} />
           </div>
         ) : (
           <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
@@ -268,7 +268,6 @@ export default function ScheduleDetailPage() {
               </p>
               <ScheduleForm
                 schedule={schedule}
-                isNew={false}
                 onSubmit={onSubmit}
                 isSubmitting={updateMutation.isPending}
               />

@@ -143,7 +143,7 @@ function RunHistoryPanel({
                 />
             )}
 
-            <div 
+            <div
                 className={cn(
                     "px-6 border-b border-border/60 flex items-center justify-between shrink-0 bg-background/50 backdrop-blur-sm cursor-pointer hover:bg-muted/50 transition-colors",
                     collapsed ? "py-2 h-10 border-b-0" : "py-3"
@@ -154,13 +154,13 @@ function RunHistoryPanel({
                     <Clock className="h-4 w-4 text-muted-foreground" />
                     <p className="text-sm font-semibold text-muted-foreground">Run History</p>
                 </div>
-                
+
                 <div className="flex items-center gap-4">
                     {!collapsed && <span className="text-xs text-muted-foreground">{data?.data.total ?? 0} run{(data?.data.total ?? 0) !== 1 ? 's' : ''}</span>}
-                     <button 
-                        onClick={(e) => { e.stopPropagation(); onToggleCollapse() }} 
+                    <button
+                        onClick={(e) => { e.stopPropagation(); onToggleCollapse() }}
                         className="text-muted-foreground hover:text-foreground p-1 hover:bg-muted rounded transition-colors"
-                     >
+                    >
                         <ChevronLeft className={cn("h-4 w-4 transition-transform duration-300", collapsed ? "rotate-90" : "-rotate-90")} />
                     </button>
                 </div>
@@ -463,7 +463,7 @@ function StageBuilder({
 
                         {/* Stage Card */}
                         <div className={cn(
-                            "w-full rounded-xl border bg-card shadow-sm transition-all group/stage",
+                            "w-full rounded-xl border bg-sidebar shadow-sm transition-all group/stage",
                             "border-l-4",
                             isFirst ? "border-l-primary" : stage.gateCondition === 'ON_SUCCESS' ? "border-l-emerald-500" : "border-l-blue-500"
                         )}>
@@ -534,8 +534,8 @@ function StageBuilder({
                                                     <div className="flex items-center gap-1.5">
                                                         <Badge variant="secondary" className={cn("text-[10px] h-4 px-1.5",
                                                             selected.status === 'SUCCESS' ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/20" :
-                                                            selected.status === 'FAILED' ? "bg-rose-500/10 text-rose-600 border-rose-500/20" :
-                                                            "bg-muted text-muted-foreground"
+                                                                selected.status === 'FAILED' ? "bg-rose-500/10 text-rose-600 border-rose-500/20" :
+                                                                    "bg-muted text-muted-foreground"
                                                         )}>
                                                             {selected.status}
                                                         </Badge>
@@ -748,7 +748,7 @@ export default function LinkedTaskDetailPage() {
         }
 
         const handleMouseUp = () => {
-             setIsResizing(false)
+            setIsResizing(false)
         }
 
         if (isResizing) {
