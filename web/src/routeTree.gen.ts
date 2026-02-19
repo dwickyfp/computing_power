@@ -22,10 +22,12 @@ import { Route as ClerkAuthenticatedRouteRouteImport } from './routes/clerk/_aut
 import { Route as ClerkauthRouteRouteImport } from './routes/clerk/(auth)/route'
 import { Route as AuthenticatedSettingsRouteRouteImport } from './routes/_authenticated/settings/route'
 import { Route as AuthenticatedPipelinesRouteRouteImport } from './routes/_authenticated/pipelines/route'
+import { Route as AuthenticatedLinkedTasksRouteRouteImport } from './routes/_authenticated/linked-tasks/route'
 import { Route as AuthenticatedFlowTasksRouteRouteImport } from './routes/_authenticated/flow-tasks/route'
 import { Route as AuthenticatedDestinationsRouteRouteImport } from './routes/_authenticated/destinations/route'
 import { Route as AuthenticatedSourcesIndexRouteImport } from './routes/_authenticated/sources/index'
 import { Route as AuthenticatedPipelinesIndexRouteImport } from './routes/_authenticated/pipelines/index'
+import { Route as AuthenticatedLinkedTasksIndexRouteImport } from './routes/_authenticated/linked-tasks/index'
 import { Route as AuthenticatedFlowTasksIndexRouteImport } from './routes/_authenticated/flow-tasks/index'
 import { Route as AuthenticatedDestinationsIndexRouteImport } from './routes/_authenticated/destinations/index'
 import { Route as ClerkAuthenticatedUserManagementRouteImport } from './routes/clerk/_authenticated/user-management'
@@ -35,6 +37,7 @@ import { Route as AuthenticatedSettingsWalMonitorRouteImport } from './routes/_a
 import { Route as AuthenticatedSettingsNotificationsRouteImport } from './routes/_authenticated/settings/notifications'
 import { Route as AuthenticatedSettingsBatchConfigurationRouteImport } from './routes/_authenticated/settings/batch-configuration'
 import { Route as AuthenticatedPipelinesPipelineIdRouteImport } from './routes/_authenticated/pipelines/$pipelineId'
+import { Route as AuthenticatedLinkedTasksLinkedTaskIdRouteImport } from './routes/_authenticated/linked-tasks/$linkedTaskId'
 import { Route as AuthenticatedErrorsErrorRouteImport } from './routes/_authenticated/errors/$error'
 import { Route as AuthenticatedDestinationsDestinationIdRouteImport } from './routes/_authenticated/destinations/$destinationId'
 import { Route as AuthenticatedFlowTasksFlowTaskIdRouteRouteImport } from './routes/_authenticated/flow-tasks/$flowTaskId/route'
@@ -108,6 +111,12 @@ const AuthenticatedPipelinesRouteRoute =
     path: '/pipelines',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedLinkedTasksRouteRoute =
+  AuthenticatedLinkedTasksRouteRouteImport.update({
+    id: '/linked-tasks',
+    path: '/linked-tasks',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedFlowTasksRouteRoute =
   AuthenticatedFlowTasksRouteRouteImport.update({
     id: '/flow-tasks',
@@ -131,6 +140,12 @@ const AuthenticatedPipelinesIndexRoute =
     id: '/',
     path: '/',
     getParentRoute: () => AuthenticatedPipelinesRouteRoute,
+  } as any)
+const AuthenticatedLinkedTasksIndexRoute =
+  AuthenticatedLinkedTasksIndexRouteImport.update({
+    id: '/',
+    path: '/',
+    getParentRoute: () => AuthenticatedLinkedTasksRouteRoute,
   } as any)
 const AuthenticatedFlowTasksIndexRoute =
   AuthenticatedFlowTasksIndexRouteImport.update({
@@ -183,6 +198,12 @@ const AuthenticatedPipelinesPipelineIdRoute =
     id: '/$pipelineId',
     path: '/$pipelineId',
     getParentRoute: () => AuthenticatedPipelinesRouteRoute,
+  } as any)
+const AuthenticatedLinkedTasksLinkedTaskIdRoute =
+  AuthenticatedLinkedTasksLinkedTaskIdRouteImport.update({
+    id: '/$linkedTaskId',
+    path: '/$linkedTaskId',
+    getParentRoute: () => AuthenticatedLinkedTasksRouteRoute,
   } as any)
 const AuthenticatedErrorsErrorRoute =
   AuthenticatedErrorsErrorRouteImport.update({
@@ -240,6 +261,7 @@ export interface FileRoutesByFullPath {
   '/clerk': typeof ClerkAuthenticatedRouteRouteWithChildren
   '/destinations': typeof AuthenticatedDestinationsRouteRouteWithChildren
   '/flow-tasks': typeof AuthenticatedFlowTasksRouteRouteWithChildren
+  '/linked-tasks': typeof AuthenticatedLinkedTasksRouteRouteWithChildren
   '/pipelines': typeof AuthenticatedPipelinesRouteRouteWithChildren
   '/settings': typeof AuthenticatedSettingsRouteRouteWithChildren
   '/401': typeof errors401Route
@@ -251,6 +273,7 @@ export interface FileRoutesByFullPath {
   '/flow-tasks/$flowTaskId': typeof AuthenticatedFlowTasksFlowTaskIdRouteRouteWithChildren
   '/destinations/$destinationId': typeof AuthenticatedDestinationsDestinationIdRoute
   '/errors/$error': typeof AuthenticatedErrorsErrorRoute
+  '/linked-tasks/$linkedTaskId': typeof AuthenticatedLinkedTasksLinkedTaskIdRoute
   '/pipelines/$pipelineId': typeof AuthenticatedPipelinesPipelineIdRouteWithChildren
   '/settings/batch-configuration': typeof AuthenticatedSettingsBatchConfigurationRoute
   '/settings/notifications': typeof AuthenticatedSettingsNotificationsRoute
@@ -260,6 +283,7 @@ export interface FileRoutesByFullPath {
   '/clerk/user-management': typeof ClerkAuthenticatedUserManagementRoute
   '/destinations/': typeof AuthenticatedDestinationsIndexRoute
   '/flow-tasks/': typeof AuthenticatedFlowTasksIndexRoute
+  '/linked-tasks/': typeof AuthenticatedLinkedTasksIndexRoute
   '/pipelines/': typeof AuthenticatedPipelinesIndexRoute
   '/sources/': typeof AuthenticatedSourcesIndexRoute
   '/flow-tasks/$flowTaskId/flow': typeof AuthenticatedFlowTasksFlowTaskIdFlowRoute
@@ -280,6 +304,7 @@ export interface FileRoutesByTo {
   '/': typeof AuthenticatedIndexRoute
   '/destinations/$destinationId': typeof AuthenticatedDestinationsDestinationIdRoute
   '/errors/$error': typeof AuthenticatedErrorsErrorRoute
+  '/linked-tasks/$linkedTaskId': typeof AuthenticatedLinkedTasksLinkedTaskIdRoute
   '/pipelines/$pipelineId': typeof AuthenticatedPipelinesPipelineIdRouteWithChildren
   '/settings/batch-configuration': typeof AuthenticatedSettingsBatchConfigurationRoute
   '/settings/notifications': typeof AuthenticatedSettingsNotificationsRoute
@@ -289,6 +314,7 @@ export interface FileRoutesByTo {
   '/clerk/user-management': typeof ClerkAuthenticatedUserManagementRoute
   '/destinations': typeof AuthenticatedDestinationsIndexRoute
   '/flow-tasks': typeof AuthenticatedFlowTasksIndexRoute
+  '/linked-tasks': typeof AuthenticatedLinkedTasksIndexRoute
   '/pipelines': typeof AuthenticatedPipelinesIndexRoute
   '/sources': typeof AuthenticatedSourcesIndexRoute
   '/flow-tasks/$flowTaskId/flow': typeof AuthenticatedFlowTasksFlowTaskIdFlowRoute
@@ -303,6 +329,7 @@ export interface FileRoutesById {
   '/clerk': typeof ClerkRouteRouteWithChildren
   '/_authenticated/destinations': typeof AuthenticatedDestinationsRouteRouteWithChildren
   '/_authenticated/flow-tasks': typeof AuthenticatedFlowTasksRouteRouteWithChildren
+  '/_authenticated/linked-tasks': typeof AuthenticatedLinkedTasksRouteRouteWithChildren
   '/_authenticated/pipelines': typeof AuthenticatedPipelinesRouteRouteWithChildren
   '/_authenticated/settings': typeof AuthenticatedSettingsRouteRouteWithChildren
   '/clerk/(auth)': typeof ClerkauthRouteRouteWithChildren
@@ -317,6 +344,7 @@ export interface FileRoutesById {
   '/_authenticated/flow-tasks/$flowTaskId': typeof AuthenticatedFlowTasksFlowTaskIdRouteRouteWithChildren
   '/_authenticated/destinations/$destinationId': typeof AuthenticatedDestinationsDestinationIdRoute
   '/_authenticated/errors/$error': typeof AuthenticatedErrorsErrorRoute
+  '/_authenticated/linked-tasks/$linkedTaskId': typeof AuthenticatedLinkedTasksLinkedTaskIdRoute
   '/_authenticated/pipelines/$pipelineId': typeof AuthenticatedPipelinesPipelineIdRouteWithChildren
   '/_authenticated/settings/batch-configuration': typeof AuthenticatedSettingsBatchConfigurationRoute
   '/_authenticated/settings/notifications': typeof AuthenticatedSettingsNotificationsRoute
@@ -326,6 +354,7 @@ export interface FileRoutesById {
   '/clerk/_authenticated/user-management': typeof ClerkAuthenticatedUserManagementRoute
   '/_authenticated/destinations/': typeof AuthenticatedDestinationsIndexRoute
   '/_authenticated/flow-tasks/': typeof AuthenticatedFlowTasksIndexRoute
+  '/_authenticated/linked-tasks/': typeof AuthenticatedLinkedTasksIndexRoute
   '/_authenticated/pipelines/': typeof AuthenticatedPipelinesIndexRoute
   '/_authenticated/sources/': typeof AuthenticatedSourcesIndexRoute
   '/_authenticated/flow-tasks/$flowTaskId/flow': typeof AuthenticatedFlowTasksFlowTaskIdFlowRoute
@@ -341,6 +370,7 @@ export interface FileRouteTypes {
     | '/clerk'
     | '/destinations'
     | '/flow-tasks'
+    | '/linked-tasks'
     | '/pipelines'
     | '/settings'
     | '/401'
@@ -352,6 +382,7 @@ export interface FileRouteTypes {
     | '/flow-tasks/$flowTaskId'
     | '/destinations/$destinationId'
     | '/errors/$error'
+    | '/linked-tasks/$linkedTaskId'
     | '/pipelines/$pipelineId'
     | '/settings/batch-configuration'
     | '/settings/notifications'
@@ -361,6 +392,7 @@ export interface FileRouteTypes {
     | '/clerk/user-management'
     | '/destinations/'
     | '/flow-tasks/'
+    | '/linked-tasks/'
     | '/pipelines/'
     | '/sources/'
     | '/flow-tasks/$flowTaskId/flow'
@@ -381,6 +413,7 @@ export interface FileRouteTypes {
     | '/'
     | '/destinations/$destinationId'
     | '/errors/$error'
+    | '/linked-tasks/$linkedTaskId'
     | '/pipelines/$pipelineId'
     | '/settings/batch-configuration'
     | '/settings/notifications'
@@ -390,6 +423,7 @@ export interface FileRouteTypes {
     | '/clerk/user-management'
     | '/destinations'
     | '/flow-tasks'
+    | '/linked-tasks'
     | '/pipelines'
     | '/sources'
     | '/flow-tasks/$flowTaskId/flow'
@@ -403,6 +437,7 @@ export interface FileRouteTypes {
     | '/clerk'
     | '/_authenticated/destinations'
     | '/_authenticated/flow-tasks'
+    | '/_authenticated/linked-tasks'
     | '/_authenticated/pipelines'
     | '/_authenticated/settings'
     | '/clerk/(auth)'
@@ -417,6 +452,7 @@ export interface FileRouteTypes {
     | '/_authenticated/flow-tasks/$flowTaskId'
     | '/_authenticated/destinations/$destinationId'
     | '/_authenticated/errors/$error'
+    | '/_authenticated/linked-tasks/$linkedTaskId'
     | '/_authenticated/pipelines/$pipelineId'
     | '/_authenticated/settings/batch-configuration'
     | '/_authenticated/settings/notifications'
@@ -426,6 +462,7 @@ export interface FileRouteTypes {
     | '/clerk/_authenticated/user-management'
     | '/_authenticated/destinations/'
     | '/_authenticated/flow-tasks/'
+    | '/_authenticated/linked-tasks/'
     | '/_authenticated/pipelines/'
     | '/_authenticated/sources/'
     | '/_authenticated/flow-tasks/$flowTaskId/flow'
@@ -538,6 +575,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedPipelinesRouteRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/linked-tasks': {
+      id: '/_authenticated/linked-tasks'
+      path: '/linked-tasks'
+      fullPath: '/linked-tasks'
+      preLoaderRoute: typeof AuthenticatedLinkedTasksRouteRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/flow-tasks': {
       id: '/_authenticated/flow-tasks'
       path: '/flow-tasks'
@@ -565,6 +609,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/pipelines/'
       preLoaderRoute: typeof AuthenticatedPipelinesIndexRouteImport
       parentRoute: typeof AuthenticatedPipelinesRouteRoute
+    }
+    '/_authenticated/linked-tasks/': {
+      id: '/_authenticated/linked-tasks/'
+      path: '/'
+      fullPath: '/linked-tasks/'
+      preLoaderRoute: typeof AuthenticatedLinkedTasksIndexRouteImport
+      parentRoute: typeof AuthenticatedLinkedTasksRouteRoute
     }
     '/_authenticated/flow-tasks/': {
       id: '/_authenticated/flow-tasks/'
@@ -628,6 +679,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/pipelines/$pipelineId'
       preLoaderRoute: typeof AuthenticatedPipelinesPipelineIdRouteImport
       parentRoute: typeof AuthenticatedPipelinesRouteRoute
+    }
+    '/_authenticated/linked-tasks/$linkedTaskId': {
+      id: '/_authenticated/linked-tasks/$linkedTaskId'
+      path: '/$linkedTaskId'
+      fullPath: '/linked-tasks/$linkedTaskId'
+      preLoaderRoute: typeof AuthenticatedLinkedTasksLinkedTaskIdRouteImport
+      parentRoute: typeof AuthenticatedLinkedTasksRouteRoute
     }
     '/_authenticated/errors/$error': {
       id: '/_authenticated/errors/$error'
@@ -740,6 +798,23 @@ const AuthenticatedFlowTasksRouteRouteWithChildren =
     AuthenticatedFlowTasksRouteRouteChildren,
   )
 
+interface AuthenticatedLinkedTasksRouteRouteChildren {
+  AuthenticatedLinkedTasksLinkedTaskIdRoute: typeof AuthenticatedLinkedTasksLinkedTaskIdRoute
+  AuthenticatedLinkedTasksIndexRoute: typeof AuthenticatedLinkedTasksIndexRoute
+}
+
+const AuthenticatedLinkedTasksRouteRouteChildren: AuthenticatedLinkedTasksRouteRouteChildren =
+  {
+    AuthenticatedLinkedTasksLinkedTaskIdRoute:
+      AuthenticatedLinkedTasksLinkedTaskIdRoute,
+    AuthenticatedLinkedTasksIndexRoute: AuthenticatedLinkedTasksIndexRoute,
+  }
+
+const AuthenticatedLinkedTasksRouteRouteWithChildren =
+  AuthenticatedLinkedTasksRouteRoute._addFileChildren(
+    AuthenticatedLinkedTasksRouteRouteChildren,
+  )
+
 interface AuthenticatedPipelinesPipelineIdRouteChildren {
   AuthenticatedPipelinesPipelineIdFlowRoute: typeof AuthenticatedPipelinesPipelineIdFlowRoute
   AuthenticatedPipelinesPipelineIdDestinationsDestIdTablesSyncIdRoute: typeof AuthenticatedPipelinesPipelineIdDestinationsDestIdTablesSyncIdRoute
@@ -798,6 +873,7 @@ const AuthenticatedSettingsRouteRouteWithChildren =
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedDestinationsRouteRoute: typeof AuthenticatedDestinationsRouteRouteWithChildren
   AuthenticatedFlowTasksRouteRoute: typeof AuthenticatedFlowTasksRouteRouteWithChildren
+  AuthenticatedLinkedTasksRouteRoute: typeof AuthenticatedLinkedTasksRouteRouteWithChildren
   AuthenticatedPipelinesRouteRoute: typeof AuthenticatedPipelinesRouteRouteWithChildren
   AuthenticatedSettingsRouteRoute: typeof AuthenticatedSettingsRouteRouteWithChildren
   AuthenticatedSmartTagsRoute: typeof AuthenticatedSmartTagsRoute
@@ -812,6 +888,8 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
     AuthenticatedDestinationsRouteRouteWithChildren,
   AuthenticatedFlowTasksRouteRoute:
     AuthenticatedFlowTasksRouteRouteWithChildren,
+  AuthenticatedLinkedTasksRouteRoute:
+    AuthenticatedLinkedTasksRouteRouteWithChildren,
   AuthenticatedPipelinesRouteRoute:
     AuthenticatedPipelinesRouteRouteWithChildren,
   AuthenticatedSettingsRouteRoute: AuthenticatedSettingsRouteRouteWithChildren,

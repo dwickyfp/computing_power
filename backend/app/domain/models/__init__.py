@@ -28,6 +28,18 @@ from app.domain.models.flow_task import (
     FlowTaskRunStatus,
     FlowTaskNodeStatus,
 )
+from app.domain.models.linked_task import (
+    LinkedTask,
+    LinkedTaskStep,
+    LinkedTaskEdge,
+    LinkedTaskRunHistory,
+    LinkedTaskRunStepLog,
+    LinkedTaskStatus,
+    LinkedTaskRunStatus,
+    LinkedTaskStepStatus,
+    LinkedTaskEdgeCondition,
+)
+
 
 __all__ = [
     "Base",

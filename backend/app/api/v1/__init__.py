@@ -18,6 +18,7 @@ from app.api.v1.endpoints import (
     tags,
     lineage,
     flow_tasks,
+    linked_tasks,
 )
 
 # Create v1 router
@@ -63,3 +64,8 @@ api_router.include_router(tags.router, prefix="/tags", tags=["tags"])
 api_router.include_router(
     flow_tasks.router, prefix="/flow-tasks", tags=["flow-tasks"]
 )
+
+api_router.include_router(
+    linked_tasks.router, prefix="/linked-tasks", tags=["linked-tasks"]
+)
+

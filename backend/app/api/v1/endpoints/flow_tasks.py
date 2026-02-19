@@ -65,7 +65,7 @@ def create_flow_task(
 )
 def list_flow_tasks(
     page: int = Query(default=1, ge=1, description="Page number"),
-    page_size: int = Query(default=20, ge=1, le=100, description="Items per page"),
+    page_size: int = Query(default=20, ge=1, le=1000, description="Items per page"),
     service: FlowTaskService = Depends(get_flow_task_service),
 ) -> FlowTaskListResponse:
     """List all flow tasks with pagination."""

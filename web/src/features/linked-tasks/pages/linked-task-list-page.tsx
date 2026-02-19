@@ -5,39 +5,39 @@ import { Main } from '@/components/layout/main'
 import { Search } from '@/components/search'
 import { ThemeSwitch } from '@/components/theme-switch'
 import { Button } from '@/components/ui/button'
-import { Plus, GitBranch } from 'lucide-react'
-import { flowTasksRepo } from '@/repo/flow-tasks'
-import { FlowTasksProvider, useFlowTasks } from '../components/flow-tasks-provider'
-import { FlowTasksTable } from '../components/flow-tasks-table'
-import { FlowTasksDialogs } from '../components/flow-tasks-dialogs'
+import { Plus, Link2 } from 'lucide-react'
+import { linkedTasksRepo } from '@/repo/linked-tasks'
+import { LinkedTasksProvider, useLinkedTasks } from '../components/linked-tasks-provider'
+import { LinkedTasksTable } from '../components/linked-tasks-table'
+import { LinkedTasksDialogs } from '../components/linked-tasks-dialogs'
 
-function FlowTasksPrimaryButtons() {
-    const { setOpen } = useFlowTasks()
+function LinkedTasksPrimaryButtons() {
+    const { setOpen } = useLinkedTasks()
     return (
         <Button onClick={() => setOpen('create')}>
             <Plus className="h-4 w-4 mr-2" />
-            New Flow Task
+            New Linked Task
         </Button>
     )
 }
 
-export default function FlowTaskListPage() {
+export default function LinkedTaskListPage() {
     useEffect(() => {
-        document.title = 'Flow Tasks'
+        document.title = 'Linked Tasks'
         return () => { document.title = 'Rosetta' }
     }, [])
 
     const { data } = useQuery({
-        queryKey: ['flow-tasks'],
-        queryFn: () => flowTasksRepo.list(1, 100),
+        queryKey: ['linked-tasks'],
+        queryFn: () => linkedTasksRepo.list(1, 100),
         refetchInterval: 10_000,
         refetchOnWindowFocus: true,
     })
 
-    const flowTasks = data?.data.items ?? []
+    const linkedTasks = (data?.data as any)?.items ?? []
 
     return (
-        <FlowTasksProvider>
+        <LinkedTasksProvider>
             <Header fixed>
                 <Search />
                 <div className="ms-auto flex items-center space-x-4">
@@ -49,19 +49,19 @@ export default function FlowTaskListPage() {
                 <div className="flex flex-wrap items-end justify-between gap-2">
                     <div>
                         <div className="flex items-center gap-2">
-                            <GitBranch className="h-5 w-5 text-muted-foreground" />
-                            <h2 className="text-2xl font-bold tracking-tight">Flow Tasks</h2>
+                            <Link2 className="h-5 w-5 text-muted-foreground" />
+                            <h2 className="text-2xl font-bold tracking-tight">Linked Tasks</h2>
                         </div>
                         <p className="text-muted-foreground mt-1">
-                            Visual ETL transformation flows powered by DuckDB.
+                            Orchestrate multiple flow tasks in sequential and parallel patterns.
                         </p>
                     </div>
-                    <FlowTasksPrimaryButtons />
+                    <LinkedTasksPrimaryButtons />
                 </div>
 
-                <FlowTasksTable data={flowTasks} />
+                <LinkedTasksTable data={linkedTasks} />
             </Main>
-            <FlowTasksDialogs />
-        </FlowTasksProvider>
+            <LinkedTasksDialogs />
+        </LinkedTasksProvider>
     )
 }

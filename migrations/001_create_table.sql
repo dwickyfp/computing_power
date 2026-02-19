@@ -597,7 +597,94 @@ ALTER TABLE destinations
 
 
 
+-- ============================================================
+-- Migration 010: Linked Task — Flow Task Orchestration DAG
+-- Allows chaining multiple flow tasks in sequential/parallel
+-- patterns with configurable dependency conditions.
+-- ============================================================
 
+CREATE TABLE IF NOT EXISTS linked_tasks (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(255) NOT NULL UNIQUE,
+    description TEXT NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'IDLE',   -- IDLE, RUNNING, SUCCESS, FAILED
+    last_run_at TIMESTAMPTZ NULL,
+    last_run_status VARCHAR(20) NULL,             -- SUCCESS, FAILED, NULL
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
 
+CREATE INDEX IF NOT EXISTS idx_linked_tasks_status ON linked_tasks(status);
+CREATE INDEX IF NOT EXISTS idx_linked_tasks_last_run_at ON linked_tasks(last_run_at DESC);
+COMMENT ON TABLE linked_tasks IS 'Orchestration DAGs that chain multiple flow_tasks';
+
+-- Steps (nodes) — one row per flow_task placed on the canvas
+CREATE TABLE IF NOT EXISTS linked_task_steps (
+    id SERIAL PRIMARY KEY,
+    linked_task_id INTEGER NOT NULL REFERENCES linked_tasks(id) ON DELETE CASCADE,
+    flow_task_id   INTEGER NOT NULL REFERENCES flow_tasks(id)   ON DELETE CASCADE,
+    pos_x FLOAT NOT NULL DEFAULT 0,
+    pos_y FLOAT NOT NULL DEFAULT 0,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_linked_task_steps_linked_task_id ON linked_task_steps(linked_task_id);
+COMMENT ON TABLE linked_task_steps IS 'Canvas nodes in a linked_task DAG — each references one flow_task';
+
+-- Edges — dependency connections between steps
+CREATE TABLE IF NOT EXISTS linked_task_edges (
+    id SERIAL PRIMARY KEY,
+    linked_task_id INTEGER NOT NULL REFERENCES linked_tasks(id)        ON DELETE CASCADE,
+    source_step_id INTEGER NOT NULL REFERENCES linked_task_steps(id)   ON DELETE CASCADE,
+    target_step_id INTEGER NOT NULL REFERENCES linked_task_steps(id)   ON DELETE CASCADE,
+    condition VARCHAR(20) NOT NULL DEFAULT 'ON_SUCCESS', -- ON_SUCCESS | ALWAYS
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    CONSTRAINT uq_linked_task_edge UNIQUE (source_step_id, target_step_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_linked_task_edges_linked_task_id ON linked_task_edges(linked_task_id);
+COMMENT ON TABLE linked_task_edges IS 'DAG edges: ON_SUCCESS = run target only if source succeeded; ALWAYS = run regardless';
+
+-- Run history — one row per triggered execution
+CREATE TABLE IF NOT EXISTS linked_task_run_history (
+    id SERIAL PRIMARY KEY,
+    linked_task_id INTEGER NOT NULL REFERENCES linked_tasks(id) ON DELETE CASCADE,
+    trigger_type VARCHAR(20) NOT NULL DEFAULT 'MANUAL',
+    status VARCHAR(20) NOT NULL DEFAULT 'RUNNING', -- RUNNING, SUCCESS, FAILED, CANCELLED
+    celery_task_id VARCHAR(255) NULL,
+    started_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    finished_at TIMESTAMPTZ NULL,
+    error_message TEXT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_linked_task_run_history_linked_task_id ON linked_task_run_history(linked_task_id);
+CREATE INDEX IF NOT EXISTS idx_linked_task_run_history_status ON linked_task_run_history(status);
+CREATE INDEX IF NOT EXISTS idx_linked_task_run_history_started_at ON linked_task_run_history(started_at DESC);
+COMMENT ON TABLE linked_task_run_history IS 'Execution history for each linked_task DAG run';
+
+-- Step log — per-step status within a run
+CREATE TABLE IF NOT EXISTS linked_task_run_step_log (
+    id SERIAL PRIMARY KEY,
+    run_history_id           INTEGER NOT NULL REFERENCES linked_task_run_history(id) ON DELETE CASCADE,
+    linked_task_id           INTEGER NOT NULL REFERENCES linked_tasks(id)            ON DELETE CASCADE,
+    step_id                  INTEGER NOT NULL REFERENCES linked_task_steps(id)       ON DELETE CASCADE,
+    flow_task_id             INTEGER NOT NULL REFERENCES flow_tasks(id)              ON DELETE CASCADE,
+    flow_task_run_history_id INTEGER NULL     REFERENCES flow_task_run_history(id)   ON DELETE SET NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'PENDING', -- PENDING, RUNNING, SUCCESS, FAILED, SKIPPED
+    celery_task_id VARCHAR(255) NULL,
+    started_at TIMESTAMPTZ NULL,
+    finished_at TIMESTAMPTZ NULL,
+    error_message TEXT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_linked_task_run_step_log_run_history_id ON linked_task_run_step_log(run_history_id);
+CREATE INDEX IF NOT EXISTS idx_linked_task_run_step_log_step_id ON linked_task_run_step_log(step_id);
+COMMENT ON TABLE linked_task_run_step_log IS 'Per-step execution logs within a linked_task run';
 
 
