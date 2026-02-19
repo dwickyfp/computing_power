@@ -23,6 +23,7 @@ import {
     Check,
     GitBranch,
     X,
+    Square,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { formatDistanceToNow, format } from 'date-fns'
@@ -191,10 +192,20 @@ function RunHistoryPanel({
 
 function RunRow({ run, detail }: { run: LinkedTaskRunHistory; detail: LinkedTaskDetail }) {
     const [expanded, setExpanded] = useState(false)
+    const queryClient = useQueryClient()
     const failedLog = run.step_logs.find(l => l.status === 'FAILED')
     const duration = run.finished_at && run.started_at
         ? Math.round((new Date(run.finished_at).getTime() - new Date(run.started_at).getTime()) / 1000)
         : null
+
+    const cancelMutation = useMutation({
+        mutationFn: () => linkedTasksRepo.cancelRun(detail.id, run.id),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['linked-task-runs', detail.id] })
+            queryClient.invalidateQueries({ queryKey: ['linked-task', detail.id] })
+        },
+        onError: () => toast.error('Failed to cancel run'),
+    })
 
     return (
         <div className="border-b border-border/40 last:border-0 group">
@@ -225,6 +236,19 @@ function RunRow({ run, detail }: { run: LinkedTaskRunHistory; detail: LinkedTask
                         <AlertCircle className="h-3 w-3 shrink-0" />
                         <span className="truncate">Error in step #{failedLog.step_id}</span>
                     </div>
+                )}
+                {run.status === 'RUNNING' && (
+                    <button
+                        onClick={(e) => { e.stopPropagation(); cancelMutation.mutate() }}
+                        disabled={cancelMutation.isPending}
+                        title="Cancel run"
+                        className="flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium text-orange-500 bg-orange-500/10 border border-orange-500/20 hover:bg-orange-500/20 transition-colors disabled:opacity-50"
+                    >
+                        {cancelMutation.isPending
+                            ? <Loader2 className="h-3 w-3 animate-spin" />
+                            : <Square className="h-3 w-3 fill-orange-500" />}
+                        <span>Cancel</span>
+                    </button>
                 )}
                 <ChevronLeft className={cn("h-4 w-4 text-muted-foreground transition-transform duration-200", expanded ? "-rotate-90" : "rotate-0")} />
             </button>

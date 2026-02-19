@@ -59,7 +59,7 @@ def _get_linked_task(db, linked_task_id: int) -> dict | None:
 def _get_steps(db, linked_task_id: int) -> list[dict]:
     rows = db.execute(
         text(
-            "SELECT id, linked_task_id, flow_task_id, label "
+            "SELECT id, linked_task_id, flow_task_id "
             "FROM linked_task_steps WHERE linked_task_id = :lt_id"
         ),
         {"lt_id": linked_task_id},
@@ -81,7 +81,7 @@ def _get_edges(db, linked_task_id: int) -> list[dict]:
 def _create_step_log(db, run_history_id: int, linked_task_id: int, step_id: int, flow_task_id: int) -> int:
     row = db.execute(
         text(
-            "INSERT INTO linked_task_run_step_logs "
+            "INSERT INTO linked_task_run_step_log "
             "(run_history_id, linked_task_id, step_id, flow_task_id, status, created_at, updated_at) "
             "VALUES (:rh, :lt, :step, :ft, :status, :now, :now) RETURNING id"
         ),
@@ -122,7 +122,7 @@ def _update_step_log(db, step_log_id: int, status: str, error: str | None = None
         updates["celery_task_id"] = celery_task_id
 
     db.execute(
-        text(f"UPDATE linked_task_run_step_logs SET {', '.join(set_parts)} WHERE id = :id"),
+        text(f"UPDATE linked_task_run_step_log SET {', '.join(set_parts)} WHERE id = :id"),
         updates,
     )
     db.commit()
@@ -146,7 +146,7 @@ def _create_flow_task_run(db, flow_task_id: int) -> int:
 def _get_flow_task_graph(db, flow_task_id: int) -> dict:
     row = db.execute(
         text(
-            "SELECT nodes_json, edges_json FROM flow_task_graphs "
+            "SELECT nodes_json, edges_json FROM flow_task_graph "
             "WHERE flow_task_id = :ft_id LIMIT 1"
         ),
         {"ft_id": flow_task_id},

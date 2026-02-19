@@ -161,4 +161,8 @@ export const linkedTasksRepo = {
             params: { page, page_size: pageSize },
         })
     },
+
+    cancelRun(linkedTaskId: number, runId: number) {
+        return api.post<LinkedTaskRunHistory>(`/linked-tasks/${linkedTaskId}/runs/${runId}/cancel`)
+    },
 }

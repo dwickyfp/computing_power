@@ -8,6 +8,9 @@ from zoneinfo import ZoneInfo
 
 from sqlalchemy.orm import Session
 
+from celery import Celery
+
+from app.core.config import settings
 from app.core.exceptions import EntityNotFoundError
 from app.core.logging import get_logger
 from app.domain.models.linked_task import (
@@ -24,6 +27,9 @@ from app.domain.schemas.linked_task import LinkedTaskCreate, LinkedTaskUpdate, L
 
 logger = get_logger(__name__)
 TZ = ZoneInfo("Asia/Jakarta")
+
+# Initialize Celery client for sending tasks to worker
+celery_client = Celery("backend", broker=settings.celery_broker_url)
 
 
 class LinkedTaskService:
@@ -119,9 +125,9 @@ class LinkedTaskService:
         self.db.commit()
         self.db.refresh(run)
 
-        # Dispatch Celery task
-        from app.tasks.linked_task.task import execute_linked_task_task
-        celery_task = execute_linked_task_task.apply_async(
+        # Dispatch Celery task using send_task to allow loose coupling
+        result = celery_client.send_task(
+            "worker.linked_task.execute",
             kwargs={
                 "linked_task_id": linked_task_id,
                 "run_history_id": run.id,
@@ -130,11 +136,40 @@ class LinkedTaskService:
         )
 
         # Save celery task id
-        run.celery_task_id = celery_task.id
+        run.celery_task_id = result.id
         self.db.commit()
         self.db.refresh(run)
 
-        logger.info(f"LinkedTask triggered: id={linked_task_id} run={run.id} celery={celery_task.id}")
+        logger.info(f"LinkedTask triggered: id={linked_task_id} run={run.id} celery={result.id}")
+        return run
+
+    def cancel_run(self, linked_task_id: int, run_id: int) -> LinkedTaskRunHistory:
+        """Cancel a running linked task by revoking its Celery task."""
+        from datetime import datetime
+
+        task = self.get_linked_task(linked_task_id)
+        run = self.run_repo.get(run_id)
+        if not run or run.linked_task_id != linked_task_id:
+            raise EntityNotFoundError(f"Run {run_id} not found for LinkedTask {linked_task_id}")
+        if run.status != "RUNNING":
+            raise ValueError(f"Run {run_id} is not running (status={run.status})")
+
+        # Revoke the Celery task
+        if run.celery_task_id:
+            celery_client.control.revoke(run.celery_task_id, terminate=True, signal="SIGTERM")
+            logger.info(f"Revoked celery task: {run.celery_task_id}")
+
+        # Mark run as CANCELLED
+        run.status = "CANCELLED"
+        run.finished_at = datetime.now(TZ)
+        run.error_message = "Cancelled by user"
+
+        # Reset linked task status to IDLE
+        task.status = LinkedTaskStatus.IDLE
+        self.db.commit()
+        self.db.refresh(run)
+
+        logger.info(f"LinkedTask run cancelled: linked_task_id={linked_task_id} run_id={run_id}")
         return run
 
     def get_run_history(self, linked_task_id: int, page: int = 1, page_size: int = 20):

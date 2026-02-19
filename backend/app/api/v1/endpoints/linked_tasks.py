@@ -206,3 +206,30 @@ def get_run_history(
         )
     except EntityNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+
+
+# ─── Cancel Run ────────────────────────────────────────────────────────────────
+
+@router.post(
+    "/{linked_task_id}/runs/{run_id}/cancel",
+    response_model=LinkedTaskRunHistoryResponse,
+    summary="Cancel a running linked task run",
+)
+def cancel_run(
+    linked_task_id: int,
+    run_id: int,
+    service: LinkedTaskService = Depends(get_linked_task_service),
+) -> LinkedTaskRunHistoryResponse:
+    try:
+        run = service.cancel_run(linked_task_id, run_id)
+        return LinkedTaskRunHistoryResponse.from_orm(run)
+    except EntityNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
+    except Exception as e:
+        logger.error(f"Failed to cancel run {run_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to cancel run",
+        )
