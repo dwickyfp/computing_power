@@ -140,6 +140,15 @@ def execute_node_preview(
         # so target_cte will always be the LAST CTE in cte_sql_parts)
         target_cte = compiler.cte_map.get(node_id)
         if not target_cte:
+            # Output nodes don't have CTEs — preview their upstream input instead
+            node = next((n for n in nodes if n["id"] == node_id), None)
+            if node and node.get("type") == "output":
+                # Find the upstream node connected to this output
+                upstream = [e["source"] for e in edges if e["target"] == node_id]
+                if upstream:
+                    target_cte = compiler.cte_map.get(upstream[0])
+
+        if not target_cte:
             raise ValueError(
                 f"Node '{node_id}' not found in compiled graph or has no CTE. "
                 f"Available CTEs: {list(compiler.cte_map.keys())}"
@@ -236,6 +245,15 @@ def execute_node_schema(
         compiler = GraphCompiler({"nodes": nodes, "edges": edges}).compile()
 
         target_cte = compiler.cte_map.get(node_id)
+        if not target_cte:
+            # Output nodes don't have CTEs — preview their upstream input instead
+            node = next((n for n in nodes if n["id"] == node_id), None)
+            if node and node.get("type") == "output":
+                # Find the upstream node connected to this output
+                upstream = [e["source"] for e in edges if e["target"] == node_id]
+                if upstream:
+                    target_cte = compiler.cte_map.get(upstream[0])
+
         if not target_cte:
             raise ValueError(
                 f"Node '{node_id}' not found in compiled graph. "
