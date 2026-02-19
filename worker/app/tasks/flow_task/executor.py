@@ -211,6 +211,8 @@ def execute_flow_task(
 
     conn: Optional[duckdb.DuckDBPyConnection] = None
 
+    from app.core.concurrency import acquire_duckdb_slot, release_duckdb_slot
+    acquire_duckdb_slot()
     try:
         conn = _setup_duckdb_connection()
 
@@ -263,17 +265,20 @@ def execute_flow_task(
             }
 
             try:
-                # Attach destination if not already done
-                dest_alias = attached_output_aliases.get(destination_id, f"__out_{idx}")
-                if destination_id not in attached_output_aliases:
-                    dest_alias = _attach_output_destination(
-                        conn, destination_id, output_alias=dest_alias
-                    )
-                    attached_output_aliases[destination_id] = dest_alias
-
-                # Determine destination type
+                # Determine destination type first (needed for attach decision)
                 dest_type = _get_destination_type(destination_id)
                 writer = DestinationWriterRegistry.get_writer(dest_type)
+
+                # Attach destination if not already done
+                # Skip for non-DuckDB writers (e.g. Snowflake uses native connector)
+                dest_alias = f"__out_{idx}"
+                if dest_type not in ("SNOWFLAKE",):
+                    dest_alias = attached_output_aliases.get(destination_id, dest_alias)
+                    if destination_id not in attached_output_aliases:
+                        dest_alias = _attach_output_destination(
+                            conn, destination_id, output_alias=dest_alias
+                        )
+                        attached_output_aliases[destination_id] = dest_alias
 
                 # Get row count before writing
                 row_count_in = writer.get_row_count(
@@ -290,6 +295,7 @@ def execute_flow_task(
                     write_mode=write_mode,
                     upsert_keys=upsert_keys,
                     output_alias=dest_alias,
+                    destination_id=destination_id,
                 )
 
                 total_output_records += rows_written
@@ -384,6 +390,9 @@ def execute_flow_task(
                 conn.close()
             except Exception:
                 pass
+        release_duckdb_slot()
+        from app.tasks.flow_task.connection_factory import cleanup_temp_files
+        cleanup_temp_files()
 
 
 def _get_destination_type(destination_id: Optional[int]) -> str:

@@ -4,7 +4,7 @@ SQL Lineage Parser for Worker.
 Uses sqlglot to parse custom SQL and extract column-level lineage.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 try:
@@ -76,7 +76,7 @@ class LineageParser:
             "output_columns": self.source_columns.copy(),
             "column_lineage": column_lineage,
             "referenced_tables": [self.source_table],
-            "parsed_at": datetime.utcnow().isoformat(),
+            "parsed_at": datetime.now(timezone.utc).isoformat(),
         }
 
     def _parse_sql(self, sql: str) -> dict[str, Any]:
@@ -106,7 +106,7 @@ class LineageParser:
             "output_columns": list(output_columns.keys()),
             "column_lineage": column_lineage,
             "referenced_tables": tables,
-            "parsed_at": datetime.utcnow().isoformat(),
+            "parsed_at": datetime.now(timezone.utc).isoformat(),
         }
 
     def _extract_tables(self, parsed: "exp.Expression") -> list[str]:
@@ -183,7 +183,7 @@ class LineageParser:
             "output_columns": [],
             "column_lineage": {},
             "referenced_tables": [self.source_table],
-            "parsed_at": datetime.utcnow().isoformat(),
+            "parsed_at": datetime.now(timezone.utc).isoformat(),
         }
 
 

@@ -12,8 +12,8 @@ import time
 import uvicorn
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-from celery import Celery
 
+from app.celery_app import celery_app as _worker_celery_app
 from app.config.settings import settings
 
 logger = logging.getLogger(__name__)
@@ -24,21 +24,6 @@ app = FastAPI(title="Rosetta Worker Health API")
 _health_cache: Optional[dict] = None
 _health_cache_time: float = 0
 _cache_ttl: float = 3.0
-
-# Reuse Celery app instance instead of creating new one each time
-_celery_app: Optional[Celery] = None
-
-
-def get_celery_app() -> Celery:
-    """Get or create reusable Celery app instance for health checks."""
-    global _celery_app
-    if _celery_app is None:
-        _celery_app = Celery(
-            "health_checker",
-            broker=settings.celery_broker_url,
-            backend=settings.celery_result_backend,
-        )
-    return _celery_app
 
 
 @app.get("/health")
@@ -57,8 +42,8 @@ async def health_check():
         return _health_cache
 
     try:
-        # Use reusable Celery app connection
-        celery_app = get_celery_app()
+        # Use shared Celery app from worker
+        celery_app = _worker_celery_app
 
         # Try inspector with reduced timeout to avoid blocking health API
         # Note: inspector.ping() can be unreliable even when workers are functioning

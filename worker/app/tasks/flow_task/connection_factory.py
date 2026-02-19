@@ -12,12 +12,36 @@ from __future__ import annotations
 
 import os
 import tempfile
+import threading
 from abc import ABC, abstractmethod
 from typing import Any, Dict, Optional, Tuple
 
 import structlog
 
 logger = structlog.get_logger(__name__)
+
+# Thread-local storage for tracking temp files created during ATTACH operations
+_thread_local = threading.local()
+
+
+def _track_temp_file(path: str) -> None:
+    """Track a temp file for later cleanup (per-thread)."""
+    if not hasattr(_thread_local, "temp_files"):
+        _thread_local.temp_files = []
+    _thread_local.temp_files.append(path)
+
+
+def cleanup_temp_files() -> None:
+    """Remove all temp files created by the current thread's ATTACH operations."""
+    files = getattr(_thread_local, "temp_files", [])
+    for f in files:
+        try:
+            if os.path.exists(f):
+                os.unlink(f)
+        except Exception:
+            pass
+    _thread_local.temp_files = []
+
 
 # ─── Adapter base + registry ───────────────────────────────────────────────────
 
@@ -128,7 +152,6 @@ class SnowflakeAdapter(BaseConnectionAdapter):
             )
 
         # If we have content, write to a temp file (DuckDB needs a path for key-pair)
-        _tmp_path: Optional[str] = None
         if private_key_content and not private_key_path:
             tmp = tempfile.NamedTemporaryFile(
                 suffix=".p8", delete=False, mode="w", prefix="rsa_"
@@ -136,7 +159,7 @@ class SnowflakeAdapter(BaseConnectionAdapter):
             tmp.write(private_key_content)
             tmp.close()
             private_key_path = tmp.name
-            _tmp_path = tmp.name
+            _track_temp_file(tmp.name)
 
         conn_str_parts = [
             f"account={account}",
@@ -153,18 +176,7 @@ class SnowflakeAdapter(BaseConnectionAdapter):
         ro_flag = ", READ_ONLY" if read_only else ""
         attach_sql = f"ATTACH '{conn_str}' AS {alias} (TYPE snowflake{ro_flag})"
 
-        # We store tmp path on instance to allow cleanup (called by executor)
-        self._tmp_key_path = _tmp_path
         return attach_sql, None
-
-    def cleanup(self) -> None:
-        """Remove any temp key files created during attach SQL generation."""
-        tmp = getattr(self, "_tmp_key_path", None)
-        if tmp and os.path.exists(tmp):
-            try:
-                os.unlink(tmp)
-            except Exception:
-                pass
 
 
 # ─── Registry ─────────────────────────────────────────────────────────────────

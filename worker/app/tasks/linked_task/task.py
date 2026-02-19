@@ -18,6 +18,7 @@ logger = structlog.get_logger(__name__)
     name="worker.linked_task.execute",
     bind=True,
     max_retries=0,
+    reject_on_worker_lost=False,  # Don't re-queue (would cause duplicate executions)
     queue="default",
     acks_late=True,
 )

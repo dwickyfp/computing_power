@@ -30,11 +30,34 @@ FORBIDDEN_KEYWORDS = [
     "MERGE",
     "REPLACE",
     "COPY",
+    "EXPORT",
+]
+
+# DuckDB-specific dangerous functions that could read/write external files
+FORBIDDEN_FUNCTIONS = [
+    "read_csv",
+    "read_csv_auto",
+    "read_parquet",
+    "read_json",
+    "read_json_auto",
+    "read_text",
+    "read_blob",
+    "write_csv",
+    "write_parquet",
+    "copy_to",
+    "copy_from",
+    "http_get",
+    "http_post",
 ]
 
 # Pattern to match forbidden keywords as standalone words
 _FORBIDDEN_PATTERN = re.compile(
     r"\b(" + "|".join(FORBIDDEN_KEYWORDS) + r")\b",
+    re.IGNORECASE,
+)
+
+_FORBIDDEN_FUNC_PATTERN = re.compile(
+    r"\b(" + "|".join(FORBIDDEN_FUNCTIONS) + r")\s*\(",
     re.IGNORECASE,
 )
 
@@ -65,4 +88,11 @@ def validate_preview_sql(sql: str) -> None:
         raise ValidationError(
             f"SQL contains forbidden keyword: {match.group(1).upper()}. "
             f"Preview only supports SELECT queries."
+        )
+
+    func_match = _FORBIDDEN_FUNC_PATTERN.search(cleaned)
+    if func_match:
+        raise ValidationError(
+            f"SQL contains forbidden function: {func_match.group(1)}. "
+            f"File access and HTTP functions are not allowed in preview."
         )

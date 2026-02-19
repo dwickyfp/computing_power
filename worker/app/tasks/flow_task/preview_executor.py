@@ -107,6 +107,8 @@ def execute_node_preview(
     start_time = time.time()
     conn: Optional[duckdb.DuckDBPyConnection] = None
 
+    from app.core.concurrency import acquire_duckdb_slot, release_duckdb_slot
+    acquire_duckdb_slot()
     try:
         conn = _setup_duckdb_connection()
 
@@ -209,6 +211,9 @@ def execute_node_preview(
                 conn.close()
             except Exception:
                 pass
+        release_duckdb_slot()
+        from app.tasks.flow_task.connection_factory import cleanup_temp_files
+        cleanup_temp_files()
 
 
 def execute_node_schema(
@@ -231,6 +236,8 @@ def execute_node_schema(
         }
     """
     conn: Optional[duckdb.DuckDBPyConnection] = None
+    from app.core.concurrency import acquire_duckdb_slot, release_duckdb_slot
+    acquire_duckdb_slot()
     try:
         conn = _setup_duckdb_connection()
 
@@ -284,6 +291,9 @@ def execute_node_schema(
                 conn.close()
             except Exception:
                 pass
+        release_duckdb_slot()
+        from app.tasks.flow_task.connection_factory import cleanup_temp_files
+        cleanup_temp_files()
 
 
 def _serialize_row(row: tuple) -> List[Any]:

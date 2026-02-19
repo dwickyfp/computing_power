@@ -15,7 +15,7 @@ import duckdb
 
 from app.config.settings import get_settings
 from app.core.database import get_db_session
-from app.core.exceptions import ConnectionError, PreviewExecutionError, ValidationError
+from app.core.exceptions import WorkerConnectionError, PreviewExecutionError, ValidationError
 from app.core.redis_client import get_redis
 from app.core.security import decrypt_value
 from app.tasks.preview.serializer import (
@@ -157,9 +157,12 @@ def execute_preview(
 
         logger.info("Executing preview query", query=final_query)
 
-        # 5. Execute in DuckDB
-        con = duckdb.connect(":memory:")
+        # 5. Execute in DuckDB (acquire concurrency slot)
+        from app.core.concurrency import acquire_duckdb_slot, release_duckdb_slot
+        acquire_duckdb_slot()
+        con = None
         try:
+            con = duckdb.connect(":memory:")
             # Configure DuckDB for performance
             con.execute(f"SET memory_limit='{settings.duckdb_memory_limit}'")
             con.execute(f"SET threads={getattr(settings, 'duckdb_threads', 4)}")
@@ -172,7 +175,7 @@ def execute_preview(
                     f"ATTACH '{source_config['conn_str']}' AS {source_prefix} (TYPE postgres, READ_ONLY);"
                 )
             except Exception as e:
-                raise ConnectionError(f"Could not connect to source database: {e}")
+                raise WorkerConnectionError(f"Could not connect to source database: {e}")
 
             # Attach destination (non-critical)
             try:
@@ -185,7 +188,9 @@ def execute_preview(
             # Execute query
             result = con.execute(final_query).fetch_arrow_table()
         finally:
-            con.close()
+            if con:
+                con.close()
+            release_duckdb_slot()
 
         # 6. Process results
         columns = result.column_names
@@ -209,7 +214,7 @@ def execute_preview(
 
         return response
 
-    except (ValidationError, ConnectionError) as e:
+    except (ValidationError, WorkerConnectionError) as e:
         logger.warning("Preview validation/connection error", error=str(e))
         return serialize_error(str(e))
     except Exception as e:
@@ -240,7 +245,7 @@ def _fetch_connection_configs(
         ).fetchone()
 
         if not row:
-            raise ConnectionError(f"Source {source_id} not found")
+            raise WorkerConnectionError(f"Source {source_id} not found")
 
         src_pass = decrypt_value(row.pg_password) if row.pg_password else ""
         source_config = {
@@ -258,7 +263,7 @@ def _fetch_connection_configs(
         ).fetchone()
 
         if not dest_row:
-            raise ConnectionError(f"Destination {destination_id} not found")
+            raise WorkerConnectionError(f"Destination {destination_id} not found")
 
         dest_cfg = dest_row.config
         if isinstance(dest_cfg, str):
@@ -296,9 +301,13 @@ def _filter_sql_to_where_clause(filter_sql: str) -> str:
         column = c.get("column", "")
         if not column:
             return ""
+        # Sanitize column name to prevent injection
+        if not re.match(r'^[a-zA-Z_][a-zA-Z0-9_."]*$', column):
+            return ""
         op = c.get("operator", "").upper()
-        value = c.get("value", "")
-        value2 = c.get("value2", "")
+        # Escape single quotes in values to prevent SQL injection
+        value = c.get("value", "").replace("'", "''")
+        value2 = c.get("value2", "").replace("'", "''")
 
         if op in ("IS NULL", "IS NOT NULL"):
             return f"{column} {op}"

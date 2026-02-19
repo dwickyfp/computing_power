@@ -33,6 +33,7 @@ class BaseDestinationWriter(ABC):
         write_mode: str,
         upsert_keys: List[str],
         output_alias: str,
+        destination_id: Optional[int] = None,
     ) -> int:
         """
         Write data from the CTE to the destination table.
@@ -91,6 +92,7 @@ class PostgresDestinationWriter(BaseDestinationWriter):
         write_mode: str,
         upsert_keys: List[str],
         output_alias: str,
+        destination_id: Optional[int] = None,
     ) -> int:
         fqt = f"{output_alias}.{schema_name}.{target_table}"
         row_count = self.get_row_count(conn, cte_prefix, source_cte)
@@ -212,6 +214,203 @@ class PostgresDestinationWriter(BaseDestinationWriter):
         return self.get_row_count(conn, cte_prefix, source_cte)
 
 
+# ─── Snowflake Writer ─────────────────────────────────────────────────────────
+
+
+class SnowflakeDestinationWriter(BaseDestinationWriter):
+    """
+    Write to a Snowflake destination via snowflake-connector-python.
+
+    DuckDB's Snowflake extension is read-only, so data is fetched from
+    the CTE as a pandas DataFrame and written via write_pandas().
+    """
+
+    def get_row_count(
+        self,
+        conn: duckdb.DuckDBPyConnection,
+        cte_prefix: str,
+        source_cte: str,
+    ) -> int:
+        count_sql = f"{cte_prefix}\nSELECT COUNT(*) FROM {source_cte}"
+        result = conn.execute(count_sql).fetchone()
+        return result[0] if result else 0
+
+    def write(
+        self,
+        conn: duckdb.DuckDBPyConnection,
+        source_cte: str,
+        cte_prefix: str,
+        target_table: str,
+        schema_name: str,
+        write_mode: str,
+        upsert_keys: List[str],
+        output_alias: str,
+        destination_id: Optional[int] = None,
+    ) -> int:
+        import json as _json
+
+        import snowflake.connector
+        from cryptography.hazmat.backends import default_backend
+        from cryptography.hazmat.primitives import serialization
+        from snowflake.connector.pandas_tools import write_pandas
+
+        from app.core.database import get_db_session
+        from app.core.security import decrypt_value
+
+        # Fetch data from DuckDB CTE as pandas DataFrame
+        fetch_sql = f"{cte_prefix}\nSELECT * FROM {source_cte}"
+        arrow_table = conn.execute(fetch_sql).fetch_arrow_table()
+        df = arrow_table.to_pandas()
+
+        if df.empty:
+            return 0
+
+        if destination_id is None:
+            raise ValueError("SnowflakeDestinationWriter requires destination_id")
+
+        # Fetch destination config
+        with get_db_session() as db:
+            from sqlalchemy import text
+
+            row = db.execute(
+                text("SELECT config FROM destinations WHERE id = :id"),
+                {"id": destination_id},
+            ).fetchone()
+
+        if not row:
+            raise ValueError(f"Destination {destination_id} not found")
+
+        config = row.config if isinstance(row.config, dict) else _json.loads(row.config)
+
+        # Build Snowflake connection
+        conn_params: dict = {
+            "user": config.get("user"),
+            "account": config.get("account"),
+            "role": config.get("role"),
+            "warehouse": config.get("warehouse"),
+            "database": config.get("database"),
+            "schema": schema_name or config.get("schema"),
+            "application": "Rosetta_ETL",
+        }
+
+        if config.get("private_key"):
+            pk_str = config["private_key"].strip().replace("\\n", "\n")
+            if not pk_str.startswith("-----"):
+                try:
+                    pk_str = decrypt_value(pk_str)
+                except Exception:
+                    pass
+            passphrase = None
+            if config.get("private_key_passphrase"):
+                pp = config["private_key_passphrase"]
+                try:
+                    pp = decrypt_value(pp)
+                except Exception:
+                    pass
+                passphrase = pp.encode()
+            p_key = serialization.load_pem_private_key(
+                pk_str.encode(), password=passphrase, backend=default_backend()
+            )
+            conn_params["private_key"] = p_key.private_bytes(
+                encoding=serialization.Encoding.DER,
+                format=serialization.PrivateFormat.PKCS8,
+                encryption_algorithm=serialization.NoEncryption(),
+            )
+        elif config.get("password"):
+            try:
+                conn_params["password"] = decrypt_value(config["password"])
+            except Exception:
+                conn_params["password"] = config["password"]
+
+        sf_conn = snowflake.connector.connect(**conn_params)
+        try:
+            if write_mode == "REPLACE":
+                cursor = sf_conn.cursor()
+                cursor.execute(
+                    f"TRUNCATE TABLE IF EXISTS {schema_name}.{target_table}"
+                )
+                cursor.close()
+
+            if write_mode == "UPSERT":
+                rows_written = self._upsert_snowflake(
+                    sf_conn, df, target_table, schema_name, upsert_keys
+                )
+            else:
+                # APPEND or REPLACE (after truncate)
+                _success, _num_chunks, num_rows, _ = write_pandas(
+                    sf_conn,
+                    df,
+                    target_table,
+                    schema=schema_name,
+                    auto_create_table=False,
+                )
+                rows_written = num_rows
+
+            logger.info(
+                "Snowflake write complete",
+                target_table=target_table,
+                schema=schema_name,
+                write_mode=write_mode,
+                rows_written=rows_written,
+            )
+            return rows_written
+        finally:
+            sf_conn.close()
+
+    def _upsert_snowflake(
+        self,
+        sf_conn: Any,
+        df: Any,
+        target_table: str,
+        schema_name: str,
+        upsert_keys: List[str],
+    ) -> int:
+        """Snowflake MERGE INTO via temporary staging table."""
+        import random
+        import string
+
+        from snowflake.connector.pandas_tools import write_pandas
+
+        stage_table = f"__tmp_{''.join(random.choices(string.ascii_lowercase, k=8))}"
+        cursor = sf_conn.cursor()
+        try:
+            cursor.execute(
+                f"CREATE TEMPORARY TABLE {schema_name}.{stage_table} "
+                f"LIKE {schema_name}.{target_table}"
+            )
+            write_pandas(sf_conn, df, stage_table, schema=schema_name)
+
+            cols = list(df.columns)
+            on_clause = " AND ".join(f"tgt.{k} = src.{k}" for k in upsert_keys)
+            non_key_cols = [c for c in cols if c not in upsert_keys]
+            update_expr = ", ".join(f"tgt.{c} = src.{c}" for c in non_key_cols)
+            col_list = ", ".join(cols)
+            src_col_list = ", ".join(f"src.{c}" for c in cols)
+
+            merge_sql = (
+                f"MERGE INTO {schema_name}.{target_table} AS tgt "
+                f"USING {schema_name}.{stage_table} AS src "
+                f"ON ({on_clause}) "
+            )
+            if non_key_cols:
+                merge_sql += f"WHEN MATCHED THEN UPDATE SET {update_expr} "
+            merge_sql += (
+                f"WHEN NOT MATCHED THEN INSERT ({col_list}) "
+                f"VALUES ({src_col_list})"
+            )
+
+            cursor.execute(merge_sql)
+            return len(df)
+        finally:
+            try:
+                cursor.execute(
+                    f"DROP TABLE IF EXISTS {schema_name}.{stage_table}"
+                )
+            except Exception:
+                pass
+            cursor.close()
+
+
 # ─── Registry ─────────────────────────────────────────────────────────────────
 
 class DestinationWriterRegistry:
@@ -220,7 +419,7 @@ class DestinationWriterRegistry:
     _registry: Dict[str, type] = {
         "POSTGRES": PostgresDestinationWriter,
         "POSTGRESQL": PostgresDestinationWriter,
-        # Future: "SNOWFLAKE": SnowflakeDestinationWriter,
+        "SNOWFLAKE": SnowflakeDestinationWriter,
     }
 
     @classmethod

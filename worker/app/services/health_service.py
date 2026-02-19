@@ -34,7 +34,7 @@ def get_health_status() -> dict[str, Any]:
 
     # Check Celery broker
     try:
-        inspector = celery_app.control.inspect()
+        inspector = celery_app.control.inspect(timeout=2.0)
         active = inspector.active()
         status["components"]["celery"] = {
             "status": "up",
@@ -73,7 +73,7 @@ def get_health_status() -> dict[str, Any]:
 def get_worker_stats() -> dict[str, Any]:
     """Get worker statistics from Celery inspect."""
     try:
-        inspector = celery_app.control.inspect()
+        inspector = celery_app.control.inspect(timeout=2.0)
         return {
             "active": inspector.active() or {},
             "reserved": inspector.reserved() or {},

@@ -35,17 +35,18 @@ celery_app.conf.update(
     result_extended=True,  # Store task args, name, etc.
     # Task routing
     task_routes={
-        "app.tasks.preview.task.*": {"queue": "preview"},
+        "worker.preview.execute": {"queue": "preview"},
+        "worker.flow_task.preview": {"queue": "preview"},
     },
     # Default queue
     task_default_queue="default",
     # Worker settings - HIGH PERFORMANCE
     worker_concurrency=settings.worker_concurrency,
     worker_prefetch_multiplier=4,  # Prefetch more tasks for throughput
-    worker_max_tasks_per_child=1000,  # Restart worker after N tasks (memory cleanup)
+    # Note: worker_max_tasks_per_child has no effect with --pool=threads
     # Task behavior
     task_acks_late=True,  # Ack after task completes (crash safety)
-    task_reject_on_worker_lost=False,  # Don't re-queue on worker crash
+    task_reject_on_worker_lost=True,  # Re-queue on worker crash (overridden per-task for flow/linked)
     task_track_started=True,  # Track STARTED state
     # Broker settings - HIGH PERFORMANCE
     broker_pool_limit=20,  # Connection pool to Redis

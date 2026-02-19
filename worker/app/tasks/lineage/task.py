@@ -4,7 +4,7 @@ Lineage generation Celery task.
 Parses custom SQL to extract column-level lineage metadata.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 import json
 
@@ -67,7 +67,7 @@ def generate_lineage_task(
             source_columns=source_columns or [],
         )
 
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
 
         # Update database with lineage result
         with get_db_session() as db:
@@ -132,7 +132,7 @@ def generate_lineage_task(
                     {
                         "id": table_sync_id,
                         "error": str(e)[:1000],
-                        "updated_at": datetime.utcnow(),
+                        "updated_at": datetime.now(timezone.utc),
                     },
                 )
         except Exception as db_error:

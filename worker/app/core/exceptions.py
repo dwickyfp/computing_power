@@ -13,9 +13,13 @@ class PreviewExecutionError(WorkerError):
     pass
 
 
-class ConnectionError(WorkerError):
+class WorkerConnectionError(WorkerError):
     """Database connection error."""
     pass
+
+
+# Backward-compatible alias (avoid shadowing built-in ConnectionError)
+ConnectionError = WorkerConnectionError
 
 
 class ValidationError(WorkerError):
