@@ -4,7 +4,7 @@
 #
 # Options:
 #   --concurrency N    Number of worker threads (default: 8)
-#   --queues Q         Comma-separated queue names (default: preview,default)
+#   --queues Q         Comma-separated queue names (default: preview,default,orchestration)
 #   --loglevel LEVEL   Log level (default: info)
 #   --beat             Also start Celery Beat scheduler
 
@@ -12,8 +12,8 @@ set -e
 
 cd "$(dirname "$0")"
 
-CONCURRENCY=${WORKER_CONCURRENCY:-8}
-QUEUES="preview,default"
+CONCURRENCY=${WORKER_CONCURRENCY:-10}
+QUEUES="preview,default,orchestration"
 LOGLEVEL=${LOG_LEVEL:-info}
 RUN_BEAT=false
 

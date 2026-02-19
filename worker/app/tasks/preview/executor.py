@@ -49,6 +49,7 @@ except ImportError:
 _conn_cache: dict[tuple[int, int], tuple[float, tuple[dict, dict]]] = {}
 _conn_cache_lock = threading.Lock()
 _CONN_CACHE_TTL = 60.0  # seconds
+_CONN_CACHE_MAX_SIZE = 64  # prevent unbounded growth
 
 
 def execute_preview(
@@ -267,6 +268,11 @@ def _fetch_connection_configs(
     result = _fetch_connection_configs_from_db(source_id, destination_id)
 
     with _conn_cache_lock:
+        # Evict oldest entries if cache is full
+        if len(_conn_cache) >= _CONN_CACHE_MAX_SIZE:
+            sorted_keys = sorted(_conn_cache, key=lambda k: _conn_cache[k][0])
+            for k in sorted_keys[: len(sorted_keys) // 2]:
+                del _conn_cache[k]
         _conn_cache[cache_key] = (now, result)
     return result
 

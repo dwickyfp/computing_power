@@ -217,6 +217,43 @@ def get_db_session() -> Generator[Session, None, None]:
         session.close()
 
 
+def get_db_session_readonly() -> Generator[Session, None, None]:
+    """
+    Dependency for getting a read-only database session.
+
+    Unlike get_db_session(), this does NOT call session.commit() on success.
+    Use for GET endpoints that only read data — avoids an unnecessary
+    COMMIT round-trip to PostgreSQL (~0.1-0.5ms per request).
+
+    Usage:
+        @app.get("/example")
+        def example(db: Session = Depends(get_db_session_readonly)):
+            return db.query(Model).all()
+    """
+    session = db_manager.session_factory()
+    try:
+        yield session
+    except HTTPException:
+        session.rollback()
+        raise
+    except RosettaException:
+        session.rollback()
+        raise
+    except SQLAlchemyError as e:
+        session.rollback()
+        logger.error("Database error during read-only session", extra={"error": str(e)})
+        raise DatabaseError(f"Database operation failed: {str(e)}") from e
+    except Exception as e:
+        session.rollback()
+        logger.error(
+            "Unexpected error during read-only database session",
+            extra={"error": str(e)},
+        )
+        raise
+    finally:
+        session.close()
+
+
 def get_db() -> Generator[Session, None, None]:
     """
     Alias for get_db_session for backward compatibility.

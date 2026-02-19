@@ -29,6 +29,18 @@ logger = structlog.get_logger(__name__)
 TZ = ZoneInfo("Asia/Jakarta")
 MAX_POLL_TIMEOUT = 3600    # 1 hour max wait per step
 
+# ─── Deadlock prevention ──────────────────────────────────────────────────────
+# Linked task orchestration threads call celery_result.get() which blocks the
+# Celery thread slot while waiting for child flow tasks.  If all thread slots
+# are consumed by waiting parents, child tasks can never start → deadlock.
+#
+# Mitigation applied:
+# 1. Linked tasks are routed to the 'orchestration' queue.
+# 2. start.sh passes '-Q preview,default,orchestration' so children on
+#    'default' always have capacity.
+# 3. worker_concurrency must be >= duckdb_max_concurrent +
+#    linked_task_max_parallel_steps + headroom (see config/settings.py).
+
 # Edge condition constants (mirrors LinkedTaskEdgeCondition enum)
 CONDITION_ON_SUCCESS = "ON_SUCCESS"
 CONDITION_ALWAYS = "ALWAYS"

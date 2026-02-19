@@ -8,7 +8,7 @@ from typing import List
 
 from fastapi import APIRouter, Depends, Query, status
 
-from app.api.deps import get_pipeline_service
+from app.api.deps import get_pipeline_service, get_pipeline_service_readonly
 from app.core.config import get_settings
 from app.domain.schemas.pipeline import (
     PipelineCreate,
@@ -111,7 +111,7 @@ def list_pipelines(
     limit: int = Query(
         100, ge=1, le=1000, description="Maximum number of items to return"
     ),
-    service: PipelineService = Depends(get_pipeline_service),
+    service: PipelineService = Depends(get_pipeline_service_readonly),
 ) -> List[PipelineResponse]:
     """
     List all pipelines with pagination.
@@ -135,7 +135,7 @@ def list_pipelines(
     description="Get a specific pipeline by ID with full details",
 )
 def get_pipeline(
-    pipeline_id: int, service: PipelineService = Depends(get_pipeline_service)
+    pipeline_id: int, service: PipelineService = Depends(get_pipeline_service_readonly)
 ) -> PipelineResponse:
     """
     Get pipeline by ID.
@@ -274,7 +274,7 @@ def refresh_pipeline(
 def get_pipeline_stats(
     pipeline_id: int,
     days: int = Query(7, ge=1, le=30, description="Number of days to look back"),
-    service: PipelineService = Depends(get_pipeline_service),
+    service: PipelineService = Depends(get_pipeline_service_readonly),
 ) -> List[dict]:
     """
     Get pipeline data flow statistics.

@@ -56,8 +56,11 @@ class WorkerSettings(BaseSettings):
     )
 
     # Worker Behavior
+    # Concurrency must be >= duckdb_max_concurrent + linked_task_max_parallel_steps
+    # + headroom to prevent deadlocks between linked task orchestration threads
+    # and child flow task execution threads.
     worker_concurrency: int = Field(
-        default=8, ge=1, le=32, description="Number of concurrent worker threads"
+        default=10, ge=1, le=32, description="Number of concurrent worker threads"
     )
     task_soft_time_limit: int = Field(
         default=120, ge=10, le=600, description="Soft time limit for tasks (seconds)"

@@ -10,7 +10,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Path, status
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_db, get_pipeline_service
+from app.api.deps import get_db, get_db_readonly, get_pipeline_service, get_pipeline_service_readonly
 from app.core.config import get_settings
 from app.core.logging import get_logger
 from app.domain.models.pipeline import PipelineDestinationTableSync
@@ -31,8 +31,8 @@ def get_table_sync_details(
     pipeline_id: int = Path(..., description="Pipeline ID"),
     dest_id: int = Path(..., description="Pipeline Destination ID"),
     sync_id: int = Path(..., description="Table Sync Config ID"),
-    db: Session = Depends(get_db),
-    pipeline_service: PipelineService = Depends(get_pipeline_service),
+    db: Session = Depends(get_db_readonly),
+    pipeline_service: PipelineService = Depends(get_pipeline_service_readonly),
 ) -> dict[str, Any]:
     """Get complete details for a table sync config including lineage."""
     sync = (
@@ -117,7 +117,7 @@ def get_table_lineage(
     pipeline_id: int = Path(..., description="Pipeline ID"),
     dest_id: int = Path(..., description="Pipeline Destination ID"),
     sync_id: int = Path(..., description="Table Sync Config ID"),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db_readonly),
 ) -> dict[str, Any]:
     """Get lineage metadata for a specific table sync config."""
     sync = (

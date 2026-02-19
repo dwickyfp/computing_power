@@ -55,8 +55,20 @@ def _setup_duckdb_connection() -> duckdb.DuckDBPyConnection:
 
     Extensions are INSTALL-ed once at worker startup (see celery_app.py
     worker_init signal). Here we only LOAD them, which is fast.
+
+    Memory and thread limits are applied to prevent OOM when multiple
+    DuckDB connections run concurrently (max_concurrent × memory_limit
+    must fit within available system RAM).
     """
+    from app.config.settings import get_settings
+
+    settings = get_settings()
     conn = duckdb.connect(database=":memory:")
+
+    # Apply resource limits — critical for concurrent execution safety
+    conn.execute(f"SET memory_limit='{settings.duckdb_memory_limit}';")
+    conn.execute(f"SET threads={settings.duckdb_threads};")
+
     # Load required extensions (already installed at worker startup)
     for ext in _REQUIRED_EXTENSIONS:
         try:
@@ -411,6 +423,7 @@ import threading as _th
 _dest_type_cache: dict[int, tuple[float, str]] = {}
 _dest_type_lock = _th.Lock()
 _DEST_TYPE_TTL = 60.0  # seconds
+_DEST_TYPE_MAX_SIZE = 128  # prevent unbounded growth
 
 
 def _get_destination_type_cached(destination_id: int) -> str:
@@ -437,6 +450,11 @@ def _get_destination_type_cached(destination_id: int) -> str:
         result = "POSTGRES"
 
     with _dest_type_lock:
+        # Evict oldest entries if cache is full
+        if len(_dest_type_cache) >= _DEST_TYPE_MAX_SIZE:
+            sorted_keys = sorted(_dest_type_cache, key=lambda k: _dest_type_cache[k][0])
+            for k in sorted_keys[: len(sorted_keys) // 2]:
+                del _dest_type_cache[k]
         _dest_type_cache[destination_id] = (now, result)
     return result
 

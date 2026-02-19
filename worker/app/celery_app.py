@@ -32,25 +32,26 @@ celery_app.conf.update(
     task_soft_time_limit=settings.task_soft_time_limit,
     task_time_limit=settings.task_hard_time_limit,
     # Result settings
-    result_expires=3600,  # Results expire after 1 hour
+    result_expires=600,  # Results expire after 10 minutes (reduces Redis memory)
     result_extended=True,  # Store task args, name, etc.
     # Task routing
     task_routes={
         "worker.preview.execute": {"queue": "preview"},
         "worker.flow_task.preview": {"queue": "preview"},
+        "worker.linked_task.execute": {"queue": "orchestration"},
     },
     # Default queue
     task_default_queue="default",
     # Worker settings - HIGH PERFORMANCE
     worker_concurrency=settings.worker_concurrency,
-    worker_prefetch_multiplier=4,  # Prefetch more tasks for throughput
+    worker_prefetch_multiplier=1,  # Keep low for CPU/memory-intensive DuckDB tasks
     # Note: worker_max_tasks_per_child has no effect with --pool=threads
     # Task behavior
     task_acks_late=True,  # Ack after task completes (crash safety)
     task_reject_on_worker_lost=True,  # Re-queue on worker crash (overridden per-task for flow/linked)
     task_track_started=True,  # Track STARTED state
     # Broker settings - HIGH PERFORMANCE
-    broker_pool_limit=20,  # Connection pool to Redis
+    broker_pool_limit=10,  # Connection pool to Redis (1 per worker thread + headroom)
     broker_connection_retry_on_startup=True,
     broker_transport_options={
         "visibility_timeout": 3600,  # 1 hour task visibility
@@ -91,6 +92,8 @@ def _preinstall_duckdb_extensions(**kwargs):
     try:
         import duckdb
         con = duckdb.connect(":memory:")
+        # Limit memory during extension install to avoid transient spike
+        con.execute("SET memory_limit='256MB';")
         for ext in ("postgres", "httpfs"):
             try:
                 con.execute(f"INSTALL {ext};")

@@ -11,9 +11,10 @@ while waiting for child flow-task Celery results — doing so causes deadlock
 when all slots are consumed by waiting parents and children can't acquire.
 """
 
-import resource
+import os
 import sys
 import threading
+import time
 from contextlib import contextmanager
 from typing import Generator
 
@@ -28,7 +29,12 @@ _init_lock = threading.Lock()
 _total_acquired = 0
 _total_released = 0
 _total_waited = 0
+_total_memory_delays = 0
 _metrics_lock = threading.Lock()
+
+# Memory backpressure settings
+_MEMORY_BACKPRESSURE_DELAY = 1.0  # seconds to wait when under memory pressure
+_MEMORY_BACKPRESSURE_MAX_RETRIES = 5  # max retries before proceeding anyway
 
 
 def _get_semaphore() -> threading.Semaphore:
@@ -61,8 +67,26 @@ def duckdb_slot() -> Generator[None, None, None]:
 
 
 def acquire_duckdb_slot() -> None:
-    """Acquire a DuckDB execution slot. Blocks if all slots are in use."""
-    global _total_acquired, _total_waited
+    """Acquire a DuckDB execution slot. Blocks if all slots are in use.
+
+    Also applies memory backpressure: if current RSS exceeds the warning
+    threshold, delays acquisition to allow in-flight tasks to complete
+    and release memory before starting new ones.
+    """
+    global _total_acquired, _total_waited, _total_memory_delays
+
+    # Memory backpressure: delay if under memory pressure
+    for _ in range(_MEMORY_BACKPRESSURE_MAX_RETRIES):
+        if not check_memory_pressure():
+            break
+        with _metrics_lock:
+            _total_memory_delays += 1
+        logger.warning(
+            "Memory backpressure — delaying DuckDB slot acquisition",
+            delay_seconds=_MEMORY_BACKPRESSURE_DELAY,
+        )
+        time.sleep(_MEMORY_BACKPRESSURE_DELAY)
+
     sem = _get_semaphore()
     if not sem.acquire(blocking=False):
         with _metrics_lock:
@@ -88,7 +112,9 @@ def get_concurrency_metrics() -> dict:
             "total_acquired": _total_acquired,
             "total_released": _total_released,
             "total_waited": _total_waited,
+            "total_memory_delays": _total_memory_delays,
             "slots_in_use": _total_acquired - _total_released,
+            "current_rss_mb": round(get_memory_usage_mb(), 1),
         }
 
 
@@ -112,21 +138,20 @@ def check_memory_pressure() -> bool:
 
     Returns True if memory is under pressure (above threshold).
     Logs a warning when threshold is crossed.
+
+    Uses /proc/self/statm on Linux for accurate *current* RSS
+    (not peak like ru_maxrss). Falls back to psutil or resource module.
     """
     try:
-        rusage = resource.getrusage(resource.RUSAGE_SELF)
-        maxrss_kb = rusage.ru_maxrss
-        # macOS reports bytes, Linux reports KB
-        if sys.platform == "darwin":
-            maxrss_mb = maxrss_kb / (1024 * 1024)
-        else:
-            maxrss_mb = maxrss_kb / 1024
+        current_mb = get_memory_usage_mb()
+        if current_mb <= 0:
+            return False
 
         threshold = _get_memory_warning_mb()
-        if maxrss_mb > threshold:
+        if current_mb > threshold:
             logger.warning(
                 "Memory pressure detected",
-                rss_mb=round(maxrss_mb, 1),
+                rss_mb=round(current_mb, 1),
                 threshold_mb=threshold,
             )
             return True
@@ -136,11 +161,43 @@ def check_memory_pressure() -> bool:
 
 
 def get_memory_usage_mb() -> float:
-    """Return current RSS memory usage in MB."""
+    """Return current RSS memory usage in MB (not peak).
+
+    Priority:
+    1. /proc/self/statm (Linux) — most accurate, no imports
+    2. psutil (cross-platform) — if installed
+    3. resource.getrusage — fallback (reports peak on macOS)
+    """
+    # Method 1: Linux /proc/self/statm (current RSS, not peak)
     try:
+        if sys.platform == "linux":
+            with open("/proc/self/statm", "r") as f:
+                parts = f.read().split()
+                # Second field is RSS in pages
+                rss_pages = int(parts[1])
+                page_size = os.sysconf("SC_PAGE_SIZE")
+                return (rss_pages * page_size) / (1024 * 1024)
+    except Exception:
+        pass
+
+    # Method 2: psutil (accurate current RSS, cross-platform)
+    try:
+        import psutil
+        process = psutil.Process()
+        return process.memory_info().rss / (1024 * 1024)
+    except ImportError:
+        pass
+    except Exception:
+        pass
+
+    # Method 3: resource.getrusage fallback (peak RSS on macOS, current on Linux)
+    try:
+        import resource
         rusage = resource.getrusage(resource.RUSAGE_SELF)
         if sys.platform == "darwin":
+            # macOS reports bytes (peak RSS)
             return rusage.ru_maxrss / (1024 * 1024)
+        # Linux reports KB
         return rusage.ru_maxrss / 1024
     except Exception:
         return 0.0

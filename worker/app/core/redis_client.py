@@ -35,8 +35,8 @@ class RedisClient:
                             settings.redis_url,
                             decode_responses=True,
                             max_connections=settings.redis_max_connections,
-                            socket_connect_timeout=3,
-                            socket_timeout=3,
+                            socket_connect_timeout=5,
+                            socket_timeout=10,
                             retry_on_timeout=True,
                         )
                         cls._instance = redis_lib.Redis(
