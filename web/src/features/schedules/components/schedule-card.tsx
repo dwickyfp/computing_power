@@ -86,7 +86,7 @@ export function ScheduleCard({ schedule }: Props) {
     })()
 
     return (
-        <Card className='group relative overflow-hidden transition-all hover:shadow-md border-border/60'>
+        <Card className='group relative overflow-hidden transition-all hover:shadow-md border-border/60 bg-sidebar'>
             {/* Status Strip */}
             <div className={cn(
                 "absolute left-0 top-0 bottom-0 w-1 transition-colors",
