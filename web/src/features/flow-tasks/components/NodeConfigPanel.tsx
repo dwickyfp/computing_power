@@ -132,7 +132,7 @@ function MultiColumnSelect({
 // ─── Main panel ────────────────────────────────────────────────────────────────
 
 export function NodeConfigPanel() {
-    const { nodes, selectedNodeId, selectNode, updateNodeData, removeNode, requestPreview } =
+    const { nodes, selectedNodeId, selectNode, updateNodeData, removeNode, requestPreview, setConfigPanelWidth } =
         useFlowTaskStore()
 
     // Extract flow task ID from route params
@@ -172,6 +172,11 @@ export function NodeConfigPanel() {
     }, [panelWidth])
 
     useEffect(() => {
+        // Init store with default
+        setConfigPanelWidth(DEFAULT_WIDTH)
+    }, [setConfigPanelWidth])
+
+    useEffect(() => {
         const onMove = (e: MouseEvent) => {
             if (!dragging.current || !innerRef.current) return
             // Cancel any pending frame — use latest mouse position only
@@ -194,7 +199,11 @@ export function NodeConfigPanel() {
                 rafId.current = null
             }
             // Commit final value to state — one re-render, panel keeps its size on remount
-            if (innerRef.current) setPanelWidth(innerRef.current.offsetWidth)
+            if (innerRef.current) {
+                const w = innerRef.current.offsetWidth
+                setPanelWidth(w)
+                setConfigPanelWidth(w)
+            }
         }
         window.addEventListener('mousemove', onMove)
         window.addEventListener('mouseup', onUp)
@@ -202,7 +211,7 @@ export function NodeConfigPanel() {
             window.removeEventListener('mousemove', onMove)
             window.removeEventListener('mouseup', onUp)
         }
-    }, [])
+    }, [setConfigPanelWidth])
 
     const selectedNode = (nodes ?? []).find((n) => n.id === selectedNodeId)
     if (!selectedNode) return null

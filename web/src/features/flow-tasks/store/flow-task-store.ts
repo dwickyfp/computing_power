@@ -14,6 +14,9 @@ interface PreviewState {
     isLoading: boolean
     nodeId: string | null
     nodeLabel: string | null
+    nodeType: string | null
+    /** Unique token per preview request — used to discard stale Celery results. */
+    previewSessionId: string | null
     celeryTaskId: string | null
     result: NodePreviewResult | null
     error: string | null
@@ -42,7 +45,7 @@ interface FlowTaskStore {
     markClean: () => void
 
     // Actions — preview
-    openPreview: (nodeId: string, nodeLabel: string, celeryTaskId: string) => void
+    openPreview: (nodeId: string, nodeLabel: string, nodeType: string, celeryTaskId: string) => string
     setPreviewLoading: (loading: boolean) => void
     setPreviewResult: (result: NodePreviewResult) => void
     setPreviewError: (error: string) => void
@@ -50,6 +53,10 @@ interface FlowTaskStore {
     // Slot set by FlowCanvas so NodeConfigPanel can trigger preview
     requestPreview: ((nodeId: string, nodeLabel: string) => void) | null
     setRequestPreview: (fn: ((nodeId: string, nodeLabel: string) => void) | null) => void
+
+    // Config Panel state
+    configPanelWidth: number
+    setConfigPanelWidth: (width: number) => void
 }
 
 export const useFlowTaskStore = create<FlowTaskStore>((set) => ({
@@ -58,12 +65,15 @@ export const useFlowTaskStore = create<FlowTaskStore>((set) => ({
     edges: [],
     selectedNodeId: null,
     isDirty: false,
+    configPanelWidth: 288, // Default width
 
     preview: {
         isOpen: false,
         isLoading: false,
         nodeId: null,
         nodeLabel: null,
+        nodeType: null,
+        previewSessionId: null,
         celeryTaskId: null,
         result: null,
         error: null,
@@ -132,20 +142,29 @@ export const useFlowTaskStore = create<FlowTaskStore>((set) => ({
     requestPreview: null,
     setRequestPreview: (fn) => set({ requestPreview: fn }),
 
+    // ─── Config Panel actions ──────────────────────────────────────────────────
+
+    setConfigPanelWidth: (width) => set({ configPanelWidth: width }),
+
     // ─── Preview actions ────────────────────────────────────────────────────────
 
-    openPreview: (nodeId, nodeLabel, celeryTaskId) =>
+    openPreview: (nodeId, nodeLabel, nodeType, celeryTaskId) => {
+        const previewSessionId = crypto.randomUUID()
         set({
             preview: {
                 isOpen: true,
                 isLoading: true,
                 nodeId,
                 nodeLabel,
+                nodeType,
+                previewSessionId,
                 celeryTaskId,
                 result: null,
                 error: null,
             },
-        }),
+        })
+        return previewSessionId
+    },
 
     setPreviewLoading: (loading) =>
         set((state) => ({
@@ -169,6 +188,8 @@ export const useFlowTaskStore = create<FlowTaskStore>((set) => ({
                 isLoading: false,
                 nodeId: null,
                 nodeLabel: null,
+                nodeType: null,
+                previewSessionId: null,
                 celeryTaskId: null,
                 result: null,
                 error: null,

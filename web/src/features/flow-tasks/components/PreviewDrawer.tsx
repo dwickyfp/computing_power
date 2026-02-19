@@ -13,8 +13,31 @@ const MIN_HEIGHT = 120
 const MAX_HEIGHT = 600
 const DEFAULT_HEIGHT = 224  // h-56
 
+// ─── Node type badge ───────────────────────────────────────────────────────────
+
+const NODE_TYPE_COLORS: Record<string, string> = {
+    input:     'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300',
+    clean:     'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300',
+    aggregate: 'bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300',
+    join:      'bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300',
+    union:     'bg-teal-100 text-teal-700 dark:bg-teal-900/40 dark:text-teal-300',
+    pivot:     'bg-pink-100 text-pink-700 dark:bg-pink-900/40 dark:text-pink-300',
+    new_rows:  'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-300',
+    output:    'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300',
+}
+
+function NodeTypeBadge({ nodeType }: { nodeType: string }) {
+    const colorClass = NODE_TYPE_COLORS[nodeType] ?? 'bg-muted text-muted-foreground'
+    return (
+        <span className={cn('inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide', colorClass)}>
+            {nodeType.replace('_', ' ')}
+        </span>
+    )
+}
+
+
 export function PreviewDrawer() {
-    const { preview, closePreview } = useFlowTaskStore()
+    const { preview, closePreview, configPanelWidth, selectedNodeId } = useFlowTaskStore()
     const [height, setHeight] = useState(DEFAULT_HEIGHT)
     const [visible, setVisible] = useState(false)
     const dragging = useRef(false)
@@ -56,13 +79,17 @@ export function PreviewDrawer() {
 
     if (!preview.isOpen) return null
 
+    // Calculate right offset: if a node is selected, the config panel is open
+    const rightOffset = selectedNodeId ? configPanelWidth : 0
+
     return (
         <div
             className={cn(
-                'absolute bottom-0 left-0 right-0 z-10 border-t border-border bg-background shadow-lg',
-                'transition-transform duration-300 ease-out',
+                'absolute bottom-0 left-0 right-0 z-10 border-t border-x border-border bg-background shadow-lg mx-4 rounded-t-xl',
+                'transition-transform duration-300 ease-out', // animate right/transform
                 visible ? 'translate-y-0' : 'translate-y-full'
             )}
+            style={{ right: rightOffset }}
         >
             {/* Resize handle */}
             <div
@@ -76,6 +103,9 @@ export function PreviewDrawer() {
             <div className="flex items-center justify-between px-4 py-2 border-b border-border/50">
                 <div className="flex items-center gap-2">
                     <span className="text-sm font-semibold">Preview</span>
+                    {preview.nodeType && (
+                        <NodeTypeBadge nodeType={preview.nodeType} />
+                    )}
                     {preview.nodeLabel && (
                         <span className="text-xs text-muted-foreground">— {preview.nodeLabel}</span>
                     )}

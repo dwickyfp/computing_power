@@ -9,6 +9,7 @@ flow building" without saving the graph.
 from __future__ import annotations
 
 import time
+from collections import deque
 from typing import Any, Dict, List, Optional
 
 import duckdb
@@ -23,6 +24,59 @@ from app.tasks.flow_task.executor import (
 )
 
 logger = structlog.get_logger(__name__)
+
+
+# ─── Upstream graph trimming ───────────────────────────────────────────────────
+
+def _get_upstream_subgraph(
+    target_node_id: str,
+    nodes: List[dict],
+    edges: List[dict],
+) -> tuple[List[dict], List[dict]]:
+    """
+    Return only the nodes and edges that are ancestors of (or equal to)
+    `target_node_id` in the data-flow graph.
+
+    This prevents compilation errors from unrelated or downstream nodes
+    (e.g. a Join with no join keys) from breaking a preview of an upstream
+    Input node.
+
+    Algorithm: reverse-BFS from `target_node_id` along **incoming** edges.
+    """
+    # Build backwards adjacency: node_id -> list of source node_ids (parents)
+    parents: Dict[str, List[str]] = {n["id"]: [] for n in nodes}
+    for edge in edges:
+        tgt = edge.get("target", "")
+        src = edge.get("source", "")
+        if tgt and src and tgt in parents:
+            parents[tgt].append(src)
+
+    # BFS backwards
+    visited: set = set()
+    queue: deque = deque([target_node_id])
+    while queue:
+        nid = queue.popleft()
+        if nid in visited:
+            continue
+        visited.add(nid)
+        for parent_id in parents.get(nid, []):
+            if parent_id not in visited:
+                queue.append(parent_id)
+
+    # Filter nodes and edges to the ancestor set
+    filtered_nodes = [n for n in nodes if n["id"] in visited]
+    filtered_edges = [
+        e for e in edges
+        if e.get("source") in visited and e.get("target") in visited
+    ]
+
+    logger.debug(
+        "Upstream subgraph trimmed",
+        target=target_node_id,
+        total_nodes=len(nodes),
+        kept_nodes=len(filtered_nodes),
+    )
+    return filtered_nodes, filtered_edges
 
 
 def execute_node_preview(
@@ -56,16 +110,23 @@ def execute_node_preview(
     try:
         conn = _setup_duckdb_connection()
 
-        nodes = graph_snapshot.get("nodes", [])
-        edges = graph_snapshot.get("edges", [])
+        # Extract nodes/edges from the graph snapshot
+        nodes: list = graph_snapshot.get("nodes", [])
+        edges: list = graph_snapshot.get("edges", [])
 
-        # Inject ATTACH config into input nodes
+        # Trim graph to only the target node + its upstream ancestors.
+        # This prevents compilation errors from downstream nodes that are
+        # partially configured (e.g. a Join with no join keys).
+        nodes, edges = _get_upstream_subgraph(node_id, nodes, edges)
+
+        # Inject ATTACH config into input nodes (after trimming)
         _inject_attach_configs(nodes, conn)
 
-        # Compile the (potentially partial) graph
+        # Compile only the upstream subgraph
         compiler = GraphCompiler({"nodes": nodes, "edges": edges}).compile()
 
-        # Resolve target CTE
+        # Resolve target CTE (the trimmed graph contains only ancestors + target,
+        # so target_cte will always be the LAST CTE in cte_sql_parts)
         target_cte = compiler.cte_map.get(node_id)
         if not target_cte:
             raise ValueError(
@@ -73,10 +134,8 @@ def execute_node_preview(
                 f"Available CTEs: {list(compiler.cte_map.keys())}"
             )
 
-        # Build SQL up to (and including) the target CTE
+        # Build SQL for all CTEs up to and including the target CTE
         partial_prefix = compiler.get_cte_sql_up_to(target_cte)
-        if not partial_prefix:
-            raise ValueError(f"Could not build SQL up to CTE '{target_cte}'")
 
         preview_sql = f"{partial_prefix}\nSELECT * FROM {target_cte} LIMIT {limit}"
         logger.debug(f"Preview SQL for node {node_id}:\n{preview_sql}")
@@ -155,6 +214,9 @@ def execute_node_schema(
         nodes = graph_snapshot.get("nodes", [])
         edges = graph_snapshot.get("edges", [])
 
+        # Trim to only the upstream ancestors of the target node
+        nodes, edges = _get_upstream_subgraph(node_id, nodes, edges)
+
         _inject_attach_configs(nodes, conn)
 
         compiler = GraphCompiler({"nodes": nodes, "edges": edges}).compile()
@@ -167,8 +229,6 @@ def execute_node_schema(
             )
 
         partial_prefix = compiler.get_cte_sql_up_to(target_cte)
-        if not partial_prefix:
-            raise ValueError(f"Could not build SQL up to CTE '{target_cte}'")
 
         schema_sql = f"{partial_prefix}\nSELECT * FROM {target_cte} LIMIT 0"
         logger.debug(f"Schema SQL for node {node_id}:\n{schema_sql}")

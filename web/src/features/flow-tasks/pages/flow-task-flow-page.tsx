@@ -99,6 +99,9 @@ function FlowCanvas({ flowTaskId }: { flowTaskId: number }) {
     const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
     const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null)
     const [lastSavedLabel, setLastSavedLabel] = useState('')
+    /** Tracks the session ID of the most recently triggered preview. Used to
+     *  discard Celery task results that arrive from an older preview request. */
+    const previewSessionRef = useRef<string | null>(null)
 
     // Update relative label every 10 s
     useEffect(() => {
@@ -224,9 +227,17 @@ function FlowCanvas({ flowTaskId }: { flowTaskId: number }) {
         if (!previewStatusData) return
         if (previewStatusData.state === 'SUCCESS') {
             setPreviewPollingTaskId(null)
+            // Guard: ignore stale results from a previous preview session.
+            // If the user triggered a new preview before this one resolved,
+            // previewSessionRef.current will no longer match the session ID
+            // that was active when this particular Celery task was submitted.
+            const currentSession = useFlowTaskStore.getState().preview.previewSessionId
+            if (currentSession !== previewSessionRef.current) return
             setPreviewResult(previewStatusData.result as never)
         } else if (previewStatusData.state === 'FAILURE') {
             setPreviewPollingTaskId(null)
+            const currentSession = useFlowTaskStore.getState().preview.previewSessionId
+            if (currentSession !== previewSessionRef.current) return
             setPreviewError((previewStatusData.error as string) || 'Preview failed')
         }
     }, [previewStatusData, setPreviewResult, setPreviewError])
@@ -362,6 +373,8 @@ function FlowCanvas({ flowTaskId }: { flowTaskId: number }) {
     const handlePreviewNode = useCallback(
         async (nodeId: string, nodeLabel: string) => {
             const graphSnapshot: FlowGraph = { nodes, edges }
+            // Resolve the node type from the current graph state
+            const nodeType = nodes.find((n) => n.id === nodeId)?.type ?? 'unknown'
             try {
                 const resp = await flowTasksRepo.previewNode(flowTaskId, {
                     node_id: nodeId,
@@ -370,7 +383,10 @@ function FlowCanvas({ flowTaskId }: { flowTaskId: number }) {
                     limit: 500,
                 })
                 const { task_id } = resp.data
-                openPreview(nodeId, nodeLabel, task_id)
+                // openPreview now returns a unique session ID for this request
+                const sessionId = openPreview(nodeId, nodeLabel, nodeType, task_id)
+                // Record which session is "current" so the effect can guard stale results
+                previewSessionRef.current = sessionId
                 setPreviewPollingTaskId(task_id)
             } catch {
                 toast.error('Failed to submit preview')
