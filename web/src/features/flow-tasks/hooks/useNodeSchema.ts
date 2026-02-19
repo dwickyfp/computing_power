@@ -27,7 +27,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { useFlowTaskStore } from '../store/flow-task-store'
 import { flowTasksRepo } from '@/repo/flow-tasks'
-import type { FlowNode, ColumnInfo } from '@/repo/flow-tasks'
+import type { FlowNode, FlowEdge, ColumnInfo } from '@/repo/flow-tasks'
 
 export interface UseNodeSchemaResult {
     columns: ColumnInfo[]
@@ -97,6 +97,27 @@ function getSchemaFingerprint(node: FlowNode): Record<string, unknown> {
     }
 }
 
+// ─── Helper: Get Ancestors ─────────────────────────────────────────────────────
+
+function getAncestors(targetId: string, edges: FlowEdge[]): Set<string> {
+    const ancestors = new Set<string>()
+    const queue = [targetId]
+    ancestors.add(targetId)
+
+    while (queue.length > 0) {
+        const current = queue.shift()!
+        // Find edges where target is current (incoming edges)
+        const incoming = edges.filter((e) => e.target === current)
+        for (const edge of incoming) {
+            if (!ancestors.has(edge.source)) {
+                ancestors.add(edge.source)
+                queue.push(edge.source)
+            }
+        }
+    }
+    return ancestors
+}
+
 // ─── Hook ─────────────────────────────────────────────────────────────────────
 
 /**
@@ -146,17 +167,24 @@ export function useNodeSchema(
         hasConfiguredInput
 
     // ── Cache key ──────────────────────────────────────────────────────────────
-    // Uses schema fingerprints (not raw data) + edge topology.
-    // Non-schema fields (filter_expr, label, write_mode, …) are excluded so
-    // editing them never triggers a new DuckDB request.
+    // Optimization: The output schema of `nodeId` depends ONLY on `nodeId` itself
+    // and its upstream ancestors. Changes to downstream nodes or disjoint branches
+    // should NOT invalidate the cache.
+    
+    // 1. Find all ancestor nodes
+    const ancestorIds = nodeId ? getAncestors(nodeId, edges) : new Set<string>()
+
+    // 2. Filter nodes/edges for the fingerprint
+    const relevantNodes = (nodes ?? []).filter((n) => ancestorIds.has(n.id))
+    const relevantEdges = (edges ?? []).filter((e) => ancestorIds.has(e.source) && ancestorIds.has(e.target))
+
     const fingerprintKey = JSON.stringify({
-        nodes: (nodes ?? []).map((n) => ({
+        nodes: relevantNodes.map((n) => ({
             id: n.id,
             type: n.type,
             fp: getSchemaFingerprint(n),
         })),
-        // Edge topology affects which upstream CTEs are wired into this node
-        edges: (edges ?? []).map((e) => `${e.source}->${e.target}`),
+        edges: relevantEdges.map((e) => `${e.source}->${e.target}`),
     })
 
     const { data, isLoading, isError } = useQuery({

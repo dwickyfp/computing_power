@@ -154,9 +154,10 @@ function FlowCanvas({ flowTaskId }: { flowTaskId: number }) {
         closePreview,
     } = useFlowTaskStore()
 
-    // Always close the preview drawer when entering the flow editor
+    // Always close the preview drawer when entering, relative clean up on exit
     useEffect(() => {
         closePreview()
+        return () => selectNode(null)
     }, [])  // eslint-disable-line react-hooks/exhaustive-deps
 
     // Load graph from API

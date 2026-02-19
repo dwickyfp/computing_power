@@ -817,9 +817,26 @@ const AGG_FUNCTIONS = ['COUNT', 'COUNT_DISTINCT', 'SUM', 'AVG', 'MIN', 'MAX', 'F
 interface AggRow { column: string; function: string; alias: string }
 
 function AggregateConfig({ data, update, nodeId, flowTaskId }: ConfigFormProps) {
-    const { columns, isLoading } = useNodeSchema(flowTaskId, nodeId)
+    const { edges } = useFlowTaskStore()
+    // Find the upstream node connected to this aggregate node
+    const upstreamNodeId = edges.find((e) => e.target === nodeId)?.source
+    
+    // Use upstream node for schema (input schema), NOT current node
+    const { columns, isLoading } = useNodeSchema(flowTaskId, upstreamNodeId)
+    
     const groupBy: string[] = (data.group_by as string[]) || []
     const aggregations: AggRow[] = (data.aggregations as AggRow[]) || []
+
+    // Filter for numeric columns for aggregations (approximate check)
+    const numericColumns = columns.filter(c => {
+        const t = c.data_type.toLowerCase()
+        return t.includes('int') || 
+               t.includes('float') || 
+               t.includes('double') || 
+               t.includes('numeric') || 
+               t.includes('real') || 
+               t.includes('decimal')
+    })
 
     return (
         <>
@@ -834,29 +851,65 @@ function AggregateConfig({ data, update, nodeId, flowTaskId }: ConfigFormProps) 
 
             <Field label="Aggregations">
                 <div className="space-y-1.5">
+                    {/* Header Row */}
+                    <div className="grid grid-cols-[1.5fr_100px_1fr_28px] gap-2 px-1 mb-1">
+                        <Label className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Column</Label>
+                        <Label className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Func</Label>
+                        <Label className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Alias</Label>
+                        <span />
+                    </div>
+
                     {aggregations.map((row, i) => (
-                        <div key={i} className="flex gap-1 items-center">
+                        <div key={i} className="grid grid-cols-[1.5fr_100px_1fr_28px] gap-2 items-center group">
                             <ColumnSelect
-                                columns={columns}
+                                columns={numericColumns}
                                 value={row.column}
                                 onChange={(v) => {
                                     const next = [...aggregations]
-                                    next[i] = { ...next[i], column: v }
+                                    const currentAlias = next[i].alias
+                                    const func = next[i].function
+                                    
+                                    // Generate new alias if empty or looks like auto-generated
+                                    const isAuto = !currentAlias || /_\d+$/.test(currentAlias)
+                                    let newAlias = currentAlias
+                                    
+                                    if (isAuto && v) {
+                                        const cleanCol = v.replace(/\W+/g, '_')
+                                        const rand = Math.floor(Math.random() * 1000)
+                                        newAlias = `${cleanCol}_${func}_${rand}`
+                                    }
+
+                                    next[i] = { ...next[i], column: v, alias: newAlias }
                                     update({ aggregations: next })
                                 }}
                                 isLoading={isLoading}
-                                placeholder="column"
+                                placeholder="Col..."
+                                className="h-8 w-full py-1"
                             />
+
                             <Select
                                 value={row.function}
                                 onValueChange={(v) => {
                                     const next = [...aggregations]
-                                    next[i] = { ...next[i], function: v }
+                                    const col = next[i].column
+                                    const currentAlias = next[i].alias
+                                    
+                                    // Generate new alias if empty or looks like auto-generated
+                                    const isAuto = !currentAlias || /_\d+$/.test(currentAlias)
+                                    let newAlias = currentAlias
+
+                                    if (isAuto && col) {
+                                        const cleanCol = col.replace(/\W+/g, '_')
+                                        const rand = Math.floor(Math.random() * 1000)
+                                        newAlias = `${cleanCol}_${v}_${rand}`
+                                    }
+
+                                    next[i] = { ...next[i], function: v, alias: newAlias }
                                     update({ aggregations: next })
                                 }}
                             >
-                                <SelectTrigger className="h-7 text-xs w-24 shrink-0">
-                                    <SelectValue placeholder="func" />
+                                <SelectTrigger className="h-8 text-xs w-full py-1">
+                                    <SelectValue placeholder="Func" />
                                 </SelectTrigger>
                                 <SelectContent>
                                     {AGG_FUNCTIONS.map((f) => (
@@ -864,8 +917,9 @@ function AggregateConfig({ data, update, nodeId, flowTaskId }: ConfigFormProps) 
                                     ))}
                                 </SelectContent>
                             </Select>
+
                             <Input
-                                className="h-7 text-xs w-20 shrink-0"
+                                className="h-8 text-xs font-mono"
                                 value={row.alias}
                                 onChange={(e) => {
                                     const next = [...aggregations]
@@ -874,28 +928,31 @@ function AggregateConfig({ data, update, nodeId, flowTaskId }: ConfigFormProps) 
                                 }}
                                 placeholder="alias"
                             />
+
                             <Button
                                 variant="ghost" size="icon"
-                                className="h-7 w-7 shrink-0 hover:text-destructive"
+                                className="h-8 w-7 text-muted-foreground hover:text-destructive opacity-50 group-hover:opacity-100 transition-opacity"
                                 onClick={() =>
                                     update({ aggregations: aggregations.filter((_, j) => j !== i) })
                                 }
                             >
-                                <X className="h-3 w-3" />
+                                <X className="h-4 w-4" />
                             </Button>
                         </div>
                     ))}
-                    <Button
-                        variant="outline" size="sm"
-                        className="h-6 text-[11px] w-full gap-1"
-                        onClick={() =>
-                            update({
-                                aggregations: [...aggregations, { column: '', function: 'COUNT', alias: '' }],
-                            })
-                        }
-                    >
-                        <Plus className="h-3 w-3" /> Add aggregation
-                    </Button>
+                    <div className="pt-1">
+                        <Button
+                            variant="outline" size="sm"
+                            className="h-7 text-xs w-full gap-1.5 dashed border-muted-foreground/40 text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                            onClick={() =>
+                                update({
+                                    aggregations: [...aggregations, { column: '', function: 'COUNT', alias: 'count' }],
+                                })
+                            }
+                        >
+                            <Plus className="h-3.5 w-3.5" /> Add aggregation
+                        </Button>
+                    </div>
                 </div>
             </Field>
         </>

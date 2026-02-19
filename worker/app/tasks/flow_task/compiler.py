@@ -211,7 +211,9 @@ def _build_aggregate_cte(node: dict, pred_ctes: list) -> str:
         # Support both "function" (from NodeConfigPanel) and legacy "func" key
         func = (agg.get("function") or agg.get("func") or "COUNT").upper()
         col = agg.get("column", "*")
-        alias = agg.get("alias", f"{func.lower()}_{col}")
+        alias = agg.get("alias", "")
+        if not alias:
+            alias = f"{func.lower()}_{_safe_identifier(col)}"
         if func == "COUNT_DISTINCT":
             col_parts.append(f"COUNT(DISTINCT {col}) AS {alias}")
         else:
