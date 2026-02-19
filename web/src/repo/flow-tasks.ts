@@ -36,6 +36,7 @@ export interface FlowNodeData {
     schema_name?: string
     table_name?: string
     alias?: string
+    sample_limit?: number // for input node preview limit
     // clean node
     drop_nulls?: boolean
     deduplicate?: boolean

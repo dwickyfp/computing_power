@@ -8,6 +8,7 @@
  */
 
 import { useFlowTaskStore } from '../store/flow-task-store'
+import { cn } from '@/lib/utils'
 import { useQuery } from '@tanstack/react-query'
 import { useRef, useState, useEffect, useCallback } from 'react'
 import { Button } from '@/components/ui/button'
@@ -38,12 +39,14 @@ function ColumnSelect({
     onChange,
     placeholder = 'Select column…',
     isLoading = false,
+    className,
 }: {
     columns: ColumnInfo[]
     value: string
     onChange: (v: string) => void
     placeholder?: string
     isLoading?: boolean
+    className?: string
 }) {
     if (isLoading) {
         return (
@@ -54,7 +57,7 @@ function ColumnSelect({
     }
     return (
         <Select value={value || ''} onValueChange={onChange}>
-            <SelectTrigger className="h-7 text-xs">
+            <SelectTrigger className={cn("h-7 text-xs", className)}>
                 <SelectValue placeholder={placeholder} />
             </SelectTrigger>
             <SelectContent>
@@ -459,7 +462,7 @@ function InputConfig({ data, update, nodeId: _nodeId, flowTaskId: _flowTaskId }:
                         })
                     }
                 >
-                    <SelectTrigger className="h-7 text-xs">
+                    <SelectTrigger className="h-7 text-xs w-full">
                         <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -486,7 +489,7 @@ function InputConfig({ data, update, nodeId: _nodeId, flowTaskId: _flowTaskId }:
                         value={pgConnectionValue}
                         onValueChange={handlePgConnectionChange}
                     >
-                        <SelectTrigger className="h-7 text-xs">
+                        <SelectTrigger className="h-7 text-xs w-full">
                             <SelectValue placeholder="Select connection…" />
                         </SelectTrigger>
                         <SelectContent>
@@ -524,7 +527,7 @@ function InputConfig({ data, update, nodeId: _nodeId, flowTaskId: _flowTaskId }:
                             update({ destination_id: parseInt(v), table_name: undefined })
                         }
                     >
-                        <SelectTrigger className="h-7 text-xs">
+                        <SelectTrigger className="h-7 text-xs w-full">
                             <SelectValue placeholder="Select destination…" />
                         </SelectTrigger>
                         <SelectContent>
@@ -550,7 +553,7 @@ function InputConfig({ data, update, nodeId: _nodeId, flowTaskId: _flowTaskId }:
                             value={(data.table_name as string) || ''}
                             onValueChange={(v) => update({ table_name: v })}
                         >
-                            <SelectTrigger className="h-7 text-xs">
+                            <SelectTrigger className="h-7 text-xs w-full">
                                 <SelectValue placeholder="Select table…" />
                             </SelectTrigger>
                             <SelectContent>
@@ -589,6 +592,26 @@ function InputConfig({ data, update, nodeId: _nodeId, flowTaskId: _flowTaskId }:
                     onChange={(e) => update({ alias: e.target.value })}
                     placeholder="cte_alias"
                 />
+            </Field>
+
+            <Field label="Sample Limit (rows)">
+                <Select
+                    value={data.sample_limit ? String(data.sample_limit) : '0'}
+                    onValueChange={(v) => {
+                        const val = parseInt(v)
+                        update({ sample_limit: val || undefined })
+                    }}
+                >
+                    <SelectTrigger className="h-7 text-xs w-full">
+                        <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="100">100</SelectItem>
+                        <SelectItem value="200">200</SelectItem>
+                        <SelectItem value="500">500</SelectItem>
+                        <SelectItem value="0">No limit (Default)</SelectItem>
+                    </SelectContent>
+                </Select>
             </Field>
         </>
     )
@@ -937,7 +960,7 @@ function JoinConfig({ data, update, nodeId, flowTaskId }: ConfigFormProps) {
                     value={(data.join_type as string) || 'INNER'}
                     onValueChange={(v) => update({ join_type: v })}
                 >
-                    <SelectTrigger className="h-7 text-xs">
+                    <SelectTrigger className="h-7 text-xs w-full">
                         <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -983,6 +1006,7 @@ function JoinConfig({ data, update, nodeId, flowTaskId }: ConfigFormProps) {
                                     onChange={(v) => updatePair(i, 'left', v)}
                                     placeholder="Left col..."
                                     isLoading={leftLoading}
+                                    className="w-full"
                                 />
                             </div>
                             <span className="text-muted-foreground text-[10px]">=</span>
@@ -993,6 +1017,7 @@ function JoinConfig({ data, update, nodeId, flowTaskId }: ConfigFormProps) {
                                     onChange={(v) => updatePair(i, 'right', v)}
                                     placeholder="Right col..."
                                     isLoading={rightLoading}
+                                    className="w-full"
                                 />
                             </div>
                             <Button
@@ -1160,7 +1185,7 @@ function PivotConfig({ data, update, nodeId, flowTaskId }: ConfigFormProps) {
                     value={pivotType}
                     onValueChange={(v) => update({ pivot_type: v as 'PIVOT' | 'UNPIVOT' })}
                 >
-                    <SelectTrigger className="h-7 text-xs">
+                    <SelectTrigger className="h-7 text-xs w-full">
                         <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -1176,6 +1201,7 @@ function PivotConfig({ data, update, nodeId, flowTaskId }: ConfigFormProps) {
                     value={(data.pivot_column as string) || ''}
                     onChange={(v) => update({ pivot_column: v })}
                     isLoading={isLoading}
+                    className="w-full"
                 />
             </Field>
 
@@ -1185,6 +1211,7 @@ function PivotConfig({ data, update, nodeId, flowTaskId }: ConfigFormProps) {
                     value={(data.value_column as string) || ''}
                     onChange={(v) => update({ value_column: v })}
                     isLoading={isLoading}
+                    className="w-full"
                 />
             </Field>
 
@@ -1230,7 +1257,7 @@ function OutputConfig({ data, update }: ConfigFormProps) {
                         value={data.destination_id != null ? String(data.destination_id) : ''}
                         onValueChange={(v) => update({ destination_id: parseInt(v) })}
                     >
-                        <SelectTrigger className="h-7 text-xs">
+                        <SelectTrigger className="h-7 text-xs w-full">
                             <SelectValue placeholder="Select destination…" />
                         </SelectTrigger>
                         <SelectContent>
@@ -1266,7 +1293,7 @@ function OutputConfig({ data, update }: ConfigFormProps) {
                     value={(data.write_mode as string) || 'APPEND'}
                     onValueChange={(v) => update({ write_mode: v as WriteMode })}
                 >
-                    <SelectTrigger className="h-7 text-xs">
+                    <SelectTrigger className="h-7 text-xs w-full">
                         <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
