@@ -3,7 +3,7 @@ import {
     type ScheduleListItem,
     type ScheduleRunStatus,
 } from '@/repo/schedules'
-import { formatDistanceToNow } from 'date-fns'
+import { formatDistanceToNow, format } from 'date-fns'
 import {
     MoreVertical,
     Play,
@@ -28,6 +28,8 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { useSchedules } from './schedules-provider'
 import cronstrue from 'cronstrue'
+
+import parser from 'cron-parser'
 
 interface Props {
     schedule: ScheduleListItem
@@ -113,14 +115,56 @@ export function ScheduleCard({ schedule }: Props) {
                             <Clock className='h-3 w-3' />
                             <span>{cronHuman}</span>
                         </div>
-                        {schedule.next_run_at && (
-                            <span className='hidden sm:inline-block'>•</span>
-                        )}
-                        {schedule.next_run_at && (
-                            <span title={new Date(schedule.next_run_at).toLocaleString()}>
-                                Next: {formatDistanceToNow(new Date(schedule.next_run_at), { addSuffix: true })}
-                            </span>
-                        )}
+                        {(() => {
+                            // Last Run
+                            const sortedRuns = [...(schedule.run_history || [])].sort((a, b) =>
+                                new Date(b.triggered_at).getTime() - new Date(a.triggered_at).getTime()
+                            )
+                            const lastRun = sortedRuns[0]
+
+                            // Calculate Next Run client-side
+                            let nextRunDate: Date | null = null
+                            try {
+                                const options = {
+                                    currentDate: new Date(),
+                                    iterator: true
+                                }
+                                // Handle different module formats for cron-parser
+                                const cronParser = (parser as any).default || parser
+                                const interval = (cronParser as any).parseExpression ?
+                                    (cronParser as any).parseExpression(schedule.cron_expression, options) :
+                                    (cronParser as any)(schedule.cron_expression, options)
+                                nextRunDate = interval.next().toDate()
+                            } catch (err) {
+                                console.error('Failed to parse cron:', err)
+                                // Fallback to server value if available and in future
+                                if (schedule.next_run_at && new Date(schedule.next_run_at) > new Date()) {
+                                    nextRunDate = new Date(schedule.next_run_at)
+                                }
+                            }
+
+                            return (
+                                <>
+                                    {lastRun && (
+                                        <>
+                                            <span className='hidden sm:inline-block'>•</span>
+                                            <span title="Last Run">
+                                                Last: {format(new Date(lastRun.triggered_at), 'dd-MM-yyyy HH:mm:ss')}
+                                            </span>
+                                        </>
+                                    )}
+
+                                    {nextRunDate && (
+                                        <>
+                                            <span className='hidden sm:inline-block'>•</span>
+                                            <span title="Next Run">
+                                                Next: {format(nextRunDate, 'dd-MM-yyyy HH:mm:ss')}
+                                            </span>
+                                        </>
+                                    )}
+                                </>
+                            )
+                        })()}
                     </div>
                 </div>
 

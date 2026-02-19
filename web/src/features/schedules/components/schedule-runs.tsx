@@ -14,7 +14,6 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import {
-    Table,
     TableBody,
     TableCell,
     TableHead,
@@ -100,13 +99,13 @@ export function ScheduleRuns({ data, isLoading, onRefresh }: ScheduleRunsProps) 
                         <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
                     </div>
                 ) : (
-                    <div className="relative max-h-[600px] overflow-y-auto">
-                        <Table>
+                    <div className="relative max-h-[600px] overflow-auto">
+                        <table className="w-full caption-bottom text-sm">
                             <TableHeader className="sticky top-0 z-10 bg-card shadow-sm">
                                 {table.getHeaderGroups().map((hg) => (
-                                    <TableRow key={hg.id} className="bg-muted/50 hover:bg-muted/50 transition-none">
+                                    <TableRow key={hg.id} className="bg-muted/50 hover:bg-muted/50 transition-none border-b-0 shadow-sm">
                                         {hg.headers.map((h) => (
-                                            <TableHead key={h.id} className={cn(h.column.columnDef.meta?.className)}>
+                                            <TableHead key={h.id} className={cn(h.column.columnDef.meta?.className, "text-xs uppercase tracking-wider text-muted-foreground/70 h-10")}>
                                                 {h.isPlaceholder ? null : flexRender(h.column.columnDef.header, h.getContext())}
                                             </TableHead>
                                         ))}
@@ -116,7 +115,10 @@ export function ScheduleRuns({ data, isLoading, onRefresh }: ScheduleRunsProps) 
                             <TableBody>
                                 {table.getRowModel().rows.length ? (
                                     table.getRowModel().rows.map((row) => (
-                                        <TableRow key={row.id}>
+                                        <TableRow
+                                            key={row.id}
+                                            className="group border-b border-muted/40 hover:bg-muted/30 data-[state=selected]:bg-muted/50 transition-colors duration-200"
+                                        >
                                             {row.getVisibleCells().map((cell) => (
                                                 <TableCell key={cell.id} className={cn(cell.column.columnDef.meta?.className, "py-2")}>
                                                     {flexRender(cell.column.columnDef.cell, cell.getContext())}
@@ -135,7 +137,7 @@ export function ScheduleRuns({ data, isLoading, onRefresh }: ScheduleRunsProps) 
                                     </TableRow>
                                 )}
                             </TableBody>
-                        </Table>
+                        </table>
                     </div>
                 )}
             </div>
