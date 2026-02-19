@@ -10,7 +10,7 @@ import { Search } from '@/components/search'
 import { ThemeSwitch } from '@/components/theme-switch'
 import { SchedulesDialogs } from './components/schedules-dialogs'
 import { SchedulesProvider } from './components/schedules-provider'
-import { SchedulesTable } from './components/schedules-table'
+import { SchedulesList } from './components/schedules-list'
 
 function SchedulesPrimaryButton() {
   const navigate = useNavigate()
@@ -69,7 +69,7 @@ export function Schedules() {
           <SchedulesPrimaryButton />
         </div>
 
-        <SchedulesTable data={schedules} />
+        <SchedulesList data={schedules} />
       </Main>
 
       <SchedulesDialogs />

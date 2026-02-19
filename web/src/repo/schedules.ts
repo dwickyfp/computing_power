@@ -33,7 +33,9 @@ export interface Schedule {
   run_history: ScheduleRunHistory[]
 }
 
-export type ScheduleListItem = Omit<Schedule, 'run_history'>
+export interface ScheduleListItem extends Omit<Schedule, 'run_history'> {
+  run_history: ScheduleRunHistory[]
+}
 
 export interface ScheduleCreate {
   name: string

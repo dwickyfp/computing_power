@@ -30,15 +30,26 @@ router = APIRouter()
 # ---------------------------------------------------------------------------
 
 
-@router.get("", response_model=List[ScheduleListResponse])
+@router.get("", response_model=List[ScheduleResponse])
 def list_schedules(
     skip: int = Query(0, ge=0, description="Number of records to skip"),
     limit: int = Query(100, ge=1, le=500, description="Max records to return"),
     service: ScheduleService = Depends(get_schedule_service),
-) -> List[ScheduleListResponse]:
-    """Return all schedules (lightweight, no run history)."""
+) -> List[ScheduleResponse]:
+    """Return all schedules with recent run history (last 20)."""
     schedules = service.list_schedules(skip=skip, limit=limit)
-    return [ScheduleListResponse.from_orm(s) for s in schedules]
+    results = []
+    for s in schedules:
+        resp = ScheduleResponse.from_orm(s)
+        # Limit run_history to 20 to keep list response small
+        # Note: 'run_history' is lazy loaded, but access triggers it.
+        # Ideally we'd optimize the query, but this suffices for now.
+        resp.run_history = [
+            RunHistoryResponse.from_orm(h)
+            for h in (s.run_history[:20] if s.run_history else [])
+        ]
+        results.append(resp)
+    return results
 
 
 # ---------------------------------------------------------------------------
@@ -154,18 +165,20 @@ def delete_schedule(
 # ---------------------------------------------------------------------------
 
 
-@router.post("/{schedule_id}/pause", response_model=ScheduleListResponse)
+@router.post("/{schedule_id}/pause", response_model=ScheduleResponse)
 def pause_schedule(
     schedule_id: int,
     service: ScheduleService = Depends(get_schedule_service),
-) -> ScheduleListResponse:
+) -> ScheduleResponse:
     """
     Pause a schedule — sets status=PAUSED and removes APScheduler job.
     The schedule is preserved in DB and can be resumed.
     """
     try:
         schedule = service.pause_schedule(schedule_id)
-        return ScheduleListResponse.from_orm(schedule)
+        resp = ScheduleResponse.from_orm(schedule)
+        resp.run_history = []
+        return resp
     except EntityNotFoundError:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -178,17 +191,19 @@ def pause_schedule(
 # ---------------------------------------------------------------------------
 
 
-@router.post("/{schedule_id}/resume", response_model=ScheduleListResponse)
+@router.post("/{schedule_id}/resume", response_model=ScheduleResponse)
 def resume_schedule(
     schedule_id: int,
     service: ScheduleService = Depends(get_schedule_service),
-) -> ScheduleListResponse:
+) -> ScheduleResponse:
     """
     Resume a paused schedule — sets status=ACTIVE and re-registers job in APScheduler.
     """
     try:
         schedule = service.resume_schedule(schedule_id)
-        return ScheduleListResponse.from_orm(schedule)
+        resp = ScheduleResponse.from_orm(schedule)
+        resp.run_history = []
+        return resp
     except EntityNotFoundError:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
