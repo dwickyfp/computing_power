@@ -688,3 +688,63 @@ CREATE INDEX IF NOT EXISTS idx_linked_task_run_step_log_step_id ON linked_task_r
 COMMENT ON TABLE linked_task_run_step_log IS 'Per-step execution logs within a linked_task run';
 
 
+-- ============================================================
+-- Migration 011: Schedules — Cron-based job scheduling
+-- Allows users to schedule flow_tasks and linked_tasks to run
+-- automatically on a cron expression. APScheduler registers
+-- ACTIVE schedules at startup and syncs on CRUD operations.
+-- ============================================================
+
+-- Master schedule definition
+CREATE TABLE IF NOT EXISTS schedules (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(255) NOT NULL UNIQUE,
+    description TEXT NULL,
+    task_type VARCHAR(20) NOT NULL,          -- FLOW_TASK | LINKED_TASK
+    task_id INTEGER NOT NULL,                -- references flow_tasks.id or linked_tasks.id
+    cron_expression VARCHAR(100) NOT NULL,   -- standard 5-part crontab: "*/5 * * * *"
+    status VARCHAR(20) NOT NULL DEFAULT 'ACTIVE',  -- ACTIVE | PAUSED
+    last_run_at TIMESTAMPTZ NULL,
+    next_run_at TIMESTAMPTZ NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Unique name constraint (idempotent for re-runs)
+ALTER TABLE schedules DROP CONSTRAINT IF EXISTS uq_schedules_name;
+ALTER TABLE schedules ADD CONSTRAINT uq_schedules_name UNIQUE (name);
+
+-- Indexes
+CREATE INDEX IF NOT EXISTS idx_schedules_status ON schedules(status);
+CREATE INDEX IF NOT EXISTS idx_schedules_task_type ON schedules(task_type);
+CREATE INDEX IF NOT EXISTS idx_schedules_task_type_task_id ON schedules(task_type, task_id);
+CREATE INDEX IF NOT EXISTS idx_schedules_last_run_at ON schedules(last_run_at DESC);
+
+COMMENT ON TABLE schedules IS 'Cron-based job schedules — each row triggers a flow_task or linked_task on a cron expression';
+COMMENT ON COLUMN schedules.cron_expression IS 'Standard 5-part crontab string, e.g. "*/5 * * * *" (minute hour day month weekday)';
+COMMENT ON COLUMN schedules.task_type IS 'FLOW_TASK = references flow_tasks.id; LINKED_TASK = references linked_tasks.id';
+
+-- Execution run history (append-only, cascade-deleted with schedule)
+CREATE TABLE IF NOT EXISTS schedule_run_history (
+    id SERIAL PRIMARY KEY,
+    schedule_id INTEGER NOT NULL REFERENCES schedules(id) ON DELETE CASCADE,
+    task_type VARCHAR(20) NOT NULL,
+    task_id INTEGER NOT NULL,
+    triggered_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    completed_at TIMESTAMPTZ NULL,
+    duration_ms INTEGER NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'RUNNING',  -- RUNNING | SUCCESS | FAILED
+    message TEXT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Indexes for run history
+CREATE INDEX IF NOT EXISTS idx_schedule_run_history_schedule_id ON schedule_run_history(schedule_id);
+CREATE INDEX IF NOT EXISTS idx_schedule_run_history_triggered_at ON schedule_run_history(triggered_at DESC);
+CREATE INDEX IF NOT EXISTS idx_schedule_run_history_status ON schedule_run_history(status);
+CREATE INDEX IF NOT EXISTS idx_schedule_run_history_schedule_triggered ON schedule_run_history(schedule_id, triggered_at DESC);
+
+COMMENT ON TABLE schedule_run_history IS 'Execution history for scheduled jobs — one row per cron-triggered run, cascade-deleted with parent schedule';
+
+

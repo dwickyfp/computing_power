@@ -26,6 +26,7 @@ import { Route as AuthenticatedLinkedTasksRouteRouteImport } from './routes/_aut
 import { Route as AuthenticatedFlowTasksRouteRouteImport } from './routes/_authenticated/flow-tasks/route'
 import { Route as AuthenticatedDestinationsRouteRouteImport } from './routes/_authenticated/destinations/route'
 import { Route as AuthenticatedSourcesIndexRouteImport } from './routes/_authenticated/sources/index'
+import { Route as AuthenticatedSchedulesIndexRouteImport } from './routes/_authenticated/schedules/index'
 import { Route as AuthenticatedPipelinesIndexRouteImport } from './routes/_authenticated/pipelines/index'
 import { Route as AuthenticatedLinkedTasksIndexRouteImport } from './routes/_authenticated/linked-tasks/index'
 import { Route as AuthenticatedFlowTasksIndexRouteImport } from './routes/_authenticated/flow-tasks/index'
@@ -36,6 +37,7 @@ import { Route as ClerkauthSignInRouteImport } from './routes/clerk/(auth)/sign-
 import { Route as AuthenticatedSettingsWalMonitorRouteImport } from './routes/_authenticated/settings/wal-monitor'
 import { Route as AuthenticatedSettingsNotificationsRouteImport } from './routes/_authenticated/settings/notifications'
 import { Route as AuthenticatedSettingsBatchConfigurationRouteImport } from './routes/_authenticated/settings/batch-configuration'
+import { Route as AuthenticatedSchedulesScheduleIdRouteImport } from './routes/_authenticated/schedules/$scheduleId'
 import { Route as AuthenticatedPipelinesPipelineIdRouteImport } from './routes/_authenticated/pipelines/$pipelineId'
 import { Route as AuthenticatedLinkedTasksLinkedTaskIdRouteImport } from './routes/_authenticated/linked-tasks/$linkedTaskId'
 import { Route as AuthenticatedErrorsErrorRouteImport } from './routes/_authenticated/errors/$error'
@@ -135,6 +137,12 @@ const AuthenticatedSourcesIndexRoute =
     path: '/sources/',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedSchedulesIndexRoute =
+  AuthenticatedSchedulesIndexRouteImport.update({
+    id: '/schedules/',
+    path: '/schedules/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedPipelinesIndexRoute =
   AuthenticatedPipelinesIndexRouteImport.update({
     id: '/',
@@ -192,6 +200,12 @@ const AuthenticatedSettingsBatchConfigurationRoute =
     id: '/batch-configuration',
     path: '/batch-configuration',
     getParentRoute: () => AuthenticatedSettingsRouteRoute,
+  } as any)
+const AuthenticatedSchedulesScheduleIdRoute =
+  AuthenticatedSchedulesScheduleIdRouteImport.update({
+    id: '/schedules/$scheduleId',
+    path: '/schedules/$scheduleId',
+    getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
 const AuthenticatedPipelinesPipelineIdRoute =
   AuthenticatedPipelinesPipelineIdRouteImport.update({
@@ -275,6 +289,7 @@ export interface FileRoutesByFullPath {
   '/errors/$error': typeof AuthenticatedErrorsErrorRoute
   '/linked-tasks/$linkedTaskId': typeof AuthenticatedLinkedTasksLinkedTaskIdRoute
   '/pipelines/$pipelineId': typeof AuthenticatedPipelinesPipelineIdRouteWithChildren
+  '/schedules/$scheduleId': typeof AuthenticatedSchedulesScheduleIdRoute
   '/settings/batch-configuration': typeof AuthenticatedSettingsBatchConfigurationRoute
   '/settings/notifications': typeof AuthenticatedSettingsNotificationsRoute
   '/settings/wal-monitor': typeof AuthenticatedSettingsWalMonitorRoute
@@ -285,6 +300,7 @@ export interface FileRoutesByFullPath {
   '/flow-tasks/': typeof AuthenticatedFlowTasksIndexRoute
   '/linked-tasks/': typeof AuthenticatedLinkedTasksIndexRoute
   '/pipelines/': typeof AuthenticatedPipelinesIndexRoute
+  '/schedules/': typeof AuthenticatedSchedulesIndexRoute
   '/sources/': typeof AuthenticatedSourcesIndexRoute
   '/flow-tasks/$flowTaskId/flow': typeof AuthenticatedFlowTasksFlowTaskIdFlowRoute
   '/pipelines/$pipelineId/flow': typeof AuthenticatedPipelinesPipelineIdFlowRoute
@@ -306,6 +322,7 @@ export interface FileRoutesByTo {
   '/errors/$error': typeof AuthenticatedErrorsErrorRoute
   '/linked-tasks/$linkedTaskId': typeof AuthenticatedLinkedTasksLinkedTaskIdRoute
   '/pipelines/$pipelineId': typeof AuthenticatedPipelinesPipelineIdRouteWithChildren
+  '/schedules/$scheduleId': typeof AuthenticatedSchedulesScheduleIdRoute
   '/settings/batch-configuration': typeof AuthenticatedSettingsBatchConfigurationRoute
   '/settings/notifications': typeof AuthenticatedSettingsNotificationsRoute
   '/settings/wal-monitor': typeof AuthenticatedSettingsWalMonitorRoute
@@ -316,6 +333,7 @@ export interface FileRoutesByTo {
   '/flow-tasks': typeof AuthenticatedFlowTasksIndexRoute
   '/linked-tasks': typeof AuthenticatedLinkedTasksIndexRoute
   '/pipelines': typeof AuthenticatedPipelinesIndexRoute
+  '/schedules': typeof AuthenticatedSchedulesIndexRoute
   '/sources': typeof AuthenticatedSourcesIndexRoute
   '/flow-tasks/$flowTaskId/flow': typeof AuthenticatedFlowTasksFlowTaskIdFlowRoute
   '/pipelines/$pipelineId/flow': typeof AuthenticatedPipelinesPipelineIdFlowRoute
@@ -346,6 +364,7 @@ export interface FileRoutesById {
   '/_authenticated/errors/$error': typeof AuthenticatedErrorsErrorRoute
   '/_authenticated/linked-tasks/$linkedTaskId': typeof AuthenticatedLinkedTasksLinkedTaskIdRoute
   '/_authenticated/pipelines/$pipelineId': typeof AuthenticatedPipelinesPipelineIdRouteWithChildren
+  '/_authenticated/schedules/$scheduleId': typeof AuthenticatedSchedulesScheduleIdRoute
   '/_authenticated/settings/batch-configuration': typeof AuthenticatedSettingsBatchConfigurationRoute
   '/_authenticated/settings/notifications': typeof AuthenticatedSettingsNotificationsRoute
   '/_authenticated/settings/wal-monitor': typeof AuthenticatedSettingsWalMonitorRoute
@@ -356,6 +375,7 @@ export interface FileRoutesById {
   '/_authenticated/flow-tasks/': typeof AuthenticatedFlowTasksIndexRoute
   '/_authenticated/linked-tasks/': typeof AuthenticatedLinkedTasksIndexRoute
   '/_authenticated/pipelines/': typeof AuthenticatedPipelinesIndexRoute
+  '/_authenticated/schedules/': typeof AuthenticatedSchedulesIndexRoute
   '/_authenticated/sources/': typeof AuthenticatedSourcesIndexRoute
   '/_authenticated/flow-tasks/$flowTaskId/flow': typeof AuthenticatedFlowTasksFlowTaskIdFlowRoute
   '/_authenticated/pipelines/$pipelineId/flow': typeof AuthenticatedPipelinesPipelineIdFlowRoute
@@ -384,6 +404,7 @@ export interface FileRouteTypes {
     | '/errors/$error'
     | '/linked-tasks/$linkedTaskId'
     | '/pipelines/$pipelineId'
+    | '/schedules/$scheduleId'
     | '/settings/batch-configuration'
     | '/settings/notifications'
     | '/settings/wal-monitor'
@@ -394,6 +415,7 @@ export interface FileRouteTypes {
     | '/flow-tasks/'
     | '/linked-tasks/'
     | '/pipelines/'
+    | '/schedules/'
     | '/sources/'
     | '/flow-tasks/$flowTaskId/flow'
     | '/pipelines/$pipelineId/flow'
@@ -415,6 +437,7 @@ export interface FileRouteTypes {
     | '/errors/$error'
     | '/linked-tasks/$linkedTaskId'
     | '/pipelines/$pipelineId'
+    | '/schedules/$scheduleId'
     | '/settings/batch-configuration'
     | '/settings/notifications'
     | '/settings/wal-monitor'
@@ -425,6 +448,7 @@ export interface FileRouteTypes {
     | '/flow-tasks'
     | '/linked-tasks'
     | '/pipelines'
+    | '/schedules'
     | '/sources'
     | '/flow-tasks/$flowTaskId/flow'
     | '/pipelines/$pipelineId/flow'
@@ -454,6 +478,7 @@ export interface FileRouteTypes {
     | '/_authenticated/errors/$error'
     | '/_authenticated/linked-tasks/$linkedTaskId'
     | '/_authenticated/pipelines/$pipelineId'
+    | '/_authenticated/schedules/$scheduleId'
     | '/_authenticated/settings/batch-configuration'
     | '/_authenticated/settings/notifications'
     | '/_authenticated/settings/wal-monitor'
@@ -464,6 +489,7 @@ export interface FileRouteTypes {
     | '/_authenticated/flow-tasks/'
     | '/_authenticated/linked-tasks/'
     | '/_authenticated/pipelines/'
+    | '/_authenticated/schedules/'
     | '/_authenticated/sources/'
     | '/_authenticated/flow-tasks/$flowTaskId/flow'
     | '/_authenticated/pipelines/$pipelineId/flow'
@@ -603,6 +629,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSourcesIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/schedules/': {
+      id: '/_authenticated/schedules/'
+      path: '/schedules'
+      fullPath: '/schedules/'
+      preLoaderRoute: typeof AuthenticatedSchedulesIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/pipelines/': {
       id: '/_authenticated/pipelines/'
       path: '/'
@@ -672,6 +705,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/settings/batch-configuration'
       preLoaderRoute: typeof AuthenticatedSettingsBatchConfigurationRouteImport
       parentRoute: typeof AuthenticatedSettingsRouteRoute
+    }
+    '/_authenticated/schedules/$scheduleId': {
+      id: '/_authenticated/schedules/$scheduleId'
+      path: '/schedules/$scheduleId'
+      fullPath: '/schedules/$scheduleId'
+      preLoaderRoute: typeof AuthenticatedSchedulesScheduleIdRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/pipelines/$pipelineId': {
       id: '/_authenticated/pipelines/$pipelineId'
@@ -879,6 +919,8 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedSmartTagsRoute: typeof AuthenticatedSmartTagsRoute
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
   AuthenticatedErrorsErrorRoute: typeof AuthenticatedErrorsErrorRoute
+  AuthenticatedSchedulesScheduleIdRoute: typeof AuthenticatedSchedulesScheduleIdRoute
+  AuthenticatedSchedulesIndexRoute: typeof AuthenticatedSchedulesIndexRoute
   AuthenticatedSourcesIndexRoute: typeof AuthenticatedSourcesIndexRoute
   AuthenticatedSourcesSourceIdDetailsRoute: typeof AuthenticatedSourcesSourceIdDetailsRoute
 }
@@ -896,6 +938,8 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedSmartTagsRoute: AuthenticatedSmartTagsRoute,
   AuthenticatedIndexRoute: AuthenticatedIndexRoute,
   AuthenticatedErrorsErrorRoute: AuthenticatedErrorsErrorRoute,
+  AuthenticatedSchedulesScheduleIdRoute: AuthenticatedSchedulesScheduleIdRoute,
+  AuthenticatedSchedulesIndexRoute: AuthenticatedSchedulesIndexRoute,
   AuthenticatedSourcesIndexRoute: AuthenticatedSourcesIndexRoute,
   AuthenticatedSourcesSourceIdDetailsRoute:
     AuthenticatedSourcesSourceIdDetailsRoute,

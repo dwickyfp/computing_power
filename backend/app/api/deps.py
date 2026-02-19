@@ -118,3 +118,9 @@ def get_linked_task_service(db: Session = Depends(get_db)) -> "LinkedTaskService
 
     return LinkedTaskService(db)
 
+
+def get_schedule_service(db: Session = Depends(get_db)) -> "ScheduleService":
+    """Get schedule service dependency."""
+    from app.domain.services.schedule import ScheduleService
+
+    return ScheduleService(db)

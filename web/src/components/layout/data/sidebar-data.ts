@@ -78,9 +78,9 @@ export const sidebarData: SidebarData = {
           url: '/linked-tasks',
         },
         {
-          title: 'Schedule (Soon)',
+          title: 'Schedule',
           icon: Calendar,
-          url: '#',
+          url: '/schedules',
         },
       ],
     },

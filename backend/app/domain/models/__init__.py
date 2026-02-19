@@ -39,6 +39,13 @@ from app.domain.models.linked_task import (
     LinkedTaskStepStatus,
     LinkedTaskEdgeCondition,
 )
+from app.domain.models.schedule import (
+    Schedule,
+    ScheduleRunHistory,
+    ScheduleTaskType,
+    ScheduleStatus,
+    ScheduleRunStatus,
+)
 
 
 __all__ = [
@@ -67,4 +74,9 @@ __all__ = [
     "FlowTaskTriggerType",
     "FlowTaskRunStatus",
     "FlowTaskNodeStatus",
+    "Schedule",
+    "ScheduleRunHistory",
+    "ScheduleTaskType",
+    "ScheduleStatus",
+    "ScheduleRunStatus",
 ]
