@@ -60,6 +60,7 @@ import { NodePalette } from '../components/NodePalette'
 import { NodeConfigPanel } from '../components/NodeConfigPanel'
 import { PreviewDrawer } from '../components/PreviewDrawer'
 import { NodeContextMenu } from '../components/NodeContextMenu'
+import { DeletableEdge } from '../components/edges/DeletableEdge'
 
 // Node type registry — maps node type strings to components
 import { InputNode } from '../components/nodes/InputNode'
@@ -80,6 +81,10 @@ const nodeTypes = {
     pivot: PivotNode,
     new_rows: NewRowsNode,
     output: OutputNode,
+}
+
+const edgeTypes = {
+    default: DeletableEdge,
 }
 
 let nodeIdCounter = 1
@@ -375,6 +380,14 @@ function FlowCanvas({ flowTaskId }: { flowTaskId: number }) {
             const graphSnapshot: FlowGraph = { nodes, edges }
             // Resolve the node type from the current graph state
             const nodeType = nodes.find((n) => n.id === nodeId)?.type ?? 'unknown'
+
+            // Reset the drawer to a loading state IMMEDIATELY so the user
+            // never sees stale data from a previous node while the API call is
+            // in-flight. Pass an empty celeryTaskId for now; it will be updated
+            // once the response arrives.
+            const sessionId = openPreview(nodeId, nodeLabel, nodeType, '')
+            previewSessionRef.current = sessionId
+
             try {
                 const resp = await flowTasksRepo.previewNode(flowTaskId, {
                     node_id: nodeId,
@@ -383,10 +396,9 @@ function FlowCanvas({ flowTaskId }: { flowTaskId: number }) {
                     limit: 500,
                 })
                 const { task_id } = resp.data
-                // openPreview now returns a unique session ID for this request
-                const sessionId = openPreview(nodeId, nodeLabel, nodeType, task_id)
-                // Record which session is "current" so the effect can guard stale results
-                previewSessionRef.current = sessionId
+                // Guard: if the user triggered another preview while we were
+                // waiting for this API call, bail out so we don't overwrite it.
+                if (previewSessionRef.current !== sessionId) return
                 setPreviewPollingTaskId(task_id)
             } catch {
                 toast.error('Failed to submit preview')
@@ -538,6 +550,7 @@ function FlowCanvas({ flowTaskId }: { flowTaskId: number }) {
                             nodes={nodes}
                             edges={edges}
                             nodeTypes={nodeTypes}
+                            edgeTypes={edgeTypes}
                             colorMode={resolvedTheme}
                             onNodesChange={onNodesChange}
                             onEdgesChange={onEdgesChange}

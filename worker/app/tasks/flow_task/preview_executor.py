@@ -119,6 +119,17 @@ def execute_node_preview(
         # partially configured (e.g. a Join with no join keys).
         nodes, edges = _get_upstream_subgraph(node_id, nodes, edges)
 
+        # Inject sample_limit into input nodes so the LIMIT is applied at the
+        # source level rather than on the final preview SELECT. This ensures
+        # downstream transformations (aggregate, pivot, etc.) operate on the
+        # already-limited dataset rather than having their output truncated.
+        for n in nodes:
+            if n.get("type") == "input":
+                n.setdefault("data", {})
+                # Only inject if user hasn't set their own sample_limit
+                if not n["data"].get("sample_limit"):
+                    n["data"]["sample_limit"] = limit
+
         # Inject ATTACH config into input nodes (after trimming)
         _inject_attach_configs(nodes, conn)
 
@@ -137,7 +148,10 @@ def execute_node_preview(
         # Build SQL for all CTEs up to and including the target CTE
         partial_prefix = compiler.get_cte_sql_up_to(target_cte)
 
-        preview_sql = f"{partial_prefix}\nSELECT * FROM {target_cte} LIMIT {limit}"
+        # No outer LIMIT — the limit is already injected into input node CTEs.
+        # This ensures aggregate/pivot/join nodes show correct results on the
+        # already-limited dataset rather than a truncated aggregate output.
+        preview_sql = f"{partial_prefix}\nSELECT * FROM {target_cte}"
         logger.debug(f"Preview SQL for node {node_id}:\n{preview_sql}")
 
         # Execute

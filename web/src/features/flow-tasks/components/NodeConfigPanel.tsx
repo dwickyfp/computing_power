@@ -336,6 +336,8 @@ function NodeTypeConfig({
             return <AggregateConfig data={data} update={update} nodeId={nodeId} flowTaskId={flowTaskId} />
         case 'join':
             return <JoinConfig data={data} update={update} nodeId={nodeId} flowTaskId={flowTaskId} />
+        case 'new_rows':
+            return <NewRowsConfig data={data} update={update} nodeId={nodeId} flowTaskId={flowTaskId} />
         case 'union':
             return <UnionConfig data={data} update={update} nodeId={nodeId} flowTaskId={flowTaskId} />
         case 'pivot':
@@ -956,6 +958,117 @@ function JoinConfig({ data, update, nodeId, flowTaskId }: ConfigFormProps) {
                         </p>
                     </div>
                 )}
+            </div>
+        </>
+    )
+}
+
+// ─── New Rows (Add Columns) ────────────────────────────────────────────────────
+
+type NewRowsColumn = { alias: string; type: 'static' | 'expression'; value?: string; expr?: string }
+
+function NewRowsConfig({ data, update }: ConfigFormProps) {
+    const rawCols = (data.columns as NewRowsColumn[] | undefined) || []
+
+    const addColumn = () => {
+        update({
+            columns: [...rawCols, { alias: 'new_col', type: 'static', value: '' }],
+        })
+    }
+
+    const removeColumn = (index: number) => {
+        update({ columns: rawCols.filter((_, i) => i !== index) })
+    }
+
+    const updateColumn = (index: number, patch: Partial<NewRowsColumn>) => {
+        const updated = rawCols.map((col, i) => (i === index ? { ...col, ...patch } : col))
+        update({ columns: updated })
+    }
+
+    return (
+        <>
+            <div className="flex items-center justify-between">
+                <Label className="text-[10px] uppercase text-muted-foreground tracking-wider">
+                    Add Columns
+                </Label>
+                <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-5 px-1.5 text-[10px]"
+                    onClick={addColumn}
+                >
+                    <Plus className="h-3 w-3 mr-1" /> Add
+                </Button>
+            </div>
+
+            {rawCols.length === 0 && (
+                <div className="text-[10px] text-muted-foreground italic px-1">
+                    No columns defined. Click Add to create one.
+                </div>
+            )}
+
+            <div className="space-y-3">
+                {rawCols.map((col, i) => (
+                    <div
+                        key={i}
+                        className="space-y-1.5 p-2 rounded-md border border-border/60 bg-muted/20 animate-in fade-in slide-in-from-top-1 duration-200"
+                    >
+                        {/* Row header: alias + type toggle + delete */}
+                        <div className="flex items-center gap-1.5">
+                            <Input
+                                className="h-8 text-xs flex-1 font-mono"
+                                placeholder="column_name"
+                                value={col.alias}
+                                onChange={(e) => updateColumn(i, { alias: e.target.value })}
+                            />
+                            <Select
+                                value={col.type}
+                                onValueChange={(v: 'static' | 'expression') =>
+                                    updateColumn(i, { type: v })
+                                }
+                            >
+                                <SelectTrigger className="h-8 text-xs w-24 shrink-0">
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="static">Static</SelectItem>
+                                    <SelectItem value="expression">Expression</SelectItem>
+                                </SelectContent>
+                            </Select>
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-6 w-6 text-muted-foreground hover:text-destructive shrink-0"
+                                onClick={() => removeColumn(i)}
+                            >
+                                <X className="h-3 w-3" />
+                            </Button>
+                        </div>
+
+                        {/* Value/Expression input */}
+                        {col.type === 'static' ? (
+                            <div className="space-y-0.5">
+                                <span className="text-[9px] text-muted-foreground uppercase tracking-wider">Value</span>
+                                <Input
+                                    className="h-6 text-xs font-mono"
+                                    placeholder="e.g. active, 42, true"
+                                    value={col.value ?? ''}
+                                    onChange={(e) => updateColumn(i, { value: e.target.value })}
+                                />
+                            </div>
+                        ) : (
+                            <div className="space-y-0.5">
+                                <span className="text-[9px] text-muted-foreground uppercase tracking-wider">SQL Expression</span>
+                                <textarea
+                                    className="w-full min-h-[56px] resize-y rounded-md border border-input bg-background px-2 py-1 text-xs font-mono placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                                    placeholder={`CASE WHEN status = 'A' THEN 1 ELSE 0 END`}
+                                    value={col.expr ?? ''}
+                                    onChange={(e) => updateColumn(i, { expr: e.target.value })}
+                                />
+                            </div>
+                        )}
+                    </div>
+                ))}
             </div>
         </>
     )

@@ -5,7 +5,8 @@ import { BaseNode } from './BaseNode'
 
 export const NewRowsNode = memo(function NewRowsNode({ id, selected, data }: NodeProps) {
     const label = (data?.label as string) || 'New Rows'
-    const newRows = (data?.new_rows as unknown[]) || []
+    const columns = (data?.columns as unknown[]) || []
+    const count = columns.length
 
     return (
         <BaseNode
@@ -16,10 +17,10 @@ export const NewRowsNode = memo(function NewRowsNode({ id, selected, data }: Nod
             iconColor="text-amber-600"
             icon={<PlusCircle className="h-3.5 w-3.5" />}
             label={label}
-            subtitle={newRows.length ? `${newRows.length} row${newRows.length > 1 ? 's' : ''}` : undefined}
+            subtitle={count > 0 ? `${count} column${count > 1 ? 's' : ''} added` : undefined}
         >
-            {newRows.length === 0 && (
-                <span className="italic text-muted-foreground">No rows defined</span>
+            {count === 0 && (
+                <span className="italic text-muted-foreground">No columns defined</span>
             )}
         </BaseNode>
     )
