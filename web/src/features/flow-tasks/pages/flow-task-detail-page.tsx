@@ -416,7 +416,7 @@ export default function FlowTaskDetailPage() {
                                 value={
                                     <span
                                         className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-semibold ${ft.status === 'SUCCESS'
-                                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-900/30'
+                                            ? 'bg-emerald-50 text-emerald-700 border dark:bg-emerald-900/30'
                                             : ft.status === 'FAILED'
                                                 ? 'bg-rose-50 text-rose-700 border border-rose-200 dark:bg-rose-900/30'
                                                 : ft.status === 'RUNNING'
