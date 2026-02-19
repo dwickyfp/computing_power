@@ -211,7 +211,9 @@ def _build_aggregate_cte(node: dict, pred_ctes: list) -> str:
         # Support both "function" (from NodeConfigPanel) and legacy "func" key
         func = (agg.get("function") or agg.get("func") or "COUNT").upper()
         col = agg.get("column", "*")
-        alias = agg.get("alias", f"{func.lower()}_{col}")
+        alias = agg.get("alias", "")
+        if not alias:
+            alias = f"{func.lower()}_{_safe_identifier(col)}"
         if func == "COUNT_DISTINCT":
             col_parts.append(f"COUNT(DISTINCT {col}) AS {alias}")
         else:
@@ -365,43 +367,60 @@ def _build_pivot_cte(node: dict, pred_ctes: list) -> str:
         return sql
 
 
-def _build_new_rows_cte(node: dict, _pred_ctes: list) -> str:
+def _build_new_rows_cte(node: dict, pred_ctes: list) -> str:
     """
-    NEW ROWS node — generate synthetic rows (date or number series).
+    NEW ROWS (Add Columns) node — appends new columns to an upstream CTE.
 
-    data keys:
-      generate_type: DATE | INTEGER
-      start: str | int
-      end: str | int
-      step: str | int (default 1 or '1 day')
-      alias: str (default 'value')
+    Each column definition in data["columns"] is one of:
+      { "alias": "col_name", "type": "static",     "value": <literal> }
+      { "alias": "col_name", "type": "expression", "expr":  <sql_expr> }
+
+    Static string values are single-quoted; numbers/booleans are used as-is.
+    Expression values are injected verbatim as SQL expressions.
+
+    Produces:
+        SELECT *, <expr1> AS alias1, <expr2> AS alias2
+        FROM {source_cte}
     """
-    data = node.get("data", {})
-    gen_type = data.get("generate_type", "INTEGER").upper()
-    start = data.get("start")
-    end = data.get("end")
-    alias = data.get("alias", "value")
-
-    if start is None or end is None:
+    if not pred_ctes:
         raise ValueError(
-            f"NewRows node {node['id']}: start and end are required"
+            f"New Rows node {node['id']} has no upstream input. "
+            "Connect an upstream node first."
         )
 
-    if gen_type == "DATE":
-        step = data.get("step", "1 day")
-        sql = (
-            f"SELECT UNNEST(generate_series("
-            f"DATE '{start}', DATE '{end}', INTERVAL '{step}'"
-            f")) AS {alias}"
+    data = node.get("data", {})
+    columns: list = data.get("columns", [])
+
+    if not columns:
+        raise ValueError(
+            f"New Rows node {node['id']}: define at least one column."
         )
-    else:
-        step = data.get("step", 1)
-        sql = (
-            f"SELECT UNNEST(generate_series("
-            f"{int(start)}, {int(end)}, {int(step)}"
-            f")) AS {alias}"
-        )
-    return sql
+
+    source = pred_ctes[0]
+    col_parts: list[str] = []
+
+    for col in columns:
+        alias = _safe_identifier(col.get("alias", "new_col"))
+        col_type = col.get("type", "static")
+
+        if col_type == "expression":
+            expr = col.get("expr", "NULL")
+            col_parts.append(f"{expr} AS {alias}")
+        else:
+            # Static value — detect type and quote strings
+            raw = col.get("value", "")
+            if isinstance(raw, bool):
+                sql_val = "TRUE" if raw else "FALSE"
+            elif isinstance(raw, (int, float)):
+                sql_val = str(raw)
+            else:
+                # Treat as string literal — escape single quotes
+                escaped = str(raw).replace("'", "''")
+                sql_val = f"'{escaped}'"
+            col_parts.append(f"{sql_val} AS {alias}")
+
+    extra_cols = ", ".join(col_parts)
+    return f"SELECT *, {extra_cols} FROM {source}"
 
 
 def _build_output_node_info(node: dict, pred_ctes: list) -> dict:

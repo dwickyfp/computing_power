@@ -71,4 +71,5 @@ celery_app.autodiscover_tasks([
     "app.tasks.lineage",
     "app.tasks.flow_task",
     "app.tasks.destination_table_list",
+    "app.tasks.linked_task",
 ])

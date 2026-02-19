@@ -73,14 +73,14 @@ export const sidebarData: SidebarData = {
           url: '/flow-tasks',
         },
         {
-          title: 'Linked Task (Soon)',
+          title: 'Linked Task',
           icon: Link2,
-          url: '#',
+          url: '/linked-tasks',
         },
         {
-          title: 'Schedule (Soon)',
+          title: 'Schedule',
           icon: Calendar,
-          url: '#',
+          url: '/schedules',
         },
       ],
     },

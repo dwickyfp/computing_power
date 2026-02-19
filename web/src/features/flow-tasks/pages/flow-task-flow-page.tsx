@@ -60,6 +60,7 @@ import { NodePalette } from '../components/NodePalette'
 import { NodeConfigPanel } from '../components/NodeConfigPanel'
 import { PreviewDrawer } from '../components/PreviewDrawer'
 import { NodeContextMenu } from '../components/NodeContextMenu'
+import { DeletableEdge } from '../components/edges/DeletableEdge'
 
 // Node type registry — maps node type strings to components
 import { InputNode } from '../components/nodes/InputNode'
@@ -82,6 +83,10 @@ const nodeTypes = {
     output: OutputNode,
 }
 
+const edgeTypes = {
+    default: DeletableEdge,
+}
+
 let nodeIdCounter = 1
 function generateNodeId(type: string) {
     return `${type}_${nodeIdCounter++}_${Date.now()}`
@@ -99,6 +104,9 @@ function FlowCanvas({ flowTaskId }: { flowTaskId: number }) {
     const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
     const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null)
     const [lastSavedLabel, setLastSavedLabel] = useState('')
+    /** Tracks the session ID of the most recently triggered preview. Used to
+     *  discard Celery task results that arrive from an older preview request. */
+    const previewSessionRef = useRef<string | null>(null)
 
     // Update relative label every 10 s
     useEffect(() => {
@@ -146,9 +154,10 @@ function FlowCanvas({ flowTaskId }: { flowTaskId: number }) {
         closePreview,
     } = useFlowTaskStore()
 
-    // Always close the preview drawer when entering the flow editor
+    // Always close the preview drawer when entering, relative clean up on exit
     useEffect(() => {
         closePreview()
+        return () => selectNode(null)
     }, [])  // eslint-disable-line react-hooks/exhaustive-deps
 
     // Load graph from API
@@ -224,9 +233,17 @@ function FlowCanvas({ flowTaskId }: { flowTaskId: number }) {
         if (!previewStatusData) return
         if (previewStatusData.state === 'SUCCESS') {
             setPreviewPollingTaskId(null)
+            // Guard: ignore stale results from a previous preview session.
+            // If the user triggered a new preview before this one resolved,
+            // previewSessionRef.current will no longer match the session ID
+            // that was active when this particular Celery task was submitted.
+            const currentSession = useFlowTaskStore.getState().preview.previewSessionId
+            if (currentSession !== previewSessionRef.current) return
             setPreviewResult(previewStatusData.result as never)
         } else if (previewStatusData.state === 'FAILURE') {
             setPreviewPollingTaskId(null)
+            const currentSession = useFlowTaskStore.getState().preview.previewSessionId
+            if (currentSession !== previewSessionRef.current) return
             setPreviewError((previewStatusData.error as string) || 'Preview failed')
         }
     }, [previewStatusData, setPreviewResult, setPreviewError])
@@ -234,14 +251,14 @@ function FlowCanvas({ flowTaskId }: { flowTaskId: number }) {
     // ─── Save ──────────────────────────────────────────────────────────────────
 
     const saveMutation = useMutation({
-        mutationFn: () => {
+        mutationFn: (_opts?: { silent?: boolean }) => {
             const graph: FlowGraph = { nodes, edges }
             return flowTasksRepo.saveGraph(flowTaskId, graph)
         },
-        onSuccess: () => {
+        onSuccess: (_data, opts) => {
             markClean()
             setLastSavedAt(new Date())
-            toast.success('Graph saved')
+            if (!opts?.silent) toast.success('Graph saved')
             // Invalidate only the flow-task detail (status/name), NOT the graph query.
             // Invalidating the graph query would trigger a refetch that calls setNodes([]),
             // clearing the canvas with the freshly saved data.
@@ -262,7 +279,7 @@ function FlowCanvas({ flowTaskId }: { flowTaskId: number }) {
         if (!autoSave || !isDirty) return
         if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current)
         autoSaveTimer.current = setTimeout(() => {
-            saveMutation.mutate()
+            saveMutation.mutate({ silent: true })
         }, 2000)
         return () => {
             if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current)
@@ -362,6 +379,16 @@ function FlowCanvas({ flowTaskId }: { flowTaskId: number }) {
     const handlePreviewNode = useCallback(
         async (nodeId: string, nodeLabel: string) => {
             const graphSnapshot: FlowGraph = { nodes, edges }
+            // Resolve the node type from the current graph state
+            const nodeType = nodes.find((n) => n.id === nodeId)?.type ?? 'unknown'
+
+            // Reset the drawer to a loading state IMMEDIATELY so the user
+            // never sees stale data from a previous node while the API call is
+            // in-flight. Pass an empty celeryTaskId for now; it will be updated
+            // once the response arrives.
+            const sessionId = openPreview(nodeId, nodeLabel, nodeType, '')
+            previewSessionRef.current = sessionId
+
             try {
                 const resp = await flowTasksRepo.previewNode(flowTaskId, {
                     node_id: nodeId,
@@ -370,7 +397,9 @@ function FlowCanvas({ flowTaskId }: { flowTaskId: number }) {
                     limit: 500,
                 })
                 const { task_id } = resp.data
-                openPreview(nodeId, nodeLabel, task_id)
+                // Guard: if the user triggered another preview while we were
+                // waiting for this API call, bail out so we don't overwrite it.
+                if (previewSessionRef.current !== sessionId) return
                 setPreviewPollingTaskId(task_id)
             } catch {
                 toast.error('Failed to submit preview')
@@ -456,7 +485,7 @@ function FlowCanvas({ flowTaskId }: { flowTaskId: number }) {
                     <Button
                         size="sm"
                         variant="outline"
-                        onClick={() => saveMutation.mutate()}
+                        onClick={() => saveMutation.mutate({})}
                         disabled={saveMutation.isPending || !isDirty}
                     >
                         {saveMutation.isPending ? (
@@ -522,6 +551,7 @@ function FlowCanvas({ flowTaskId }: { flowTaskId: number }) {
                             nodes={nodes}
                             edges={edges}
                             nodeTypes={nodeTypes}
+                            edgeTypes={edgeTypes}
                             colorMode={resolvedTheme}
                             onNodesChange={onNodesChange}
                             onEdgesChange={onEdgesChange}

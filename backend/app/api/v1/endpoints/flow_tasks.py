@@ -65,7 +65,7 @@ def create_flow_task(
 )
 def list_flow_tasks(
     page: int = Query(default=1, ge=1, description="Page number"),
-    page_size: int = Query(default=20, ge=1, le=100, description="Items per page"),
+    page_size: int = Query(default=20, ge=1, le=1000, description="Items per page"),
     service: FlowTaskService = Depends(get_flow_task_service),
 ) -> FlowTaskListResponse:
     """List all flow tasks with pagination."""
@@ -132,6 +132,30 @@ def delete_flow_task(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.post(
+    "/{flow_task_id}/duplicate",
+    response_model=FlowTaskResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Duplicate flow task",
+)
+def duplicate_flow_task(
+    flow_task_id: int,
+    service: FlowTaskService = Depends(get_flow_task_service),
+) -> FlowTaskResponse:
+    """Duplicate a flow task and its graph."""
+    try:
+        task = service.duplicate_flow_task(flow_task_id)
+        return FlowTaskResponse.from_orm(task)
+    except EntityNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except Exception as e:
+        logger.error(f"Failed to duplicate flow task {flow_task_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to duplicate flow task",
+        )
 
 
 # ─── Graph ─────────────────────────────────────────────────────────────────────

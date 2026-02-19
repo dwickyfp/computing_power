@@ -36,6 +36,7 @@ export interface FlowNodeData {
     schema_name?: string
     table_name?: string
     alias?: string
+    sample_limit?: number // for input node preview limit
     // clean node
     drop_nulls?: boolean
     deduplicate?: boolean
@@ -249,6 +250,10 @@ export const flowTasksRepo = {
 
     remove(id: number) {
         return api.delete<{ message: string }>(`/flow-tasks/${id}`)
+    },
+
+    duplicate(id: number) {
+        return api.post<FlowTask>(`/flow-tasks/${id}/duplicate`)
     },
 
     // Graph

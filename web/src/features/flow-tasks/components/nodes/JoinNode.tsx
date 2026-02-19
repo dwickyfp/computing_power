@@ -10,7 +10,7 @@ import { BaseNode } from './BaseNode'
 export const JoinNode = memo(function JoinNode({ id, selected, data }: NodeProps) {
     const label = (data?.label as string) || 'Join'
     const joinType = (data?.join_type as string) || 'INNER'
-    const conditions = (data?.join_conditions as unknown[]) || []
+    const leftKeys = (data?.left_keys as unknown[]) || []
 
     return (
         <BaseNode
@@ -34,8 +34,8 @@ export const JoinNode = memo(function JoinNode({ id, selected, data }: NodeProps
                     <span className="inline-flex items-center justify-center w-3.5 h-3.5 rounded-sm bg-orange-200 dark:bg-orange-800 text-[8px] font-bold text-orange-700 dark:text-orange-300">R</span>
                     <span>Right input</span>
                 </div>
-                {conditions.length > 0
-                    ? <span className="mt-0.5">{conditions.length} join key{conditions.length > 1 ? 's' : ''}</span>
+                {leftKeys.length > 0
+                    ? <span className="mt-0.5">{leftKeys.length} join key{leftKeys.length > 1 ? 's' : ''}</span>
                     : <span className="italic text-muted-foreground mt-0.5">No join keys</span>
                 }
             </div>

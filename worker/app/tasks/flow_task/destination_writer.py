@@ -109,6 +109,11 @@ class PostgresDestinationWriter(BaseDestinationWriter):
             rows_written = self._upsert(
                 conn, cte_prefix, source_cte, fqt, upsert_keys
             )
+        elif write_mode == "REPLACE":
+            # REPLACE mode: truncate + insert
+            logger.info("Truncating table", table=fqt)
+            conn.execute(f"TRUNCATE TABLE {fqt}")
+            rows_written = self._append(conn, cte_prefix, source_cte, fqt)
         else:
             # APPEND mode
             rows_written = self._append(conn, cte_prefix, source_cte, fqt)

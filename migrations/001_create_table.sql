@@ -597,7 +597,154 @@ ALTER TABLE destinations
 
 
 
+-- ============================================================
+-- Migration 010: Linked Task — Flow Task Orchestration DAG
+-- Allows chaining multiple flow tasks in sequential/parallel
+-- patterns with configurable dependency conditions.
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS linked_tasks (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(255) NOT NULL UNIQUE,
+    description TEXT NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'IDLE',   -- IDLE, RUNNING, SUCCESS, FAILED
+    last_run_at TIMESTAMPTZ NULL,
+    last_run_status VARCHAR(20) NULL,             -- SUCCESS, FAILED, NULL
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_linked_tasks_status ON linked_tasks(status);
+CREATE INDEX IF NOT EXISTS idx_linked_tasks_last_run_at ON linked_tasks(last_run_at DESC);
+COMMENT ON TABLE linked_tasks IS 'Orchestration DAGs that chain multiple flow_tasks';
+
+-- Steps (nodes) — one row per flow_task placed on the canvas
+CREATE TABLE IF NOT EXISTS linked_task_steps (
+    id SERIAL PRIMARY KEY,
+    linked_task_id INTEGER NOT NULL REFERENCES linked_tasks(id) ON DELETE CASCADE,
+    flow_task_id   INTEGER NOT NULL REFERENCES flow_tasks(id)   ON DELETE CASCADE,
+    pos_x FLOAT NOT NULL DEFAULT 0,
+    pos_y FLOAT NOT NULL DEFAULT 0,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_linked_task_steps_linked_task_id ON linked_task_steps(linked_task_id);
+COMMENT ON TABLE linked_task_steps IS 'Canvas nodes in a linked_task DAG — each references one flow_task';
+
+-- Edges — dependency connections between steps
+CREATE TABLE IF NOT EXISTS linked_task_edges (
+    id SERIAL PRIMARY KEY,
+    linked_task_id INTEGER NOT NULL REFERENCES linked_tasks(id)        ON DELETE CASCADE,
+    source_step_id INTEGER NOT NULL REFERENCES linked_task_steps(id)   ON DELETE CASCADE,
+    target_step_id INTEGER NOT NULL REFERENCES linked_task_steps(id)   ON DELETE CASCADE,
+    condition VARCHAR(20) NOT NULL DEFAULT 'ON_SUCCESS', -- ON_SUCCESS | ALWAYS
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    CONSTRAINT uq_linked_task_edge UNIQUE (source_step_id, target_step_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_linked_task_edges_linked_task_id ON linked_task_edges(linked_task_id);
+COMMENT ON TABLE linked_task_edges IS 'DAG edges: ON_SUCCESS = run target only if source succeeded; ALWAYS = run regardless';
+
+-- Run history — one row per triggered execution
+CREATE TABLE IF NOT EXISTS linked_task_run_history (
+    id SERIAL PRIMARY KEY,
+    linked_task_id INTEGER NOT NULL REFERENCES linked_tasks(id) ON DELETE CASCADE,
+    trigger_type VARCHAR(20) NOT NULL DEFAULT 'MANUAL',
+    status VARCHAR(20) NOT NULL DEFAULT 'RUNNING', -- RUNNING, SUCCESS, FAILED, CANCELLED
+    celery_task_id VARCHAR(255) NULL,
+    started_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    finished_at TIMESTAMPTZ NULL,
+    error_message TEXT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_linked_task_run_history_linked_task_id ON linked_task_run_history(linked_task_id);
+CREATE INDEX IF NOT EXISTS idx_linked_task_run_history_status ON linked_task_run_history(status);
+CREATE INDEX IF NOT EXISTS idx_linked_task_run_history_started_at ON linked_task_run_history(started_at DESC);
+COMMENT ON TABLE linked_task_run_history IS 'Execution history for each linked_task DAG run';
+
+-- Step log — per-step status within a run
+CREATE TABLE IF NOT EXISTS linked_task_run_step_log (
+    id SERIAL PRIMARY KEY,
+    run_history_id           INTEGER NOT NULL REFERENCES linked_task_run_history(id) ON DELETE CASCADE,
+    linked_task_id           INTEGER NOT NULL REFERENCES linked_tasks(id)            ON DELETE CASCADE,
+    step_id                  INTEGER NOT NULL REFERENCES linked_task_steps(id)       ON DELETE CASCADE,
+    flow_task_id             INTEGER NOT NULL REFERENCES flow_tasks(id)              ON DELETE CASCADE,
+    flow_task_run_history_id INTEGER NULL     REFERENCES flow_task_run_history(id)   ON DELETE SET NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'PENDING', -- PENDING, RUNNING, SUCCESS, FAILED, SKIPPED
+    celery_task_id VARCHAR(255) NULL,
+    started_at TIMESTAMPTZ NULL,
+    finished_at TIMESTAMPTZ NULL,
+    error_message TEXT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_linked_task_run_step_log_run_history_id ON linked_task_run_step_log(run_history_id);
+CREATE INDEX IF NOT EXISTS idx_linked_task_run_step_log_step_id ON linked_task_run_step_log(step_id);
+COMMENT ON TABLE linked_task_run_step_log IS 'Per-step execution logs within a linked_task run';
 
 
+-- ============================================================
+-- Migration 011: Schedules — Cron-based job scheduling
+-- Allows users to schedule flow_tasks and linked_tasks to run
+-- automatically on a cron expression. APScheduler registers
+-- ACTIVE schedules at startup and syncs on CRUD operations.
+-- ============================================================
+
+-- Master schedule definition
+CREATE TABLE IF NOT EXISTS schedules (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(255) NOT NULL UNIQUE,
+    description TEXT NULL,
+    task_type VARCHAR(20) NOT NULL,          -- FLOW_TASK | LINKED_TASK
+    task_id INTEGER NOT NULL,                -- references flow_tasks.id or linked_tasks.id
+    cron_expression VARCHAR(100) NOT NULL,   -- standard 5-part crontab: "*/5 * * * *"
+    status VARCHAR(20) NOT NULL DEFAULT 'ACTIVE',  -- ACTIVE | PAUSED
+    last_run_at TIMESTAMPTZ NULL,
+    next_run_at TIMESTAMPTZ NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Unique name constraint (idempotent for re-runs)
+ALTER TABLE schedules DROP CONSTRAINT IF EXISTS uq_schedules_name;
+ALTER TABLE schedules ADD CONSTRAINT uq_schedules_name UNIQUE (name);
+
+-- Indexes
+CREATE INDEX IF NOT EXISTS idx_schedules_status ON schedules(status);
+CREATE INDEX IF NOT EXISTS idx_schedules_task_type ON schedules(task_type);
+CREATE INDEX IF NOT EXISTS idx_schedules_task_type_task_id ON schedules(task_type, task_id);
+CREATE INDEX IF NOT EXISTS idx_schedules_last_run_at ON schedules(last_run_at DESC);
+
+COMMENT ON TABLE schedules IS 'Cron-based job schedules — each row triggers a flow_task or linked_task on a cron expression';
+COMMENT ON COLUMN schedules.cron_expression IS 'Standard 5-part crontab string, e.g. "*/5 * * * *" (minute hour day month weekday)';
+COMMENT ON COLUMN schedules.task_type IS 'FLOW_TASK = references flow_tasks.id; LINKED_TASK = references linked_tasks.id';
+
+-- Execution run history (append-only, cascade-deleted with schedule)
+CREATE TABLE IF NOT EXISTS schedule_run_history (
+    id SERIAL PRIMARY KEY,
+    schedule_id INTEGER NOT NULL REFERENCES schedules(id) ON DELETE CASCADE,
+    task_type VARCHAR(20) NOT NULL,
+    task_id INTEGER NOT NULL,
+    triggered_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    completed_at TIMESTAMPTZ NULL,
+    duration_ms INTEGER NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'RUNNING',  -- RUNNING | SUCCESS | FAILED
+    message TEXT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Indexes for run history
+CREATE INDEX IF NOT EXISTS idx_schedule_run_history_schedule_id ON schedule_run_history(schedule_id);
+CREATE INDEX IF NOT EXISTS idx_schedule_run_history_triggered_at ON schedule_run_history(triggered_at DESC);
+CREATE INDEX IF NOT EXISTS idx_schedule_run_history_status ON schedule_run_history(status);
+CREATE INDEX IF NOT EXISTS idx_schedule_run_history_schedule_triggered ON schedule_run_history(schedule_id, triggered_at DESC);
+
+COMMENT ON TABLE schedule_run_history IS 'Execution history for scheduled jobs — one row per cron-triggered run, cascade-deleted with parent schedule';
 
 

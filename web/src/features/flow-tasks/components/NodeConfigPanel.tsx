@@ -8,6 +8,7 @@
  */
 
 import { useFlowTaskStore } from '../store/flow-task-store'
+import { cn } from '@/lib/utils'
 import { useQuery } from '@tanstack/react-query'
 import { useRef, useState, useEffect, useCallback } from 'react'
 import { Button } from '@/components/ui/button'
@@ -22,7 +23,7 @@ import {
 } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { Separator } from '@/components/ui/separator'
-import { X, Trash2, Eye, Loader2, Plus, GripVertical } from 'lucide-react'
+import { X, Trash2, Eye, Loader2, Plus, GripVertical, AlertCircle } from 'lucide-react'
 import type { FlowNodeType, FlowNodeData, WriteMode } from '@/repo/flow-tasks'
 import type { ColumnInfo } from '@/repo/flow-tasks'
 import { sourcesRepo } from '@/repo/sources'
@@ -38,12 +39,14 @@ function ColumnSelect({
     onChange,
     placeholder = 'Select column…',
     isLoading = false,
+    className,
 }: {
     columns: ColumnInfo[]
     value: string
     onChange: (v: string) => void
     placeholder?: string
     isLoading?: boolean
+    className?: string
 }) {
     if (isLoading) {
         return (
@@ -54,7 +57,7 @@ function ColumnSelect({
     }
     return (
         <Select value={value || ''} onValueChange={onChange}>
-            <SelectTrigger className="h-7 text-xs">
+            <SelectTrigger className={cn("h-7 text-xs", className)}>
                 <SelectValue placeholder={placeholder} />
             </SelectTrigger>
             <SelectContent>
@@ -132,7 +135,7 @@ function MultiColumnSelect({
 // ─── Main panel ────────────────────────────────────────────────────────────────
 
 export function NodeConfigPanel() {
-    const { nodes, selectedNodeId, selectNode, updateNodeData, removeNode, requestPreview } =
+    const { nodes, selectedNodeId, selectNode, updateNodeData, removeNode, requestPreview, setConfigPanelWidth } =
         useFlowTaskStore()
 
     // Extract flow task ID from route params
@@ -172,6 +175,11 @@ export function NodeConfigPanel() {
     }, [panelWidth])
 
     useEffect(() => {
+        // Init store with default
+        setConfigPanelWidth(DEFAULT_WIDTH)
+    }, [setConfigPanelWidth])
+
+    useEffect(() => {
         const onMove = (e: MouseEvent) => {
             if (!dragging.current || !innerRef.current) return
             // Cancel any pending frame — use latest mouse position only
@@ -194,7 +202,11 @@ export function NodeConfigPanel() {
                 rafId.current = null
             }
             // Commit final value to state — one re-render, panel keeps its size on remount
-            if (innerRef.current) setPanelWidth(innerRef.current.offsetWidth)
+            if (innerRef.current) {
+                const w = innerRef.current.offsetWidth
+                setPanelWidth(w)
+                setConfigPanelWidth(w)
+            }
         }
         window.addEventListener('mousemove', onMove)
         window.addEventListener('mouseup', onUp)
@@ -202,7 +214,7 @@ export function NodeConfigPanel() {
             window.removeEventListener('mousemove', onMove)
             window.removeEventListener('mouseup', onUp)
         }
-    }, [])
+    }, [setConfigPanelWidth])
 
     const selectedNode = (nodes ?? []).find((n) => n.id === selectedNodeId)
     if (!selectedNode) return null
@@ -327,6 +339,8 @@ function NodeTypeConfig({
             return <AggregateConfig data={data} update={update} nodeId={nodeId} flowTaskId={flowTaskId} />
         case 'join':
             return <JoinConfig data={data} update={update} nodeId={nodeId} flowTaskId={flowTaskId} />
+        case 'new_rows':
+            return <NewRowsConfig data={data} update={update} nodeId={nodeId} flowTaskId={flowTaskId} />
         case 'union':
             return <UnionConfig data={data} update={update} nodeId={nodeId} flowTaskId={flowTaskId} />
         case 'pivot':
@@ -448,7 +462,7 @@ function InputConfig({ data, update, nodeId: _nodeId, flowTaskId: _flowTaskId }:
                         })
                     }
                 >
-                    <SelectTrigger className="h-7 text-xs">
+                    <SelectTrigger className="h-7 text-xs w-full">
                         <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -475,7 +489,7 @@ function InputConfig({ data, update, nodeId: _nodeId, flowTaskId: _flowTaskId }:
                         value={pgConnectionValue}
                         onValueChange={handlePgConnectionChange}
                     >
-                        <SelectTrigger className="h-7 text-xs">
+                        <SelectTrigger className="h-7 text-xs w-full">
                             <SelectValue placeholder="Select connection…" />
                         </SelectTrigger>
                         <SelectContent>
@@ -513,7 +527,7 @@ function InputConfig({ data, update, nodeId: _nodeId, flowTaskId: _flowTaskId }:
                             update({ destination_id: parseInt(v), table_name: undefined })
                         }
                     >
-                        <SelectTrigger className="h-7 text-xs">
+                        <SelectTrigger className="h-7 text-xs w-full">
                             <SelectValue placeholder="Select destination…" />
                         </SelectTrigger>
                         <SelectContent>
@@ -539,7 +553,7 @@ function InputConfig({ data, update, nodeId: _nodeId, flowTaskId: _flowTaskId }:
                             value={(data.table_name as string) || ''}
                             onValueChange={(v) => update({ table_name: v })}
                         >
-                            <SelectTrigger className="h-7 text-xs">
+                            <SelectTrigger className="h-7 text-xs w-full">
                                 <SelectValue placeholder="Select table…" />
                             </SelectTrigger>
                             <SelectContent>
@@ -579,6 +593,26 @@ function InputConfig({ data, update, nodeId: _nodeId, flowTaskId: _flowTaskId }:
                     placeholder="cte_alias"
                 />
             </Field>
+
+            <Field label="Sample Limit (rows)">
+                <Select
+                    value={data.sample_limit ? String(data.sample_limit) : '0'}
+                    onValueChange={(v) => {
+                        const val = parseInt(v)
+                        update({ sample_limit: val || undefined })
+                    }}
+                >
+                    <SelectTrigger className="h-7 text-xs w-full">
+                        <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="100">100</SelectItem>
+                        <SelectItem value="200">200</SelectItem>
+                        <SelectItem value="500">500</SelectItem>
+                        <SelectItem value="0">No limit (Default)</SelectItem>
+                    </SelectContent>
+                </Select>
+            </Field>
         </>
     )
 }
@@ -596,6 +630,18 @@ function CleanConfig({ data, update, nodeId, flowTaskId }: ConfigFormProps) {
     const { columns, isLoading } = useNodeSchema(flowTaskId, nodeId)
     const filterRows: FilterRow[] = (data.filter_rows as FilterRow[]) || []
     const selectColumns: string[] = (data.select_columns as string[]) || []
+
+    // rename_columns is Record<string, string> (old → new)
+    const renameMap: Record<string, string> = (data.rename_columns as Record<string, string>) || {}
+    const renameRows = Object.entries(renameMap)
+
+    const setRenameRows = (pairs: [string, string][]) => {
+        const record: Record<string, string> = {}
+        for (const [from, to] of pairs) {
+            if (from) record[from] = to
+        }
+        update({ rename_columns: record })
+    }
 
     const setFilterRows = (rows: FilterRow[]) => {
         const expr = rows
@@ -715,6 +761,51 @@ function CleanConfig({ data, update, nodeId, flowTaskId }: ConfigFormProps) {
                     </p>
                 )}
             </Field>
+
+            <Field label="Rename columns">
+                <div className="space-y-1.5">
+                    {renameRows.map(([from, to], i) => (
+                        <div key={i} className="flex gap-1 items-center">
+                            <ColumnSelect
+                                columns={columns}
+                                value={from}
+                                onChange={(v) => {
+                                    const next = [...renameRows] as [string, string][]
+                                    next[i] = [v, to]
+                                    setRenameRows(next)
+                                }}
+                                placeholder="Column"
+                                isLoading={isLoading}
+                            />
+                            <span className="text-muted-foreground text-[11px] shrink-0">→</span>
+                            <Input
+                                className="!h-8 !py-0 px-2 text-[11px] flex-1 min-w-0"
+                                value={to}
+                                onChange={(e) => {
+                                    const next = [...renameRows] as [string, string][]
+                                    next[i] = [from, e.target.value]
+                                    setRenameRows(next)
+                                }}
+                                placeholder="New name"
+                            />
+                            <Button
+                                variant="ghost" size="icon"
+                                className="!h-7 !w-7 shrink-0 hover:text-destructive"
+                                onClick={() => setRenameRows(renameRows.filter((_, j) => j !== i) as [string, string][])}
+                            >
+                                <X className="h-3 w-3" />
+                            </Button>
+                        </div>
+                    ))}
+                    <Button
+                        variant="outline" size="sm"
+                        className="h-6 text-[11px] w-full gap-1"
+                        onClick={() => setRenameRows([...renameRows, ['', '']] as [string, string][])}
+                    >
+                        <Plus className="h-3 w-3" /> Add rename
+                    </Button>
+                </div>
+            </Field>
         </>
     )
 }
@@ -726,9 +817,26 @@ const AGG_FUNCTIONS = ['COUNT', 'COUNT_DISTINCT', 'SUM', 'AVG', 'MIN', 'MAX', 'F
 interface AggRow { column: string; function: string; alias: string }
 
 function AggregateConfig({ data, update, nodeId, flowTaskId }: ConfigFormProps) {
-    const { columns, isLoading } = useNodeSchema(flowTaskId, nodeId)
+    const { edges } = useFlowTaskStore()
+    // Find the upstream node connected to this aggregate node
+    const upstreamNodeId = edges.find((e) => e.target === nodeId)?.source
+    
+    // Use upstream node for schema (input schema), NOT current node
+    const { columns, isLoading } = useNodeSchema(flowTaskId, upstreamNodeId)
+    
     const groupBy: string[] = (data.group_by as string[]) || []
     const aggregations: AggRow[] = (data.aggregations as AggRow[]) || []
+
+    // Filter for numeric columns for aggregations (approximate check)
+    const numericColumns = columns.filter(c => {
+        const t = c.data_type.toLowerCase()
+        return t.includes('int') || 
+               t.includes('float') || 
+               t.includes('double') || 
+               t.includes('numeric') || 
+               t.includes('real') || 
+               t.includes('decimal')
+    })
 
     return (
         <>
@@ -743,29 +851,65 @@ function AggregateConfig({ data, update, nodeId, flowTaskId }: ConfigFormProps) 
 
             <Field label="Aggregations">
                 <div className="space-y-1.5">
+                    {/* Header Row */}
+                    <div className="grid grid-cols-[1.5fr_100px_1fr_28px] gap-2 px-1 mb-1">
+                        <Label className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Column</Label>
+                        <Label className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Func</Label>
+                        <Label className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Alias</Label>
+                        <span />
+                    </div>
+
                     {aggregations.map((row, i) => (
-                        <div key={i} className="flex gap-1 items-center">
+                        <div key={i} className="grid grid-cols-[1.5fr_100px_1fr_28px] gap-2 items-center group">
                             <ColumnSelect
-                                columns={columns}
+                                columns={numericColumns}
                                 value={row.column}
                                 onChange={(v) => {
                                     const next = [...aggregations]
-                                    next[i] = { ...next[i], column: v }
+                                    const currentAlias = next[i].alias
+                                    const func = next[i].function
+                                    
+                                    // Generate new alias if empty or looks like auto-generated
+                                    const isAuto = !currentAlias || /_\d+$/.test(currentAlias)
+                                    let newAlias = currentAlias
+                                    
+                                    if (isAuto && v) {
+                                        const cleanCol = v.replace(/\W+/g, '_')
+                                        const rand = Math.floor(Math.random() * 1000)
+                                        newAlias = `${cleanCol}_${func}_${rand}`
+                                    }
+
+                                    next[i] = { ...next[i], column: v, alias: newAlias }
                                     update({ aggregations: next })
                                 }}
                                 isLoading={isLoading}
-                                placeholder="column"
+                                placeholder="Col..."
+                                className="h-8 w-full py-1"
                             />
+
                             <Select
                                 value={row.function}
                                 onValueChange={(v) => {
                                     const next = [...aggregations]
-                                    next[i] = { ...next[i], function: v }
+                                    const col = next[i].column
+                                    const currentAlias = next[i].alias
+                                    
+                                    // Generate new alias if empty or looks like auto-generated
+                                    const isAuto = !currentAlias || /_\d+$/.test(currentAlias)
+                                    let newAlias = currentAlias
+
+                                    if (isAuto && col) {
+                                        const cleanCol = col.replace(/\W+/g, '_')
+                                        const rand = Math.floor(Math.random() * 1000)
+                                        newAlias = `${cleanCol}_${v}_${rand}`
+                                    }
+
+                                    next[i] = { ...next[i], function: v, alias: newAlias }
                                     update({ aggregations: next })
                                 }}
                             >
-                                <SelectTrigger className="h-7 text-xs w-24 shrink-0">
-                                    <SelectValue placeholder="func" />
+                                <SelectTrigger className="h-8 text-xs w-full py-1">
+                                    <SelectValue placeholder="Func" />
                                 </SelectTrigger>
                                 <SelectContent>
                                     {AGG_FUNCTIONS.map((f) => (
@@ -773,8 +917,9 @@ function AggregateConfig({ data, update, nodeId, flowTaskId }: ConfigFormProps) 
                                     ))}
                                 </SelectContent>
                             </Select>
+
                             <Input
-                                className="h-7 text-xs w-20 shrink-0"
+                                className="h-8 text-xs font-mono"
                                 value={row.alias}
                                 onChange={(e) => {
                                     const next = [...aggregations]
@@ -783,28 +928,31 @@ function AggregateConfig({ data, update, nodeId, flowTaskId }: ConfigFormProps) 
                                 }}
                                 placeholder="alias"
                             />
+
                             <Button
                                 variant="ghost" size="icon"
-                                className="h-7 w-7 shrink-0 hover:text-destructive"
+                                className="h-8 w-7 text-muted-foreground hover:text-destructive opacity-50 group-hover:opacity-100 transition-opacity"
                                 onClick={() =>
                                     update({ aggregations: aggregations.filter((_, j) => j !== i) })
                                 }
                             >
-                                <X className="h-3 w-3" />
+                                <X className="h-4 w-4" />
                             </Button>
                         </div>
                     ))}
-                    <Button
-                        variant="outline" size="sm"
-                        className="h-6 text-[11px] w-full gap-1"
-                        onClick={() =>
-                            update({
-                                aggregations: [...aggregations, { column: '', function: 'COUNT', alias: '' }],
-                            })
-                        }
-                    >
-                        <Plus className="h-3 w-3" /> Add aggregation
-                    </Button>
+                    <div className="pt-1">
+                        <Button
+                            variant="outline" size="sm"
+                            className="h-7 text-xs w-full gap-1.5 dashed border-muted-foreground/40 text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                            onClick={() =>
+                                update({
+                                    aggregations: [...aggregations, { column: '', function: 'COUNT', alias: 'count' }],
+                                })
+                            }
+                        >
+                            <Plus className="h-3.5 w-3.5" /> Add aggregation
+                        </Button>
+                    </div>
                 </div>
             </Field>
         </>
@@ -813,7 +961,55 @@ function AggregateConfig({ data, update, nodeId, flowTaskId }: ConfigFormProps) 
 
 // ─── Join ──────────────────────────────────────────────────────────────────────
 
-function JoinConfig({ data, update, nodeId: _nodeId, flowTaskId: _flowTaskId }: ConfigFormProps) {
+function JoinConfig({ data, update, nodeId, flowTaskId }: ConfigFormProps) {
+    const { edges } = useFlowTaskStore()
+
+    // Identify upstream nodes connected to the left/right handles
+    // Edges targetHandle must match the handle IDs in JoinNode ('left', 'right')
+    const leftEdge = edges.find((e) => e.target === nodeId && e.targetHandle === 'left')
+    const rightEdge = edges.find((e) => e.target === nodeId && e.targetHandle === 'right')
+
+    // Fetch schemas for upstream nodes
+    const { columns: leftCols, isLoading: leftLoading } = useNodeSchema(flowTaskId, leftEdge?.source)
+    const { columns: rightCols, isLoading: rightLoading } = useNodeSchema(flowTaskId, rightEdge?.source)
+
+    // Current keys
+    const leftKeys = (data.left_keys as string[]) || []
+    const rightKeys = (data.right_keys as string[]) || []
+
+    // Combine into pairs for rendering
+    // Fallback to at least one empty pair if none exist?
+    // No, empty state is valid (though preview will fail).
+    // Let's ensure length matches by truncating or padding if desynced (rare).
+    const rowCount = Math.max(leftKeys.length, rightKeys.length)
+
+    const updatePair = (index: number, side: 'left' | 'right', value: string) => {
+        const newLeft = [...leftKeys]
+        const newRight = [...rightKeys]
+
+        // Ensure arrays are long enough
+        while (newLeft.length <= index) newLeft.push('')
+        while (newRight.length <= index) newRight.push('')
+
+        if (side === 'left') newLeft[index] = value
+        else newRight[index] = value
+
+        update({ left_keys: newLeft, right_keys: newRight })
+    }
+
+    const addPair = () => {
+        update({
+            left_keys: [...leftKeys, ''],
+            right_keys: [...rightKeys, ''],
+        })
+    }
+
+    const removePair = (index: number) => {
+        const newLeft = leftKeys.filter((_, i) => i !== index)
+        const newRight = rightKeys.filter((_, i) => i !== index)
+        update({ left_keys: newLeft, right_keys: newRight })
+    }
+
     return (
         <>
             <Field label="Join Type">
@@ -821,7 +1017,7 @@ function JoinConfig({ data, update, nodeId: _nodeId, flowTaskId: _flowTaskId }: 
                     value={(data.join_type as string) || 'INNER'}
                     onValueChange={(v) => update({ join_type: v })}
                 >
-                    <SelectTrigger className="h-7 text-xs">
+                    <SelectTrigger className="h-7 text-xs w-full">
                         <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -833,10 +1029,186 @@ function JoinConfig({ data, update, nodeId: _nodeId, flowTaskId: _flowTaskId }: 
                     </SelectContent>
                 </Select>
             </Field>
-            <p className="text-[10px] text-muted-foreground">
-                Connect two nodes to this Join node via edges. The first connected input
-                is the left side; the second is the right side.
-            </p>
+
+            <Separator className="my-2" />
+
+            <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                    <Label className="text-[10px] uppercase text-muted-foreground tracking-wider">
+                        Join Conditions (ON)
+                    </Label>
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-5 px-1.5 text-[10px]"
+                        onClick={addPair}
+                    >
+                        <Plus className="h-3 w-3 mr-1" /> Add
+                    </Button>
+                </div>
+
+                {rowCount === 0 && (
+                    <div className="text-[10px] text-muted-foreground italic px-1">
+                        No join conditions set. The preview will likely fail.
+                    </div>
+                )}
+
+                <div className="space-y-2">
+                    {Array.from({ length: rowCount }).map((_, i) => (
+                        <div key={i} className="flex items-center gap-1.5 animate-in fade-in slide-in-from-left-1 duration-200">
+                            <div className="flex-1 min-w-0">
+                                <ColumnSelect
+                                    columns={leftCols}
+                                    value={leftKeys[i] || ''}
+                                    onChange={(v) => updatePair(i, 'left', v)}
+                                    placeholder="Left col..."
+                                    isLoading={leftLoading}
+                                    className="w-full"
+                                />
+                            </div>
+                            <span className="text-muted-foreground text-[10px]">=</span>
+                            <div className="flex-1 min-w-0">
+                                <ColumnSelect
+                                    columns={rightCols}
+                                    value={rightKeys[i] || ''}
+                                    onChange={(v) => updatePair(i, 'right', v)}
+                                    placeholder="Right col..."
+                                    isLoading={rightLoading}
+                                    className="w-full"
+                                />
+                            </div>
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7 text-muted-foreground hover:text-destructive shrink-0"
+                                onClick={() => removePair(i)}
+                            >
+                                <X className="h-3.5 w-3.5" />
+                            </Button>
+                        </div>
+                    ))}
+                </div>
+
+                {(!leftEdge || !rightEdge) && (
+                    <div className="flex items-start gap-1.5 p-2 rounded bg-muted/50 text-[10px] text-muted-foreground mt-2">
+                        <AlertCircle className="h-3 w-3 mt-0.5 shrink-0" />
+                        <p>
+                            Connect both Left and Right inputs to populate column lists.
+                        </p>
+                    </div>
+                )}
+            </div>
+        </>
+    )
+}
+
+// ─── New Rows (Add Columns) ────────────────────────────────────────────────────
+
+type NewRowsColumn = { alias: string; type: 'static' | 'expression'; value?: string; expr?: string }
+
+function NewRowsConfig({ data, update }: ConfigFormProps) {
+    const rawCols = (data.columns as NewRowsColumn[] | undefined) || []
+
+    const addColumn = () => {
+        update({
+            columns: [...rawCols, { alias: 'new_col', type: 'static', value: '' }],
+        })
+    }
+
+    const removeColumn = (index: number) => {
+        update({ columns: rawCols.filter((_, i) => i !== index) })
+    }
+
+    const updateColumn = (index: number, patch: Partial<NewRowsColumn>) => {
+        const updated = rawCols.map((col, i) => (i === index ? { ...col, ...patch } : col))
+        update({ columns: updated })
+    }
+
+    return (
+        <>
+            <div className="flex items-center justify-between">
+                <Label className="text-[10px] uppercase text-muted-foreground tracking-wider">
+                    Add Columns
+                </Label>
+                <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-5 px-1.5 text-[10px]"
+                    onClick={addColumn}
+                >
+                    <Plus className="h-3 w-3 mr-1" /> Add
+                </Button>
+            </div>
+
+            {rawCols.length === 0 && (
+                <div className="text-[10px] text-muted-foreground italic px-1">
+                    No columns defined. Click Add to create one.
+                </div>
+            )}
+
+            <div className="space-y-3">
+                {rawCols.map((col, i) => (
+                    <div
+                        key={i}
+                        className="space-y-1.5 p-2 rounded-md border border-border/60 bg-muted/20 animate-in fade-in slide-in-from-top-1 duration-200"
+                    >
+                        {/* Row header: alias + type toggle + delete */}
+                        <div className="flex items-center gap-1.5">
+                            <Input
+                                className="h-8 text-xs flex-1 font-mono"
+                                placeholder="column_name"
+                                value={col.alias}
+                                onChange={(e) => updateColumn(i, { alias: e.target.value })}
+                            />
+                            <Select
+                                value={col.type}
+                                onValueChange={(v: 'static' | 'expression') =>
+                                    updateColumn(i, { type: v })
+                                }
+                            >
+                                <SelectTrigger className="h-8 text-xs w-24 shrink-0">
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="static">Static</SelectItem>
+                                    <SelectItem value="expression">Expression</SelectItem>
+                                </SelectContent>
+                            </Select>
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-6 w-6 text-muted-foreground hover:text-destructive shrink-0"
+                                onClick={() => removeColumn(i)}
+                            >
+                                <X className="h-3 w-3" />
+                            </Button>
+                        </div>
+
+                        {/* Value/Expression input */}
+                        {col.type === 'static' ? (
+                            <div className="space-y-0.5">
+                                <span className="text-[9px] text-muted-foreground uppercase tracking-wider">Value</span>
+                                <Input
+                                    className="h-6 text-xs font-mono"
+                                    placeholder="e.g. active, 42, true"
+                                    value={col.value ?? ''}
+                                    onChange={(e) => updateColumn(i, { value: e.target.value })}
+                                />
+                            </div>
+                        ) : (
+                            <div className="space-y-0.5">
+                                <span className="text-[9px] text-muted-foreground uppercase tracking-wider">SQL Expression</span>
+                                <textarea
+                                    className="w-full min-h-[56px] resize-y rounded-md border border-input bg-background px-2 py-1 text-xs font-mono placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                                    placeholder={`CASE WHEN status = 'A' THEN 1 ELSE 0 END`}
+                                    value={col.expr ?? ''}
+                                    onChange={(e) => updateColumn(i, { expr: e.target.value })}
+                                />
+                            </div>
+                        )}
+                    </div>
+                ))}
+            </div>
         </>
     )
 }
@@ -856,7 +1228,11 @@ function UnionConfig({ data, update, nodeId: _nodeId, flowTaskId: _flowTaskId }:
 // ─── Pivot ─────────────────────────────────────────────────────────────────────
 
 function PivotConfig({ data, update, nodeId, flowTaskId }: ConfigFormProps) {
-    const { columns, isLoading } = useNodeSchema(flowTaskId, nodeId)
+    const { edges } = useFlowTaskStore()
+    const parentId = edges?.find((e) => e.target === nodeId)?.source
+    // Use the parent's output schema as our input schema.
+    // If no parent, we default to current node (which likely returns empty if invalid) or just empty.
+    const { columns, isLoading } = useNodeSchema(flowTaskId, parentId)
     const pivotType = (data.pivot_type as string) || 'PIVOT'
 
     return (
@@ -866,7 +1242,7 @@ function PivotConfig({ data, update, nodeId, flowTaskId }: ConfigFormProps) {
                     value={pivotType}
                     onValueChange={(v) => update({ pivot_type: v as 'PIVOT' | 'UNPIVOT' })}
                 >
-                    <SelectTrigger className="h-7 text-xs">
+                    <SelectTrigger className="h-7 text-xs w-full">
                         <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -882,6 +1258,7 @@ function PivotConfig({ data, update, nodeId, flowTaskId }: ConfigFormProps) {
                     value={(data.pivot_column as string) || ''}
                     onChange={(v) => update({ pivot_column: v })}
                     isLoading={isLoading}
+                    className="w-full"
                 />
             </Field>
 
@@ -891,6 +1268,7 @@ function PivotConfig({ data, update, nodeId, flowTaskId }: ConfigFormProps) {
                     value={(data.value_column as string) || ''}
                     onChange={(v) => update({ value_column: v })}
                     isLoading={isLoading}
+                    className="w-full"
                 />
             </Field>
 
@@ -936,7 +1314,7 @@ function OutputConfig({ data, update }: ConfigFormProps) {
                         value={data.destination_id != null ? String(data.destination_id) : ''}
                         onValueChange={(v) => update({ destination_id: parseInt(v) })}
                     >
-                        <SelectTrigger className="h-7 text-xs">
+                        <SelectTrigger className="h-7 text-xs w-full">
                             <SelectValue placeholder="Select destination…" />
                         </SelectTrigger>
                         <SelectContent>
@@ -972,7 +1350,7 @@ function OutputConfig({ data, update }: ConfigFormProps) {
                     value={(data.write_mode as string) || 'APPEND'}
                     onValueChange={(v) => update({ write_mode: v as WriteMode })}
                 >
-                    <SelectTrigger className="h-7 text-xs">
+                    <SelectTrigger className="h-7 text-xs w-full">
                         <SelectValue />
                     </SelectTrigger>
                     <SelectContent>

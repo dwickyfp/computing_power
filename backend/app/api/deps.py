@@ -110,3 +110,17 @@ def get_flow_task_service(db: Session = Depends(get_db)) -> "FlowTaskService":
     from app.domain.services.flow_task import FlowTaskService
 
     return FlowTaskService(db)
+
+
+def get_linked_task_service(db: Session = Depends(get_db)) -> "LinkedTaskService":
+    """Get linked task service dependency."""
+    from app.domain.services.linked_task import LinkedTaskService
+
+    return LinkedTaskService(db)
+
+
+def get_schedule_service(db: Session = Depends(get_db)) -> "ScheduleService":
+    """Get schedule service dependency."""
+    from app.domain.services.schedule import ScheduleService
+
+    return ScheduleService(db)

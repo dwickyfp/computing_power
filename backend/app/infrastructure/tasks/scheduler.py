@@ -226,6 +226,7 @@ class BackgroundScheduler:
                     return
 
                 # Check worker health via HTTP (worker's FastAPI health endpoint)
+                # Increased timeout to 10s to allow for Celery inspector operations
                 url = f"{self.settings.worker_health_url}/health"
                 with httpx.Client(timeout=10.0) as client:
                     response = client.get(url)
@@ -471,6 +472,20 @@ class BackgroundScheduler:
         # Start scheduler
         self.scheduler.start()
         logger.info("Background task scheduler started successfully")
+
+        # Load user-defined schedules from DB and register as CronTrigger jobs
+        # This must run AFTER self.scheduler.start() so the scheduler is live
+        try:
+            from app.infrastructure.tasks.dynamic_scheduler import (
+                dynamic_scheduler_service,
+            )
+            from app.core.database import db_manager
+
+            dynamic_scheduler_service.set_scheduler(self.scheduler)
+            dynamic_scheduler_service.load_all_from_db(db_manager.session_factory)
+            logger.info("Dynamic user schedules loaded and registered")
+        except Exception as exc:
+            logger.error(f"Failed to load dynamic user schedules: {exc}")
 
     def stop(self) -> None:
         """

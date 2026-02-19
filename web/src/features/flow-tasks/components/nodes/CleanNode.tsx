@@ -11,6 +11,9 @@ export const CleanNode = memo(function CleanNode({ id, selected, data }: NodePro
     if (data?.filter_expr) ops.push('Filter')
     const selectCols = data?.select_columns as string[] | undefined
     if (selectCols?.length) ops.push(`Select ${selectCols.length} cols`)
+    const renameCols = data?.rename_columns as Record<string, string> | undefined
+    const renameCount = renameCols ? Object.keys(renameCols).length : 0
+    if (renameCount > 0) ops.push(`Rename ${renameCount} col${renameCount !== 1 ? 's' : ''}`)
 
     return (
         <BaseNode
