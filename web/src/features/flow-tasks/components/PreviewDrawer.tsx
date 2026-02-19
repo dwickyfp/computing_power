@@ -127,7 +127,7 @@ export function PreviewDrawer() {
             </div>
 
             {/* Body */}
-            <div className="overflow-auto p-2" style={{ height }}>
+            <div className="overflow-auto" style={{ height }}>
                 {preview.isLoading && (
                     <div className="flex items-center justify-center h-full gap-2 text-muted-foreground">
                         <Loader2 className="h-4 w-4 animate-spin" />
@@ -170,10 +170,9 @@ function PreviewTable({ columns, columnTypes, rows }: PreviewTableProps) {
     }
 
     return (
-        <div className="overflow-x-auto">
-            <table className="text-xs border-collapse w-full">
-                <thead>
-                    <tr className="border-b border-border bg-muted/50">
+        <table className="text-xs border-collapse w-full relative">
+            <thead>
+                <tr className="border-b border-border bg-muted/90 backdrop-blur supports-[backdrop-filter]:bg-muted/50 sticky top-0 z-20 shadow-sm">
                         {columns.map((col) => (
                             <th
                                 key={col}
@@ -210,7 +209,6 @@ function PreviewTable({ columns, columnTypes, rows }: PreviewTableProps) {
                         </tr>
                     ))}
                 </tbody>
-            </table>
-        </div>
+        </table>
     )
 }
