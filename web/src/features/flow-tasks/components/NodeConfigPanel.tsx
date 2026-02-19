@@ -22,7 +22,7 @@ import {
 } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { Separator } from '@/components/ui/separator'
-import { X, Trash2, Eye, Loader2, Plus, GripVertical } from 'lucide-react'
+import { X, Trash2, Eye, Loader2, Plus, GripVertical, AlertCircle } from 'lucide-react'
 import type { FlowNodeType, FlowNodeData, WriteMode } from '@/repo/flow-tasks'
 import type { ColumnInfo } from '@/repo/flow-tasks'
 import { sourcesRepo } from '@/repo/sources'
@@ -822,7 +822,55 @@ function AggregateConfig({ data, update, nodeId, flowTaskId }: ConfigFormProps) 
 
 // ─── Join ──────────────────────────────────────────────────────────────────────
 
-function JoinConfig({ data, update, nodeId: _nodeId, flowTaskId: _flowTaskId }: ConfigFormProps) {
+function JoinConfig({ data, update, nodeId, flowTaskId }: ConfigFormProps) {
+    const { edges } = useFlowTaskStore()
+
+    // Identify upstream nodes connected to the left/right handles
+    // Edges targetHandle must match the handle IDs in JoinNode ('left', 'right')
+    const leftEdge = edges.find((e) => e.target === nodeId && e.targetHandle === 'left')
+    const rightEdge = edges.find((e) => e.target === nodeId && e.targetHandle === 'right')
+
+    // Fetch schemas for upstream nodes
+    const { columns: leftCols, isLoading: leftLoading } = useNodeSchema(flowTaskId, leftEdge?.source)
+    const { columns: rightCols, isLoading: rightLoading } = useNodeSchema(flowTaskId, rightEdge?.source)
+
+    // Current keys
+    const leftKeys = (data.left_keys as string[]) || []
+    const rightKeys = (data.right_keys as string[]) || []
+
+    // Combine into pairs for rendering
+    // Fallback to at least one empty pair if none exist?
+    // No, empty state is valid (though preview will fail).
+    // Let's ensure length matches by truncating or padding if desynced (rare).
+    const rowCount = Math.max(leftKeys.length, rightKeys.length)
+
+    const updatePair = (index: number, side: 'left' | 'right', value: string) => {
+        const newLeft = [...leftKeys]
+        const newRight = [...rightKeys]
+
+        // Ensure arrays are long enough
+        while (newLeft.length <= index) newLeft.push('')
+        while (newRight.length <= index) newRight.push('')
+
+        if (side === 'left') newLeft[index] = value
+        else newRight[index] = value
+
+        update({ left_keys: newLeft, right_keys: newRight })
+    }
+
+    const addPair = () => {
+        update({
+            left_keys: [...leftKeys, ''],
+            right_keys: [...rightKeys, ''],
+        })
+    }
+
+    const removePair = (index: number) => {
+        const newLeft = leftKeys.filter((_, i) => i !== index)
+        const newRight = rightKeys.filter((_, i) => i !== index)
+        update({ left_keys: newLeft, right_keys: newRight })
+    }
+
     return (
         <>
             <Field label="Join Type">
@@ -842,10 +890,73 @@ function JoinConfig({ data, update, nodeId: _nodeId, flowTaskId: _flowTaskId }: 
                     </SelectContent>
                 </Select>
             </Field>
-            <p className="text-[10px] text-muted-foreground">
-                Connect two nodes to this Join node via edges. The first connected input
-                is the left side; the second is the right side.
-            </p>
+
+            <Separator className="my-2" />
+
+            <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                    <Label className="text-[10px] uppercase text-muted-foreground tracking-wider">
+                        Join Conditions (ON)
+                    </Label>
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-5 px-1.5 text-[10px]"
+                        onClick={addPair}
+                    >
+                        <Plus className="h-3 w-3 mr-1" /> Add
+                    </Button>
+                </div>
+
+                {rowCount === 0 && (
+                    <div className="text-[10px] text-muted-foreground italic px-1">
+                        No join conditions set. The preview will likely fail.
+                    </div>
+                )}
+
+                <div className="space-y-2">
+                    {Array.from({ length: rowCount }).map((_, i) => (
+                        <div key={i} className="flex items-center gap-1.5 animate-in fade-in slide-in-from-left-1 duration-200">
+                            <div className="flex-1 min-w-0">
+                                <ColumnSelect
+                                    columns={leftCols}
+                                    value={leftKeys[i] || ''}
+                                    onChange={(v) => updatePair(i, 'left', v)}
+                                    placeholder="Left col..."
+                                    isLoading={leftLoading}
+                                />
+                            </div>
+                            <span className="text-muted-foreground text-[10px]">=</span>
+                            <div className="flex-1 min-w-0">
+                                <ColumnSelect
+                                    columns={rightCols}
+                                    value={rightKeys[i] || ''}
+                                    onChange={(v) => updatePair(i, 'right', v)}
+                                    placeholder="Right col..."
+                                    isLoading={rightLoading}
+                                />
+                            </div>
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7 text-muted-foreground hover:text-destructive shrink-0"
+                                onClick={() => removePair(i)}
+                            >
+                                <X className="h-3.5 w-3.5" />
+                            </Button>
+                        </div>
+                    ))}
+                </div>
+
+                {(!leftEdge || !rightEdge) && (
+                    <div className="flex items-start gap-1.5 p-2 rounded bg-muted/50 text-[10px] text-muted-foreground mt-2">
+                        <AlertCircle className="h-3 w-3 mt-0.5 shrink-0" />
+                        <p>
+                            Connect both Left and Right inputs to populate column lists.
+                        </p>
+                    </div>
+                )}
+            </div>
         </>
     )
 }
