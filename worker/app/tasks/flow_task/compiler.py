@@ -25,7 +25,7 @@ logger = structlog.get_logger(__name__)
 
 VALID_NODE_TYPES = {
     "input", "clean", "aggregate", "join", "union",
-    "pivot", "new_rows", "output",
+    "pivot", "new_rows", "sql", "output",
 }
 
 SUPPORTED_JOIN_TYPES = {"INNER", "LEFT", "RIGHT", "FULL"}
@@ -106,6 +106,8 @@ def _build_input_cte(node: dict, _pred_ctes: list) -> str:
       table_name: str
       columns: list[str] (optional; defaults to *)
       sample_limit: int (optional)
+      watermark_column: str (optional; D8 incremental — column to filter on)
+      watermark_value: str (optional; D8 incremental — last processed value)
     """
     data = node.get("data", {})
     alias = _safe_identifier(data.get("attach_alias", "src"))
@@ -113,6 +115,8 @@ def _build_input_cte(node: dict, _pred_ctes: list) -> str:
     table = data.get("table_name", "")
     cols = data.get("columns")
     sample = data.get("sample_limit")
+    watermark_col = data.get("watermark_column")
+    watermark_val = data.get("watermark_value")
 
     if not table:
         raise ValueError(f"Input node {node['id']} missing table_name")
@@ -120,6 +124,17 @@ def _build_input_cte(node: dict, _pred_ctes: list) -> str:
     col_expr = ", ".join(cols) if cols else "*"
     fqt = f"{alias}.{schema}.{table}" if schema else f"{alias}.{table}"
     sql = f"SELECT {col_expr} FROM {fqt}"
+
+    # D8: Incremental execution — add WHERE clause for watermark
+    where_parts: List[str] = []
+    if watermark_col and watermark_val is not None and watermark_val != "":
+        # Escape single quotes in watermark value
+        safe_val = str(watermark_val).replace("'", "''")
+        where_parts.append(f"{watermark_col} > '{safe_val}'")
+
+    if where_parts:
+        sql += " WHERE " + " AND ".join(where_parts)
+
     if sample:
         sql += f" LIMIT {int(sample)}"
     return sql
@@ -423,6 +438,51 @@ def _build_new_rows_cte(node: dict, pred_ctes: list) -> str:
     return f"SELECT *, {extra_cols} FROM {source}"
 
 
+def _build_sql_cte(node: dict, pred_ctes: list) -> str:
+    """
+    SQL node — user-provided raw SQL with template variable substitution (D6).
+
+    Allows advanced users to write arbitrary SQL transformations. The upstream
+    CTEs are available via the ``{{input}}`` (first upstream) or ``{{input_N}}``
+    (Nth upstream, 0-indexed) template variables. ``{{upstream}}`` is an alias
+    for ``{{input}}``.
+
+    data keys:
+      sql_expression: str   — raw SQL query body (required)
+                              Example: "SELECT *, col1 + col2 AS total FROM {{input}}"
+
+    Security note:
+      This node is intended for trusted ETL developers only. The SQL is injected
+      verbatim into the CTE chain — no sandboxing is applied beyond what DuckDB
+      enforces (read-only ATTACH, memory limits, statement timeout).
+    """
+    if not pred_ctes:
+        raise ValueError(f"SQL node {node['id']} has no upstream nodes")
+
+    data = node.get("data", {})
+    sql_expr: str = data.get("sql_expression", "").strip()
+
+    if not sql_expr:
+        raise ValueError(
+            f"SQL node {node['id']}: sql_expression is required. "
+            f"Use {{{{input}}}} to reference the upstream CTE."
+        )
+
+    # Template variable substitution
+    # {{input}} or {{upstream}} → first predecessor CTE
+    result = sql_expr.replace("{{input}}", pred_ctes[0])
+    result = result.replace("{{upstream}}", pred_ctes[0])
+
+    # {{input_N}} → Nth predecessor CTE (0-indexed)
+    for i, cte in enumerate(pred_ctes):
+        result = result.replace(f"{{{{input_{i}}}}}", cte)
+
+    # Strip trailing semicolons (DuckDB CTEs don't need them)
+    result = result.rstrip(";").strip()
+
+    return result
+
+
 def _build_output_node_info(node: dict, pred_ctes: list) -> dict:
     """
     OUTPUT node — extract write configuration.
@@ -529,6 +589,7 @@ class GraphCompiler:
             "union": _build_union_cte,
             "pivot": _build_pivot_cte,
             "new_rows": _build_new_rows_cte,
+            "sql": _build_sql_cte,
         }
         if node_type not in builders:
             raise ValueError(

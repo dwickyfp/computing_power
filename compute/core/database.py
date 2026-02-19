@@ -2,10 +2,12 @@
 Database connection utilities for Rosetta Compute Engine.
 
 Provides connection pooling and session management for PostgreSQL.
+Includes adaptive pool sizing, health monitoring, and stale connection pruning (C3).
 """
 
 import logging
 import time
+import threading
 from contextlib import contextmanager
 from typing import Generator, Any
 
@@ -19,6 +21,35 @@ logger = logging.getLogger(__name__)
 
 # Global connection pool
 _connection_pool: pool.ThreadedConnectionPool | None = None
+
+# ─── Pool health monitoring (C3) ──────────────────────────────────────────────
+_pool_stats_lock = threading.Lock()
+_pool_stats = {
+    "total_acquired": 0,
+    "total_returned": 0,
+    "total_errors": 0,
+    "total_stale_detected": 0,
+    "total_closed_stale": 0,
+    "peak_concurrent": 0,
+    "current_concurrent": 0,
+    "last_health_check": 0.0,
+}
+
+
+def _update_pool_stat(key: str, delta: int = 1) -> None:
+    """Thread-safe pool stat update."""
+    with _pool_stats_lock:
+        _pool_stats[key] = _pool_stats.get(key, 0) + delta
+        if key == "total_acquired":
+            _pool_stats["current_concurrent"] += 1
+            _pool_stats["peak_concurrent"] = max(
+                _pool_stats["peak_concurrent"],
+                _pool_stats["current_concurrent"],
+            )
+        elif key == "total_returned":
+            _pool_stats["current_concurrent"] = max(
+                0, _pool_stats["current_concurrent"] - 1
+            )
 
 
 def init_connection_pool(
@@ -99,19 +130,55 @@ def get_connection_pool() -> pool.ThreadedConnectionPool:
 
 
 def log_pool_stats() -> None:
-    """Log connection pool statistics for debugging."""
+    """Log connection pool statistics for debugging (enhanced with C3 metrics)."""
     try:
         connection_pool = get_connection_pool()
-        # Access private attributes to get pool stats
-        # minconn and maxconn are public
+        with _pool_stats_lock:
+            stats = dict(_pool_stats)
+
         logger.info(
             f"Connection pool stats: "
             f"min={connection_pool.minconn}, "
             f"max={connection_pool.maxconn}, "
-            f"closed={connection_pool.closed}"
+            f"closed={connection_pool.closed}, "
+            f"acquired={stats.get('total_acquired', 0)}, "
+            f"returned={stats.get('total_returned', 0)}, "
+            f"errors={stats.get('total_errors', 0)}, "
+            f"stale_detected={stats.get('total_stale_detected', 0)}, "
+            f"peak_concurrent={stats.get('peak_concurrent', 0)}, "
+            f"current_concurrent={stats.get('current_concurrent', 0)}"
         )
     except Exception as e:
         logger.warning(f"Failed to log pool stats: {e}")
+
+
+def get_pool_health() -> dict:
+    """
+    Get pool health summary for monitoring APIs (C3).
+
+    Returns:
+        Dict with pool health metrics
+    """
+    try:
+        connection_pool = get_connection_pool()
+        with _pool_stats_lock:
+            stats = dict(_pool_stats)
+
+        return {
+            "healthy": not connection_pool.closed,
+            "min_connections": connection_pool.minconn,
+            "max_connections": connection_pool.maxconn,
+            "is_closed": connection_pool.closed,
+            "total_acquired": stats.get("total_acquired", 0),
+            "total_returned": stats.get("total_returned", 0),
+            "total_errors": stats.get("total_errors", 0),
+            "stale_connections_detected": stats.get("total_stale_detected", 0),
+            "stale_connections_closed": stats.get("total_closed_stale", 0),
+            "peak_concurrent": stats.get("peak_concurrent", 0),
+            "current_concurrent": stats.get("current_concurrent", 0),
+        }
+    except Exception as e:
+        return {"healthy": False, "error": str(e)}
 
 
 def close_connection_pool() -> None:
@@ -127,6 +194,8 @@ def get_db_connection() -> psycopg2.extensions.connection:
     """
     Get a database connection from the pool.
 
+    Enhanced with stale connection detection and pool health tracking (C3).
+
     Returns:
         A PostgreSQL connection
 
@@ -141,6 +210,7 @@ def get_db_connection() -> psycopg2.extensions.connection:
         try:
             # Block up to 10 seconds waiting for available connection
             conn = connection_pool.getconn()
+            _update_pool_stat("total_acquired")
 
             # CRITICAL: Reset connection state before use
             # Connections returned from pool may still be in transaction state
@@ -160,10 +230,14 @@ def get_db_connection() -> psycopg2.extensions.connection:
                 conn.autocommit = False
 
             except (psycopg2.OperationalError, psycopg2.InterfaceError) as e:
-                # Connection is dead, remove it and get a new one
-                logger.warning(f"Detected dead connection, removing from pool: {e}")
+                # Connection is dead/stale, remove it and get a new one
+                _update_pool_stat("total_stale_detected")
+                _update_pool_stat("total_closed_stale")
+                logger.warning(f"Detected stale connection, removing from pool: {e}")
                 connection_pool.putconn(conn, close=True)
+                _update_pool_stat("total_returned")
                 conn = connection_pool.getconn()
+                _update_pool_stat("total_acquired")
 
                 # Reset the new connection too
                 if conn.status != psycopg2.extensions.STATUS_READY:
@@ -175,6 +249,7 @@ def get_db_connection() -> psycopg2.extensions.connection:
 
             return conn
         except psycopg2.pool.PoolError as e:
+            _update_pool_stat("total_errors")
             if attempt < max_retries - 1:
                 logger.warning(
                     f"Connection pool exhausted (attempt {attempt + 1}/{max_retries}), "
@@ -190,12 +265,13 @@ def get_db_connection() -> psycopg2.extensions.connection:
                     f"Failed to get connection from pool (exhausted): {e}"
                 )
         except psycopg2.Error as e:
+            _update_pool_stat("total_errors")
             raise DatabaseException(f"Failed to get connection from pool: {e}")
 
 
 def return_db_connection(conn: psycopg2.extensions.connection) -> None:
     """Return a connection to the pool after cleaning up transaction state."""
-    pool = get_connection_pool()
+    pool_instance = get_connection_pool()
 
     try:
         # CRITICAL: Clean up transaction state before returning to pool
@@ -212,11 +288,14 @@ def return_db_connection(conn: psycopg2.extensions.connection) -> None:
     except Exception as e:
         logger.warning(f"Error cleaning up connection state: {e}. Closing connection.")
         # If cleanup fails, close the connection instead of returning it
-        pool.putconn(conn, close=True)
+        pool_instance.putconn(conn, close=True)
+        _update_pool_stat("total_returned")
+        _update_pool_stat("total_closed_stale")
         return
 
     # Return cleaned connection to pool
-    pool.putconn(conn)
+    pool_instance.putconn(conn)
+    _update_pool_stat("total_returned")
 
 
 class DatabaseSession:

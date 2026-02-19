@@ -58,6 +58,7 @@ def execute_preview(
     destination_id: int,
     table_name: str,
     filter_sql: str | None = None,
+    include_profiling: bool = False,
 ) -> dict[str, Any]:
     """
     Execute a preview query using DuckDB with attached Postgres databases.
@@ -68,6 +69,7 @@ def execute_preview(
     3. Build query (with optional filter + custom SQL via CTE)
     4. Execute in DuckDB with Postgres extension
     5. Serialize and cache results (5 min TTL)
+    6. Optionally compute data profiling stats (D7)
 
     Cache Invalidation:
     - Cache key includes: custom SQL, filter SQL, source_id, dest_id, table_name
@@ -80,9 +82,10 @@ def execute_preview(
         destination_id: Destination database ID
         table_name: Table name to preview
         filter_sql: Optional filter SQL (v2 JSON or legacy format)
+        include_profiling: If True, compute and return column profiling stats (D7)
 
     Returns:
-        Dict with columns, column_types, data, error keys
+        Dict with columns, column_types, data, error keys (+ profile if requested)
     """
     settings = get_settings()
 
@@ -220,6 +223,15 @@ def execute_preview(
         data = result.to_pylist()
 
         response = serialize_preview_result(columns, column_types, data)
+
+        # 6b. Data profiling (D7) — compute column statistics if requested
+        if include_profiling:
+            try:
+                from app.tasks.preview.profiler import profile_arrow_table
+                response["profile"] = profile_arrow_table(result)
+            except Exception as e:
+                logger.warning("Data profiling failed", error=str(e))
+                response["profile"] = []
 
         # 7. Cache result (5 minute TTL)
         try:

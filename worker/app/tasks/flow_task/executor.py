@@ -217,6 +217,11 @@ def execute_flow_task(
     Compiles graph → DuckDB SQL, attaches all sources/destinations,
     runs all node CTEs in order, writes outputs, and records metrics.
 
+    Supports incremental execution (D8) — if input nodes have watermark_column
+    configured, the executor loads the last watermark value from the DB and
+    injects it into the node data before compilation. After successful execution,
+    watermarks are updated with the max value seen.
+
     Returns a result dict with:
       status, total_input_records, total_output_records, node_logs
     """
@@ -238,6 +243,9 @@ def execute_flow_task(
 
         # Step 2: Inject ATTACH configs into input nodes
         _inject_attach_configs(nodes, conn)
+
+        # Step 2b (D8): Inject watermark values for incremental execution
+        _inject_watermark_values(flow_task_id, nodes)
 
         # Recompile after injection (node data updated with attach_alias)
         compiler = GraphCompiler({"nodes": nodes, "edges": edges}).compile()
@@ -350,6 +358,12 @@ def execute_flow_task(
             else None
         )
 
+        # Step 5b (D8): Update watermarks after successful execution
+        if overall_status == "SUCCESS":
+            _update_watermarks_after_execution(
+                flow_task_id, nodes, conn, compiler
+            )
+
         _persist_run_results(
             run_history_id=run_history_id,
             flow_task_id=flow_task_id,
@@ -457,6 +471,156 @@ def _get_destination_type_cached(destination_id: int) -> str:
                 del _dest_type_cache[k]
         _dest_type_cache[destination_id] = (now, result)
     return result
+
+
+def _inject_watermark_values(
+    flow_task_id: int, nodes: List[dict]
+) -> None:
+    """
+    D8: Load watermark values from DB and inject into input node data.
+
+    For each input node with a `watermark_column` configured in its data,
+    loads the last stored watermark_value from flow_task_watermarks table
+    and injects it as `watermark_value` in the node data. The compiler
+    will then add a WHERE clause to filter only new records.
+    """
+    input_nodes_with_watermark = [
+        n for n in nodes
+        if n.get("type") == "input" and n.get("data", {}).get("watermark_column")
+    ]
+
+    if not input_nodes_with_watermark:
+        return
+
+    try:
+        from app.core.database import get_db_session
+        from sqlalchemy import text
+
+        with get_db_session() as db:
+            for node in input_nodes_with_watermark:
+                node_id = node["id"]
+                row = db.execute(
+                    text(
+                        "SELECT watermark_value FROM flow_task_watermarks "
+                        "WHERE flow_task_id = :ft_id AND node_id = :nid"
+                    ),
+                    {"ft_id": flow_task_id, "nid": node_id},
+                ).fetchone()
+
+                if row and row.watermark_value is not None:
+                    node["data"]["watermark_value"] = row.watermark_value
+                    logger.info(
+                        f"Injected watermark for node {node_id}: "
+                        f"column={node['data']['watermark_column']}, "
+                        f"value={row.watermark_value}"
+                    )
+                else:
+                    logger.debug(
+                        f"No watermark found for node {node_id} — "
+                        f"full scan will be performed"
+                    )
+    except Exception as e:
+        logger.warning(f"Failed to load watermarks: {e}. Full scan will be used.")
+
+
+def _update_watermarks_after_execution(
+    flow_task_id: int,
+    nodes: List[dict],
+    conn: Optional[Any],
+    compiler: Any,
+) -> None:
+    """
+    D8: Update watermarks after successful execution.
+
+    For each input node with a watermark_column, queries the CTE to find
+    the MAX value of the watermark column, then upserts it into
+    flow_task_watermarks.
+    """
+    input_nodes_with_watermark = [
+        n for n in nodes
+        if n.get("type") == "input" and n.get("data", {}).get("watermark_column")
+    ]
+
+    if not input_nodes_with_watermark or conn is None:
+        return
+
+    try:
+        from app.core.database import get_db_session
+        from sqlalchemy import text
+
+        now = datetime.now(ZoneInfo("Asia/Jakarta"))
+
+        for node in input_nodes_with_watermark:
+            node_id = node["id"]
+            watermark_col = node["data"]["watermark_column"]
+            cte_name = compiler.cte_map.get(node_id)
+
+            if not cte_name:
+                continue
+
+            try:
+                # Query the max watermark value from the CTE
+                max_sql = (
+                    f"{compiler.full_cte_prefix}\n"
+                    f"SELECT MAX({watermark_col})::VARCHAR AS max_val FROM {cte_name}"
+                )
+                result = conn.execute(max_sql).fetchone()
+                max_val = result[0] if result else None
+
+                if max_val is not None:
+                    # Upsert watermark to DB
+                    with get_db_session() as db:
+                        existing = db.execute(
+                            text(
+                                "SELECT id FROM flow_task_watermarks "
+                                "WHERE flow_task_id = :ft_id AND node_id = :nid"
+                            ),
+                            {"ft_id": flow_task_id, "nid": node_id},
+                        ).fetchone()
+
+                        if existing:
+                            db.execute(
+                                text(
+                                    "UPDATE flow_task_watermarks "
+                                    "SET watermark_value = :val, updated_at = :now "
+                                    "WHERE flow_task_id = :ft_id AND node_id = :nid"
+                                ),
+                                {
+                                    "val": str(max_val),
+                                    "now": now,
+                                    "ft_id": flow_task_id,
+                                    "nid": node_id,
+                                },
+                            )
+                        else:
+                            db.execute(
+                                text(
+                                    "INSERT INTO flow_task_watermarks "
+                                    "(flow_task_id, node_id, watermark_column, "
+                                    "watermark_value, created_at, updated_at) "
+                                    "VALUES (:ft_id, :nid, :col, :val, :now, :now)"
+                                ),
+                                {
+                                    "ft_id": flow_task_id,
+                                    "nid": node_id,
+                                    "col": watermark_col,
+                                    "val": str(max_val),
+                                    "now": now,
+                                },
+                            )
+
+                    logger.info(
+                        f"Updated watermark for node {node_id}: "
+                        f"{watermark_col}={max_val}"
+                    )
+
+            except Exception as e:
+                logger.warning(
+                    f"Failed to update watermark for node {node_id}: {e}"
+                )
+
+    except Exception as e:
+        logger.warning(f"Failed to update watermarks after execution: {e}")
 
 
 def _notify_flow_task_error(

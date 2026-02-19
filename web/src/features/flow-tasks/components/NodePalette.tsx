@@ -19,6 +19,7 @@ import {
     PlusCircle,
     HardDriveDownload,
     StickyNote,
+    Code2,
 } from 'lucide-react'
 import type { FlowNodeType } from '@/repo/flow-tasks'
 
@@ -82,6 +83,13 @@ const TRANSFORM_NODES: NodeDef[] = [
         description: 'Inject static rows into the flow',
         icon: <PlusCircle className="h-3.5 w-3.5" />,
         accentClass: 'border-l-amber-500',
+    },
+    {
+        type: 'sql',
+        label: 'SQL',
+        description: 'Write a custom SQL expression',
+        icon: <Code2 className="h-3.5 w-3.5" />,
+        accentClass: 'border-l-indigo-500',
     },
 ]
 

@@ -48,6 +48,7 @@ import {
     ChevronLeft,
     AlertCircle,
     Square,
+    History,
 } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -61,6 +62,7 @@ import { NodeConfigPanel } from '../components/NodeConfigPanel'
 import { PreviewDrawer } from '../components/PreviewDrawer'
 import { NodeContextMenu } from '../components/NodeContextMenu'
 import { DeletableEdge } from '../components/edges/DeletableEdge'
+import { VersionHistoryDialog } from '../components/VersionHistoryDialog'
 
 // Node type registry — maps node type strings to components
 import { InputNode } from '../components/nodes/InputNode'
@@ -72,6 +74,7 @@ import { PivotNode } from '../components/nodes/PivotNode'
 import { NewRowsNode } from '../components/nodes/NewRowsNode'
 import { OutputNode } from '../components/nodes/OutputNode'
 import { NoteNode } from '../components/nodes/NoteNode'
+import { SqlNode } from '../components/nodes/SqlNode'
 
 const nodeTypes = {
     input: InputNode,
@@ -81,6 +84,7 @@ const nodeTypes = {
     union: UnionNode,
     pivot: PivotNode,
     new_rows: NewRowsNode,
+    sql: SqlNode,
     output: OutputNode,
     note: NoteNode,
 }
@@ -103,6 +107,7 @@ function FlowCanvas({ flowTaskId }: { flowTaskId: number }) {
     const rfInstance = useRef<any>(null)
     const [pollingTaskId, setPollingTaskId] = useState<string | null>(null)
     const [autoSave, setAutoSave] = useState(false)
+    const [versionHistoryOpen, setVersionHistoryOpen] = useState(false)
     const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
     const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null)
     const [lastSavedLabel, setLastSavedLabel] = useState('')
@@ -526,6 +531,14 @@ function FlowCanvas({ flowTaskId }: { flowTaskId: number }) {
                             Cancel
                         </Button>
                     )}
+                    <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setVersionHistoryOpen(true)}
+                    >
+                        <History className="h-3.5 w-3.5 mr-1.5" />
+                        History
+                    </Button>
                     <div className="w-px h-5 bg-border" />
                     <Search />
                     <ThemeSwitch />
@@ -619,6 +632,13 @@ function FlowCanvas({ flowTaskId }: { flowTaskId: number }) {
                     {selectedNodeId && <NodeConfigPanel />}
                 </div>
             </div>
+
+            {/* Version History Dialog */}
+            <VersionHistoryDialog
+                open={versionHistoryOpen}
+                onOpenChange={setVersionHistoryOpen}
+                flowTaskId={flowTaskId}
+            />
         </div>
     )
 }

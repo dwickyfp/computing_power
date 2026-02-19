@@ -2,7 +2,7 @@
 Flow Task repositories.
 
 Provides data access for FlowTask, FlowTaskGraph, FlowTaskRunHistory,
-and FlowTaskRunNodeLog models.
+FlowTaskRunNodeLog, FlowTaskGraphVersion, and FlowTaskWatermark models.
 """
 
 from datetime import datetime
@@ -19,6 +19,8 @@ from app.domain.models.flow_task import (
     FlowTaskRunHistory,
     FlowTaskRunNodeLog,
 )
+from app.domain.models.flow_task_graph_version import FlowTaskGraphVersion
+from app.domain.models.flow_task_watermark import FlowTaskWatermark
 from app.domain.repositories.base import BaseRepository
 
 logger = get_logger(__name__)
@@ -218,3 +220,123 @@ class FlowTaskRunNodeLogRepository(BaseRepository[FlowTaskRunNodeLog]):
             records.append(record)
         self.db.flush()
         return records
+
+
+class FlowTaskGraphVersionRepository(BaseRepository[FlowTaskGraphVersion]):
+    """Repository for FlowTaskGraphVersion (D4 versioning)."""
+
+    def __init__(self, db: Session):
+        super().__init__(FlowTaskGraphVersion, db)
+
+    def get_versions_by_flow_task(
+        self, flow_task_id: int, skip: int = 0, limit: int = 20
+    ) -> tuple[List[FlowTaskGraphVersion], int]:
+        """Return paginated version history for a flow task."""
+        stmt = (
+            select(FlowTaskGraphVersion)
+            .where(FlowTaskGraphVersion.flow_task_id == flow_task_id)
+            .order_by(desc(FlowTaskGraphVersion.version))
+        )
+        total = self.db.execute(
+            select(func.count())
+            .select_from(FlowTaskGraphVersion)
+            .where(FlowTaskGraphVersion.flow_task_id == flow_task_id)
+        ).scalar_one()
+        items = list(
+            self.db.execute(stmt.offset(skip).limit(limit)).scalars().all()
+        )
+        return items, total
+
+    def get_latest_version_number(self, flow_task_id: int) -> int:
+        """Get the latest version number for a flow task (0 if none)."""
+        stmt = (
+            select(func.coalesce(func.max(FlowTaskGraphVersion.version), 0))
+            .where(FlowTaskGraphVersion.flow_task_id == flow_task_id)
+        )
+        return self.db.execute(stmt).scalar_one()
+
+    def get_by_version(
+        self, flow_task_id: int, version: int
+    ) -> Optional[FlowTaskGraphVersion]:
+        """Get a specific version snapshot."""
+        stmt = select(FlowTaskGraphVersion).where(
+            FlowTaskGraphVersion.flow_task_id == flow_task_id,
+            FlowTaskGraphVersion.version == version,
+        )
+        return self.db.execute(stmt).scalars().first()
+
+    def create_snapshot(
+        self,
+        flow_task_id: int,
+        nodes_json: list,
+        edges_json: list,
+        change_summary: str = None,
+    ) -> FlowTaskGraphVersion:
+        """Create a new version snapshot."""
+        next_version = self.get_latest_version_number(flow_task_id) + 1
+        return self.create(
+            flow_task_id=flow_task_id,
+            version=next_version,
+            nodes_json=nodes_json,
+            edges_json=edges_json,
+            change_summary=change_summary,
+        )
+
+
+class FlowTaskWatermarkRepository(BaseRepository[FlowTaskWatermark]):
+    """Repository for FlowTaskWatermark (D8 incremental execution)."""
+
+    def __init__(self, db: Session):
+        super().__init__(FlowTaskWatermark, db)
+
+    def get_by_flow_task_and_node(
+        self, flow_task_id: int, node_id: str
+    ) -> Optional[FlowTaskWatermark]:
+        """Get watermark for a specific node in a flow task."""
+        stmt = select(FlowTaskWatermark).where(
+            FlowTaskWatermark.flow_task_id == flow_task_id,
+            FlowTaskWatermark.node_id == node_id,
+        )
+        return self.db.execute(stmt).scalars().first()
+
+    def get_by_flow_task(self, flow_task_id: int) -> List[FlowTaskWatermark]:
+        """Get all watermarks for a flow task."""
+        stmt = select(FlowTaskWatermark).where(
+            FlowTaskWatermark.flow_task_id == flow_task_id
+        )
+        return list(self.db.execute(stmt).scalars().all())
+
+    def upsert_watermark(
+        self,
+        flow_task_id: int,
+        node_id: str,
+        watermark_column: str,
+        last_watermark_value: str,
+        watermark_type: str = "TIMESTAMP",
+        record_count: int = 0,
+    ) -> FlowTaskWatermark:
+        """Insert or update a watermark entry."""
+        existing = self.get_by_flow_task_and_node(flow_task_id, node_id)
+        now = datetime.now(ZoneInfo("Asia/Jakarta"))
+        if existing:
+            existing.watermark_column = watermark_column
+            existing.last_watermark_value = last_watermark_value
+            existing.watermark_type = watermark_type
+            existing.last_run_at = now
+            existing.record_count = record_count
+            existing.updated_at = now
+            self.db.flush()
+            return existing
+        else:
+            wm = FlowTaskWatermark(
+                flow_task_id=flow_task_id,
+                node_id=node_id,
+                watermark_column=watermark_column,
+                last_watermark_value=last_watermark_value,
+                watermark_type=watermark_type,
+                last_run_at=now,
+                record_count=record_count,
+            )
+            self.db.add(wm)
+            self.db.flush()
+            return wm

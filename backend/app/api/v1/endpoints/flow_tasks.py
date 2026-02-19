@@ -15,12 +15,17 @@ from app.domain.schemas.flow_task import (
     FlowTaskCreate,
     FlowTaskGraphResponse,
     FlowTaskGraphSave,
+    FlowTaskGraphSaveWithSummary,
+    FlowTaskGraphVersionListResponse,
+    FlowTaskGraphVersionResponse,
     FlowTaskListResponse,
     FlowTaskResponse,
     FlowTaskRunHistoryListResponse,
     FlowTaskRunHistoryResponse,
     FlowTaskTriggerResponse,
     FlowTaskUpdate,
+    FlowTaskWatermarkConfig,
+    FlowTaskWatermarkResponse,
     NodeColumnsResponse,
     NodePreviewRequest,
     NodePreviewTaskResponse,
@@ -418,5 +423,132 @@ def get_run_detail(
     try:
         run = service.get_run_detail(run_id)
         return FlowTaskRunHistoryResponse.from_orm(run)
+    except EntityNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+
+
+# ─── D4: Graph Versioning ─────────────────────────────────────────────────────
+
+@router.get(
+    "/{flow_task_id}/versions",
+    response_model=FlowTaskGraphVersionListResponse,
+    summary="List graph versions",
+)
+def list_graph_versions(
+    flow_task_id: int,
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
+    service: FlowTaskService = Depends(get_flow_task_service),
+) -> FlowTaskGraphVersionListResponse:
+    """List version history for a flow task graph."""
+    try:
+        skip = (page - 1) * page_size
+        items, total = service.list_graph_versions(
+            flow_task_id=flow_task_id, skip=skip, limit=page_size
+        )
+        return FlowTaskGraphVersionListResponse(
+            items=[FlowTaskGraphVersionResponse.from_orm(v) for v in items],
+            total=total,
+            page=page,
+            page_size=page_size,
+        )
+    except EntityNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+
+
+@router.get(
+    "/{flow_task_id}/versions/{version}",
+    response_model=FlowTaskGraphVersionResponse,
+    summary="Get specific graph version",
+)
+def get_graph_version(
+    flow_task_id: int,
+    version: int,
+    service: FlowTaskService = Depends(get_flow_task_service),
+) -> FlowTaskGraphVersionResponse:
+    """Get a specific version snapshot of the graph."""
+    try:
+        v = service.get_graph_version(flow_task_id, version)
+        return FlowTaskGraphVersionResponse.from_orm(v)
+    except EntityNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+
+
+@router.post(
+    "/{flow_task_id}/rollback/{version}",
+    response_model=FlowTaskGraphResponse,
+    summary="Rollback graph to version",
+)
+def rollback_graph(
+    flow_task_id: int,
+    version: int,
+    service: FlowTaskService = Depends(get_flow_task_service),
+) -> FlowTaskGraphResponse:
+    """Rollback the graph to a previous version."""
+    try:
+        graph = service.rollback_graph(flow_task_id, version)
+        return FlowTaskGraphResponse.from_orm(graph)
+    except EntityNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+# ─── D8: Watermark Management ─────────────────────────────────────────────────
+
+@router.get(
+    "/{flow_task_id}/watermarks",
+    response_model=list[FlowTaskWatermarkResponse],
+    summary="List watermarks",
+)
+def list_watermarks(
+    flow_task_id: int,
+    service: FlowTaskService = Depends(get_flow_task_service),
+) -> list[FlowTaskWatermarkResponse]:
+    """Get all watermarks for a flow task."""
+    try:
+        wms = service.get_watermarks(flow_task_id)
+        return [FlowTaskWatermarkResponse.from_orm(w) for w in wms]
+    except EntityNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+
+
+@router.post(
+    "/{flow_task_id}/watermarks",
+    response_model=FlowTaskWatermarkResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Set watermark",
+)
+def set_watermark(
+    flow_task_id: int,
+    config: FlowTaskWatermarkConfig,
+    service: FlowTaskService = Depends(get_flow_task_service),
+) -> FlowTaskWatermarkResponse:
+    """Configure a watermark for an input node."""
+    try:
+        wm = service.set_watermark(
+            flow_task_id=flow_task_id,
+            node_id=config.node_id,
+            watermark_column=config.watermark_column,
+            watermark_type=config.watermark_type,
+        )
+        return FlowTaskWatermarkResponse.from_orm(wm)
+    except EntityNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+
+
+@router.delete(
+    "/{flow_task_id}/watermarks/{node_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Reset watermark",
+)
+def reset_watermark(
+    flow_task_id: int,
+    node_id: str,
+    service: FlowTaskService = Depends(get_flow_task_service),
+) -> None:
+    """Reset (delete) the watermark for an input node."""
+    try:
+        service.reset_watermark(flow_task_id, node_id)
     except EntityNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))

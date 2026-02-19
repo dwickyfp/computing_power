@@ -95,9 +95,16 @@ class BackgroundScheduler:
 
             if db is not None:
                 # Reuse existing session — caller manages commit/close
-                repo = JobMetricRepository(db)
-                repo.upsert_metric(key, datetime.now(jakarta_tz))
-                db.commit()
+                try:
+                    repo = JobMetricRepository(db)
+                    repo.upsert_metric(key, datetime.now(jakarta_tz))
+                    db.commit()
+                except Exception as e:
+                    try:
+                        db.rollback()
+                    except Exception:
+                        pass
+                    logger.error(f"Failed to record job metric for {key}: {e}")
             else:
                 # Open a dedicated session (standalone invocation)
                 from app.core.database import db_manager
@@ -373,6 +380,106 @@ class BackgroundScheduler:
                 "Error running pipeline refresh check task", extra={"error": str(e)}
             )
 
+    def _run_alert_rules_evaluation(self) -> None:
+        """
+        Evaluate all enabled alert rules against current system metrics.
+        Collects metrics from existing monitors and evaluates rules.
+        """
+        try:
+            from app.core.database import db_manager
+            from app.domain.services.alert_rule import AlertRuleService
+
+            session_factory = db_manager.session_factory
+            db = session_factory()
+            try:
+                service = AlertRuleService(db)
+
+                # Collect current metrics from system state
+                metrics = self._collect_current_metrics(db)
+
+                if metrics:
+                    triggered = service.evaluate_all_rules(metrics)
+                    if triggered:
+                        logger.info(
+                            f"Alert evaluation triggered {len(triggered)} alert(s)"
+                        )
+
+                self._record_job_metric("alert_rules_evaluation", db=db)
+            except Exception as inner_err:
+                logger.error(
+                    "Error during alert rules evaluation",
+                    extra={"error": str(inner_err)},
+                )
+                try:
+                    db.rollback()
+                except Exception:
+                    pass
+                # Still try to record the metric with a clean session
+                self._record_job_metric("alert_rules_evaluation")
+            finally:
+                db.close()
+        except Exception as e:
+            logger.error(
+                "Error running alert rules evaluation", extra={"error": str(e)}
+            )
+
+    def _collect_current_metrics(self, db) -> dict:
+        """Collect current system metrics for alert evaluation."""
+        from sqlalchemy import text
+
+        metrics = {}
+        try:
+            # WAL size (bytes)
+            row = db.execute(
+                text("SELECT value FROM rosetta_setting_configuration WHERE key = 'WAL_SIZE_BYTES'")
+            ).fetchone()
+            if row:
+                try:
+                    metrics["wal_size"] = float(row[0])
+                except (ValueError, TypeError):
+                    pass
+
+            # Replication lag per source
+            rows = db.execute(
+                text(
+                    "SELECT s.id, EXTRACT(EPOCH FROM (NOW() - s.last_replication_check)) "
+                    "FROM sources s WHERE s.last_replication_check IS NOT NULL"
+                )
+            ).fetchall()
+            if rows:
+                metrics["replication_lag"] = {str(r[0]): float(r[1] or 0) for r in rows}
+
+            # Pipeline error counts
+            rows = db.execute(
+                text(
+                    "SELECT pipeline_id, COUNT(*) "
+                    "FROM pipeline_metadata WHERE status = 'ERROR' "
+                    "GROUP BY pipeline_id"
+                )
+            ).fetchall()
+            if rows:
+                metrics["error_rate"] = {str(r[0]): float(r[1]) for r in rows}
+
+            # System metrics (latest)
+            row = db.execute(
+                text(
+                    "SELECT cpu_percent, memory_percent "
+                    "FROM system_metrics ORDER BY created_at DESC LIMIT 1"
+                )
+            ).fetchone()
+            if row:
+                metrics["cpu_usage"] = float(row[0] or 0)
+                metrics["memory_usage"] = float(row[1] or 0)
+
+        except Exception as e:
+            logger.warning(f"Failed to collect metrics for alert evaluation: {e}")
+            try:
+                db.rollback()
+            except Exception:
+                pass
+
+        return metrics
+
     def start(self) -> None:
         """
         Start the background scheduler.
@@ -526,6 +633,18 @@ class BackgroundScheduler:
             max_instances=1,
             coalesce=True,
         )
+
+        # Schedule Alert Rules Evaluation (every 30 seconds)
+        self.scheduler.add_job(
+            self._run_alert_rules_evaluation,
+            trigger=IntervalTrigger(seconds=30),
+            id="alert_rules_evaluation",
+            name="Alert Rules Evaluation",
+            replace_existing=True,
+            max_instances=1,
+            coalesce=True,
+        )
+        logger.info("Alert rules evaluation job scheduled (every 30 seconds)")
 
         # Start scheduler
         self.scheduler.start()

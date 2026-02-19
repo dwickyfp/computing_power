@@ -352,6 +352,8 @@ function NodeTypeConfig({
             return <PivotConfig data={data} update={update} nodeId={nodeId} flowTaskId={flowTaskId} />
         case 'output':
             return <OutputConfig data={data} update={update} nodeId={nodeId} flowTaskId={flowTaskId} />
+        case 'sql':
+            return <SqlConfig data={data} update={update} nodeId={nodeId} flowTaskId={flowTaskId} />
         case 'note':
             return <NoteConfig data={data} update={update} nodeId={nodeId} flowTaskId={flowTaskId} />
         default:
@@ -1390,6 +1392,37 @@ function OutputConfig({ data, update }: ConfigFormProps) {
 }
 
 // ─── Note ──────────────────────────────────────────────────────────────────────
+
+// ─── SQL ───────────────────────────────────────────────────────────────────────
+
+function SqlConfig({ data, update }: ConfigFormProps) {
+    const expr = (data.sql_expression as string) ?? ''
+    return (
+        <>
+            <Field label="SQL Expression">
+                <textarea
+                    className="w-full min-h-[160px] resize-y rounded-md border border-input bg-background px-3 py-2 font-mono text-xs text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                    value={expr}
+                    onChange={(e) => update({ sql_expression: e.target.value })}
+                    placeholder={`SELECT *\nFROM {{input}}\nWHERE status = 'active'`}
+                    spellCheck={false}
+                />
+            </Field>
+            <div className="rounded-md bg-muted/50 p-2 space-y-1">
+                <p className="text-[10px] font-medium text-muted-foreground">Template variables</p>
+                <p className="text-[10px] text-muted-foreground">
+                    <code className="rounded bg-muted px-1">{'{{input}}'}</code> — first upstream CTE
+                </p>
+                <p className="text-[10px] text-muted-foreground">
+                    <code className="rounded bg-muted px-1">{'{{input_N}}'}</code> — Nth upstream CTE (0-based)
+                </p>
+                <p className="text-[10px] text-muted-foreground">
+                    <code className="rounded bg-muted px-1">{'{{upstream}}'}</code> — alias for first upstream
+                </p>
+            </div>
+        </>
+    )
+}
 
 function NoteConfig({ data, update }: ConfigFormProps) {
     const content = (data.note_content as string) ?? ''

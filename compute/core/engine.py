@@ -21,6 +21,7 @@ from core.exceptions import PipelineException
 from core.error_sanitizer import sanitize_for_db, sanitize_for_log
 from core.dlq_manager import DLQManager
 from core.dlq_recovery import DLQRecoveryWorker
+from core.schema_validator import validate_pipeline_schemas
 from sources.base import BaseSource
 from sources.postgresql import PostgreSQLSource
 from destinations.base import BaseDestination
@@ -316,6 +317,34 @@ class PipelineEngine:
                         "pipeline_name": self._pipeline.name,
                     },
                 )
+
+        # Validate schema compatibility between source and destinations (B2)
+        # Only warns on issues; errors are logged but don't block pipeline start
+        try:
+            schema_result = validate_pipeline_schemas(self._pipeline, table_list)
+            if schema_result.issues:
+                for issue in schema_result.issues:
+                    if issue.severity == "ERROR":
+                        self._logger.warning(
+                            f"Schema compatibility ERROR: {issue.message} "
+                            f"(table={issue.table_name}, column={issue.column_name})"
+                        )
+                    else:
+                        self._logger.info(
+                            f"Schema compatibility WARNING: {issue.message}"
+                        )
+
+                error_count = sum(1 for i in schema_result.issues if i.severity == "ERROR")
+                warn_count = sum(1 for i in schema_result.issues if i.severity == "WARNING")
+                self._logger.info(
+                    f"Schema validation: {schema_result.tables_checked} tables checked, "
+                    f"{error_count} errors, {warn_count} warnings"
+                )
+        except Exception as e:
+            self._logger.warning(
+                f"Schema validation skipped due to error: {e}",
+                exc_info=True,
+            )
 
         # Build Debezium properties
         offset_file = config.debezium.get_offset_file(self._pipeline.name)

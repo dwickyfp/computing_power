@@ -25,12 +25,16 @@ import { Route as AuthenticatedPipelinesRouteRouteImport } from './routes/_authe
 import { Route as AuthenticatedLinkedTasksRouteRouteImport } from './routes/_authenticated/linked-tasks/route'
 import { Route as AuthenticatedFlowTasksRouteRouteImport } from './routes/_authenticated/flow-tasks/route'
 import { Route as AuthenticatedDestinationsRouteRouteImport } from './routes/_authenticated/destinations/route'
+import { Route as AuthenticatedDataCatalogRouteRouteImport } from './routes/_authenticated/data-catalog/route'
+import { Route as AuthenticatedAlertRulesRouteRouteImport } from './routes/_authenticated/alert-rules/route'
 import { Route as AuthenticatedSourcesIndexRouteImport } from './routes/_authenticated/sources/index'
 import { Route as AuthenticatedSchedulesIndexRouteImport } from './routes/_authenticated/schedules/index'
 import { Route as AuthenticatedPipelinesIndexRouteImport } from './routes/_authenticated/pipelines/index'
 import { Route as AuthenticatedLinkedTasksIndexRouteImport } from './routes/_authenticated/linked-tasks/index'
 import { Route as AuthenticatedFlowTasksIndexRouteImport } from './routes/_authenticated/flow-tasks/index'
 import { Route as AuthenticatedDestinationsIndexRouteImport } from './routes/_authenticated/destinations/index'
+import { Route as AuthenticatedDataCatalogIndexRouteImport } from './routes/_authenticated/data-catalog/index'
+import { Route as AuthenticatedAlertRulesIndexRouteImport } from './routes/_authenticated/alert-rules/index'
 import { Route as ClerkAuthenticatedUserManagementRouteImport } from './routes/clerk/_authenticated/user-management'
 import { Route as ClerkauthSignUpRouteImport } from './routes/clerk/(auth)/sign-up'
 import { Route as ClerkauthSignInRouteImport } from './routes/clerk/(auth)/sign-in'
@@ -42,6 +46,7 @@ import { Route as AuthenticatedPipelinesPipelineIdRouteImport } from './routes/_
 import { Route as AuthenticatedLinkedTasksLinkedTaskIdRouteImport } from './routes/_authenticated/linked-tasks/$linkedTaskId'
 import { Route as AuthenticatedErrorsErrorRouteImport } from './routes/_authenticated/errors/$error'
 import { Route as AuthenticatedDestinationsDestinationIdRouteImport } from './routes/_authenticated/destinations/$destinationId'
+import { Route as AuthenticatedDataCatalogCatalogIdRouteImport } from './routes/_authenticated/data-catalog/$catalogId'
 import { Route as AuthenticatedFlowTasksFlowTaskIdRouteRouteImport } from './routes/_authenticated/flow-tasks/$flowTaskId/route'
 import { Route as AuthenticatedFlowTasksFlowTaskIdIndexRouteImport } from './routes/_authenticated/flow-tasks/$flowTaskId/index'
 import { Route as AuthenticatedSourcesSourceIdDetailsRouteImport } from './routes/_authenticated/sources/$sourceId.details'
@@ -131,6 +136,18 @@ const AuthenticatedDestinationsRouteRoute =
     path: '/destinations',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedDataCatalogRouteRoute =
+  AuthenticatedDataCatalogRouteRouteImport.update({
+    id: '/data-catalog',
+    path: '/data-catalog',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedAlertRulesRouteRoute =
+  AuthenticatedAlertRulesRouteRouteImport.update({
+    id: '/alert-rules',
+    path: '/alert-rules',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedSourcesIndexRoute =
   AuthenticatedSourcesIndexRouteImport.update({
     id: '/sources/',
@@ -166,6 +183,18 @@ const AuthenticatedDestinationsIndexRoute =
     id: '/',
     path: '/',
     getParentRoute: () => AuthenticatedDestinationsRouteRoute,
+  } as any)
+const AuthenticatedDataCatalogIndexRoute =
+  AuthenticatedDataCatalogIndexRouteImport.update({
+    id: '/',
+    path: '/',
+    getParentRoute: () => AuthenticatedDataCatalogRouteRoute,
+  } as any)
+const AuthenticatedAlertRulesIndexRoute =
+  AuthenticatedAlertRulesIndexRouteImport.update({
+    id: '/',
+    path: '/',
+    getParentRoute: () => AuthenticatedAlertRulesRouteRoute,
   } as any)
 const ClerkAuthenticatedUserManagementRoute =
   ClerkAuthenticatedUserManagementRouteImport.update({
@@ -231,6 +260,12 @@ const AuthenticatedDestinationsDestinationIdRoute =
     path: '/$destinationId',
     getParentRoute: () => AuthenticatedDestinationsRouteRoute,
   } as any)
+const AuthenticatedDataCatalogCatalogIdRoute =
+  AuthenticatedDataCatalogCatalogIdRouteImport.update({
+    id: '/$catalogId',
+    path: '/$catalogId',
+    getParentRoute: () => AuthenticatedDataCatalogRouteRoute,
+  } as any)
 const AuthenticatedFlowTasksFlowTaskIdRouteRoute =
   AuthenticatedFlowTasksFlowTaskIdRouteRouteImport.update({
     id: '/$flowTaskId',
@@ -273,6 +308,8 @@ const AuthenticatedPipelinesPipelineIdDestinationsDestIdTablesSyncIdRoute =
 export interface FileRoutesByFullPath {
   '/': typeof AuthenticatedIndexRoute
   '/clerk': typeof ClerkAuthenticatedRouteRouteWithChildren
+  '/alert-rules': typeof AuthenticatedAlertRulesRouteRouteWithChildren
+  '/data-catalog': typeof AuthenticatedDataCatalogRouteRouteWithChildren
   '/destinations': typeof AuthenticatedDestinationsRouteRouteWithChildren
   '/flow-tasks': typeof AuthenticatedFlowTasksRouteRouteWithChildren
   '/linked-tasks': typeof AuthenticatedLinkedTasksRouteRouteWithChildren
@@ -285,6 +322,7 @@ export interface FileRoutesByFullPath {
   '/503': typeof errors503Route
   '/smart-tags': typeof AuthenticatedSmartTagsRoute
   '/flow-tasks/$flowTaskId': typeof AuthenticatedFlowTasksFlowTaskIdRouteRouteWithChildren
+  '/data-catalog/$catalogId': typeof AuthenticatedDataCatalogCatalogIdRoute
   '/destinations/$destinationId': typeof AuthenticatedDestinationsDestinationIdRoute
   '/errors/$error': typeof AuthenticatedErrorsErrorRoute
   '/linked-tasks/$linkedTaskId': typeof AuthenticatedLinkedTasksLinkedTaskIdRoute
@@ -296,6 +334,8 @@ export interface FileRoutesByFullPath {
   '/clerk/sign-in': typeof ClerkauthSignInRoute
   '/clerk/sign-up': typeof ClerkauthSignUpRoute
   '/clerk/user-management': typeof ClerkAuthenticatedUserManagementRoute
+  '/alert-rules/': typeof AuthenticatedAlertRulesIndexRoute
+  '/data-catalog/': typeof AuthenticatedDataCatalogIndexRoute
   '/destinations/': typeof AuthenticatedDestinationsIndexRoute
   '/flow-tasks/': typeof AuthenticatedFlowTasksIndexRoute
   '/linked-tasks/': typeof AuthenticatedLinkedTasksIndexRoute
@@ -318,6 +358,7 @@ export interface FileRoutesByTo {
   '/503': typeof errors503Route
   '/smart-tags': typeof AuthenticatedSmartTagsRoute
   '/': typeof AuthenticatedIndexRoute
+  '/data-catalog/$catalogId': typeof AuthenticatedDataCatalogCatalogIdRoute
   '/destinations/$destinationId': typeof AuthenticatedDestinationsDestinationIdRoute
   '/errors/$error': typeof AuthenticatedErrorsErrorRoute
   '/linked-tasks/$linkedTaskId': typeof AuthenticatedLinkedTasksLinkedTaskIdRoute
@@ -329,6 +370,8 @@ export interface FileRoutesByTo {
   '/clerk/sign-in': typeof ClerkauthSignInRoute
   '/clerk/sign-up': typeof ClerkauthSignUpRoute
   '/clerk/user-management': typeof ClerkAuthenticatedUserManagementRoute
+  '/alert-rules': typeof AuthenticatedAlertRulesIndexRoute
+  '/data-catalog': typeof AuthenticatedDataCatalogIndexRoute
   '/destinations': typeof AuthenticatedDestinationsIndexRoute
   '/flow-tasks': typeof AuthenticatedFlowTasksIndexRoute
   '/linked-tasks': typeof AuthenticatedLinkedTasksIndexRoute
@@ -345,6 +388,8 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/clerk': typeof ClerkRouteRouteWithChildren
+  '/_authenticated/alert-rules': typeof AuthenticatedAlertRulesRouteRouteWithChildren
+  '/_authenticated/data-catalog': typeof AuthenticatedDataCatalogRouteRouteWithChildren
   '/_authenticated/destinations': typeof AuthenticatedDestinationsRouteRouteWithChildren
   '/_authenticated/flow-tasks': typeof AuthenticatedFlowTasksRouteRouteWithChildren
   '/_authenticated/linked-tasks': typeof AuthenticatedLinkedTasksRouteRouteWithChildren
@@ -360,6 +405,7 @@ export interface FileRoutesById {
   '/_authenticated/smart-tags': typeof AuthenticatedSmartTagsRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
   '/_authenticated/flow-tasks/$flowTaskId': typeof AuthenticatedFlowTasksFlowTaskIdRouteRouteWithChildren
+  '/_authenticated/data-catalog/$catalogId': typeof AuthenticatedDataCatalogCatalogIdRoute
   '/_authenticated/destinations/$destinationId': typeof AuthenticatedDestinationsDestinationIdRoute
   '/_authenticated/errors/$error': typeof AuthenticatedErrorsErrorRoute
   '/_authenticated/linked-tasks/$linkedTaskId': typeof AuthenticatedLinkedTasksLinkedTaskIdRoute
@@ -371,6 +417,8 @@ export interface FileRoutesById {
   '/clerk/(auth)/sign-in': typeof ClerkauthSignInRoute
   '/clerk/(auth)/sign-up': typeof ClerkauthSignUpRoute
   '/clerk/_authenticated/user-management': typeof ClerkAuthenticatedUserManagementRoute
+  '/_authenticated/alert-rules/': typeof AuthenticatedAlertRulesIndexRoute
+  '/_authenticated/data-catalog/': typeof AuthenticatedDataCatalogIndexRoute
   '/_authenticated/destinations/': typeof AuthenticatedDestinationsIndexRoute
   '/_authenticated/flow-tasks/': typeof AuthenticatedFlowTasksIndexRoute
   '/_authenticated/linked-tasks/': typeof AuthenticatedLinkedTasksIndexRoute
@@ -388,6 +436,8 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/clerk'
+    | '/alert-rules'
+    | '/data-catalog'
     | '/destinations'
     | '/flow-tasks'
     | '/linked-tasks'
@@ -400,6 +450,7 @@ export interface FileRouteTypes {
     | '/503'
     | '/smart-tags'
     | '/flow-tasks/$flowTaskId'
+    | '/data-catalog/$catalogId'
     | '/destinations/$destinationId'
     | '/errors/$error'
     | '/linked-tasks/$linkedTaskId'
@@ -411,6 +462,8 @@ export interface FileRouteTypes {
     | '/clerk/sign-in'
     | '/clerk/sign-up'
     | '/clerk/user-management'
+    | '/alert-rules/'
+    | '/data-catalog/'
     | '/destinations/'
     | '/flow-tasks/'
     | '/linked-tasks/'
@@ -433,6 +486,7 @@ export interface FileRouteTypes {
     | '/503'
     | '/smart-tags'
     | '/'
+    | '/data-catalog/$catalogId'
     | '/destinations/$destinationId'
     | '/errors/$error'
     | '/linked-tasks/$linkedTaskId'
@@ -444,6 +498,8 @@ export interface FileRouteTypes {
     | '/clerk/sign-in'
     | '/clerk/sign-up'
     | '/clerk/user-management'
+    | '/alert-rules'
+    | '/data-catalog'
     | '/destinations'
     | '/flow-tasks'
     | '/linked-tasks'
@@ -459,6 +515,8 @@ export interface FileRouteTypes {
     | '__root__'
     | '/_authenticated'
     | '/clerk'
+    | '/_authenticated/alert-rules'
+    | '/_authenticated/data-catalog'
     | '/_authenticated/destinations'
     | '/_authenticated/flow-tasks'
     | '/_authenticated/linked-tasks'
@@ -474,6 +532,7 @@ export interface FileRouteTypes {
     | '/_authenticated/smart-tags'
     | '/_authenticated/'
     | '/_authenticated/flow-tasks/$flowTaskId'
+    | '/_authenticated/data-catalog/$catalogId'
     | '/_authenticated/destinations/$destinationId'
     | '/_authenticated/errors/$error'
     | '/_authenticated/linked-tasks/$linkedTaskId'
@@ -485,6 +544,8 @@ export interface FileRouteTypes {
     | '/clerk/(auth)/sign-in'
     | '/clerk/(auth)/sign-up'
     | '/clerk/_authenticated/user-management'
+    | '/_authenticated/alert-rules/'
+    | '/_authenticated/data-catalog/'
     | '/_authenticated/destinations/'
     | '/_authenticated/flow-tasks/'
     | '/_authenticated/linked-tasks/'
@@ -622,6 +683,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedDestinationsRouteRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/data-catalog': {
+      id: '/_authenticated/data-catalog'
+      path: '/data-catalog'
+      fullPath: '/data-catalog'
+      preLoaderRoute: typeof AuthenticatedDataCatalogRouteRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/alert-rules': {
+      id: '/_authenticated/alert-rules'
+      path: '/alert-rules'
+      fullPath: '/alert-rules'
+      preLoaderRoute: typeof AuthenticatedAlertRulesRouteRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/sources/': {
       id: '/_authenticated/sources/'
       path: '/sources'
@@ -663,6 +738,20 @@ declare module '@tanstack/react-router' {
       fullPath: '/destinations/'
       preLoaderRoute: typeof AuthenticatedDestinationsIndexRouteImport
       parentRoute: typeof AuthenticatedDestinationsRouteRoute
+    }
+    '/_authenticated/data-catalog/': {
+      id: '/_authenticated/data-catalog/'
+      path: '/'
+      fullPath: '/data-catalog/'
+      preLoaderRoute: typeof AuthenticatedDataCatalogIndexRouteImport
+      parentRoute: typeof AuthenticatedDataCatalogRouteRoute
+    }
+    '/_authenticated/alert-rules/': {
+      id: '/_authenticated/alert-rules/'
+      path: '/'
+      fullPath: '/alert-rules/'
+      preLoaderRoute: typeof AuthenticatedAlertRulesIndexRouteImport
+      parentRoute: typeof AuthenticatedAlertRulesRouteRoute
     }
     '/clerk/_authenticated/user-management': {
       id: '/clerk/_authenticated/user-management'
@@ -741,6 +830,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedDestinationsDestinationIdRouteImport
       parentRoute: typeof AuthenticatedDestinationsRouteRoute
     }
+    '/_authenticated/data-catalog/$catalogId': {
+      id: '/_authenticated/data-catalog/$catalogId'
+      path: '/$catalogId'
+      fullPath: '/data-catalog/$catalogId'
+      preLoaderRoute: typeof AuthenticatedDataCatalogCatalogIdRouteImport
+      parentRoute: typeof AuthenticatedDataCatalogRouteRoute
+    }
     '/_authenticated/flow-tasks/$flowTaskId': {
       id: '/_authenticated/flow-tasks/$flowTaskId'
       path: '/$flowTaskId'
@@ -785,6 +881,37 @@ declare module '@tanstack/react-router' {
     }
   }
 }
+
+interface AuthenticatedAlertRulesRouteRouteChildren {
+  AuthenticatedAlertRulesIndexRoute: typeof AuthenticatedAlertRulesIndexRoute
+}
+
+const AuthenticatedAlertRulesRouteRouteChildren: AuthenticatedAlertRulesRouteRouteChildren =
+  {
+    AuthenticatedAlertRulesIndexRoute: AuthenticatedAlertRulesIndexRoute,
+  }
+
+const AuthenticatedAlertRulesRouteRouteWithChildren =
+  AuthenticatedAlertRulesRouteRoute._addFileChildren(
+    AuthenticatedAlertRulesRouteRouteChildren,
+  )
+
+interface AuthenticatedDataCatalogRouteRouteChildren {
+  AuthenticatedDataCatalogCatalogIdRoute: typeof AuthenticatedDataCatalogCatalogIdRoute
+  AuthenticatedDataCatalogIndexRoute: typeof AuthenticatedDataCatalogIndexRoute
+}
+
+const AuthenticatedDataCatalogRouteRouteChildren: AuthenticatedDataCatalogRouteRouteChildren =
+  {
+    AuthenticatedDataCatalogCatalogIdRoute:
+      AuthenticatedDataCatalogCatalogIdRoute,
+    AuthenticatedDataCatalogIndexRoute: AuthenticatedDataCatalogIndexRoute,
+  }
+
+const AuthenticatedDataCatalogRouteRouteWithChildren =
+  AuthenticatedDataCatalogRouteRoute._addFileChildren(
+    AuthenticatedDataCatalogRouteRouteChildren,
+  )
 
 interface AuthenticatedDestinationsRouteRouteChildren {
   AuthenticatedDestinationsDestinationIdRoute: typeof AuthenticatedDestinationsDestinationIdRoute
@@ -911,6 +1038,8 @@ const AuthenticatedSettingsRouteRouteWithChildren =
   )
 
 interface AuthenticatedRouteRouteChildren {
+  AuthenticatedAlertRulesRouteRoute: typeof AuthenticatedAlertRulesRouteRouteWithChildren
+  AuthenticatedDataCatalogRouteRoute: typeof AuthenticatedDataCatalogRouteRouteWithChildren
   AuthenticatedDestinationsRouteRoute: typeof AuthenticatedDestinationsRouteRouteWithChildren
   AuthenticatedFlowTasksRouteRoute: typeof AuthenticatedFlowTasksRouteRouteWithChildren
   AuthenticatedLinkedTasksRouteRoute: typeof AuthenticatedLinkedTasksRouteRouteWithChildren
@@ -926,6 +1055,10 @@ interface AuthenticatedRouteRouteChildren {
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
+  AuthenticatedAlertRulesRouteRoute:
+    AuthenticatedAlertRulesRouteRouteWithChildren,
+  AuthenticatedDataCatalogRouteRoute:
+    AuthenticatedDataCatalogRouteRouteWithChildren,
   AuthenticatedDestinationsRouteRoute:
     AuthenticatedDestinationsRouteRouteWithChildren,
   AuthenticatedFlowTasksRouteRoute:

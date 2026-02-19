@@ -27,6 +27,8 @@ from app.domain.repositories.flow_task import (
     FlowTaskRepository,
     FlowTaskRunHistoryRepository,
     FlowTaskRunNodeLogRepository,
+    FlowTaskGraphVersionRepository,
+    FlowTaskWatermarkRepository,
 )
 from app.domain.repositories.notification_log_repo import NotificationLogRepository
 from app.domain.schemas.flow_task import (
@@ -55,6 +57,8 @@ class FlowTaskService:
         self.run_history_repo = FlowTaskRunHistoryRepository(db)
         self.node_log_repo = FlowTaskRunNodeLogRepository(db)
         self.notification_repo = NotificationLogRepository(db)
+        self.version_repo = FlowTaskGraphVersionRepository(db)
+        self.watermark_repo = FlowTaskWatermarkRepository(db)
 
     # ─── Notification helper ───────────────────────────────────────────────
 
@@ -211,6 +215,21 @@ class FlowTaskService:
             nodes_json=nodes_json,
             edges_json=edges_json,
         )
+
+        # D4: Auto-create version snapshot on save
+        change_summary = None
+        if hasattr(data, "change_summary"):
+            change_summary = data.change_summary
+        try:
+            self.version_repo.create_snapshot(
+                flow_task_id=flow_task_id,
+                nodes_json=nodes_json,
+                edges_json=edges_json,
+                change_summary=change_summary,
+            )
+        except Exception as e:
+            logger.warning(f"Failed to create graph version snapshot: {e}")
+
         self.db.commit()
         self.db.refresh(graph)
         logger.info(
@@ -507,3 +526,90 @@ class FlowTaskService:
                     )
 
         return status
+
+    # ─── D4: Graph Versioning ─────────────────────────────────────────────
+
+    def list_graph_versions(
+        self, flow_task_id: int, skip: int = 0, limit: int = 20
+    ) -> Tuple[list, int]:
+        """List version history for a flow task graph."""
+        self.get_flow_task(flow_task_id)
+        return self.version_repo.get_versions_by_flow_task(
+            flow_task_id=flow_task_id, skip=skip, limit=limit
+        )
+
+    def get_graph_version(self, flow_task_id: int, version: int):
+        """Get a specific graph version snapshot."""
+        self.get_flow_task(flow_task_id)
+        v = self.version_repo.get_by_version(flow_task_id, version)
+        if not v:
+            raise EntityNotFoundError(
+                f"Version {version} not found for flow task {flow_task_id}"
+            )
+        return v
+
+    def rollback_graph(self, flow_task_id: int, version: int) -> FlowTaskGraph:
+        """
+        Rollback graph to a previous version.
+
+        Restores the nodes/edges from the snapshot and creates a new version
+        entry recording the rollback.
+        """
+        snapshot = self.get_graph_version(flow_task_id, version)
+
+        # Upsert graph with the old snapshot data
+        graph = self.graph_repo.upsert_graph(
+            flow_task_id=flow_task_id,
+            nodes_json=snapshot.nodes_json,
+            edges_json=snapshot.edges_json,
+        )
+
+        # Create a new version entry for the rollback
+        self.version_repo.create_snapshot(
+            flow_task_id=flow_task_id,
+            nodes_json=snapshot.nodes_json,
+            edges_json=snapshot.edges_json,
+            change_summary=f"Rollback to version {version}",
+        )
+
+        self.db.commit()
+        self.db.refresh(graph)
+        logger.info(
+            f"Graph rolled back: flow_task_id={flow_task_id} "
+            f"to_version={version} new_version={graph.version}"
+        )
+        return graph
+
+    # ─── D8: Watermark Management ─────────────────────────────────────────
+
+    def get_watermarks(self, flow_task_id: int) -> list:
+        """Get all watermarks for a flow task."""
+        self.get_flow_task(flow_task_id)
+        return self.watermark_repo.get_by_flow_task(flow_task_id)
+
+    def set_watermark(
+        self,
+        flow_task_id: int,
+        node_id: str,
+        watermark_column: str,
+        watermark_type: str = "TIMESTAMP",
+    ):
+        """Configure a watermark for an input node."""
+        self.get_flow_task(flow_task_id)
+        wm = self.watermark_repo.upsert_watermark(
+            flow_task_id=flow_task_id,
+            node_id=node_id,
+            watermark_column=watermark_column,
+            last_watermark_value="",
+            watermark_type=watermark_type,
+        )
+        self.db.commit()
+        self.db.refresh(wm)
+        return wm
+
+    def reset_watermark(self, flow_task_id: int, node_id: str) -> None:
+        """Reset watermark for an input node."""
+        wm = self.watermark_repo.get_by_flow_task_and_node(flow_task_id, node_id)
+        if wm:
+            self.watermark_repo.delete(wm.id)
+            self.db.commit()
