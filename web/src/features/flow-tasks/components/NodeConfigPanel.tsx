@@ -608,6 +608,18 @@ function CleanConfig({ data, update, nodeId, flowTaskId }: ConfigFormProps) {
     const filterRows: FilterRow[] = (data.filter_rows as FilterRow[]) || []
     const selectColumns: string[] = (data.select_columns as string[]) || []
 
+    // rename_columns is Record<string, string> (old → new)
+    const renameMap: Record<string, string> = (data.rename_columns as Record<string, string>) || {}
+    const renameRows = Object.entries(renameMap)
+
+    const setRenameRows = (pairs: [string, string][]) => {
+        const record: Record<string, string> = {}
+        for (const [from, to] of pairs) {
+            if (from) record[from] = to
+        }
+        update({ rename_columns: record })
+    }
+
     const setFilterRows = (rows: FilterRow[]) => {
         const expr = rows
             .filter((r) => r.col && r.op)
@@ -725,6 +737,51 @@ function CleanConfig({ data, update, nodeId, flowTaskId }: ConfigFormProps) {
                         {selectColumns.length} column{selectColumns.length !== 1 ? 's' : ''} selected
                     </p>
                 )}
+            </Field>
+
+            <Field label="Rename columns">
+                <div className="space-y-1.5">
+                    {renameRows.map(([from, to], i) => (
+                        <div key={i} className="flex gap-1 items-center">
+                            <ColumnSelect
+                                columns={columns}
+                                value={from}
+                                onChange={(v) => {
+                                    const next = [...renameRows] as [string, string][]
+                                    next[i] = [v, to]
+                                    setRenameRows(next)
+                                }}
+                                placeholder="Column"
+                                isLoading={isLoading}
+                            />
+                            <span className="text-muted-foreground text-[11px] shrink-0">→</span>
+                            <Input
+                                className="!h-8 !py-0 px-2 text-[11px] flex-1 min-w-0"
+                                value={to}
+                                onChange={(e) => {
+                                    const next = [...renameRows] as [string, string][]
+                                    next[i] = [from, e.target.value]
+                                    setRenameRows(next)
+                                }}
+                                placeholder="New name"
+                            />
+                            <Button
+                                variant="ghost" size="icon"
+                                className="!h-7 !w-7 shrink-0 hover:text-destructive"
+                                onClick={() => setRenameRows(renameRows.filter((_, j) => j !== i) as [string, string][])}
+                            >
+                                <X className="h-3 w-3" />
+                            </Button>
+                        </div>
+                    ))}
+                    <Button
+                        variant="outline" size="sm"
+                        className="h-6 text-[11px] w-full gap-1"
+                        onClick={() => setRenameRows([...renameRows, ['', '']] as [string, string][])}
+                    >
+                        <Plus className="h-3 w-3" /> Add rename
+                    </Button>
+                </div>
             </Field>
         </>
     )

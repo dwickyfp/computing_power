@@ -471,7 +471,10 @@ function ChartBuilder({ columns, rows, height }: ChartBuilderProps) {
     return (
         <div className="flex h-full">
             {/* ── Config panel (left 260px, always scrollable) ── */}
-            <div className="w-[260px] shrink-0 border-r border-border overflow-y-auto overflow-x-hidden bg-muted/5">
+            <div
+                className="w-[260px] shrink-0 border-r border-border overflow-y-scroll overflow-x-hidden bg-muted/5"
+                style={{ WebkitOverflowScrolling: 'touch', scrollBehavior: 'smooth' }}
+            >
                 <div className="p-4 space-y-6">
 
                     {/* Chart Type */}

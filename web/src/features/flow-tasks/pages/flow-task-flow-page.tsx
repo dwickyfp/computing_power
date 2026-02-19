@@ -250,14 +250,14 @@ function FlowCanvas({ flowTaskId }: { flowTaskId: number }) {
     // ─── Save ──────────────────────────────────────────────────────────────────
 
     const saveMutation = useMutation({
-        mutationFn: () => {
+        mutationFn: (_opts?: { silent?: boolean }) => {
             const graph: FlowGraph = { nodes, edges }
             return flowTasksRepo.saveGraph(flowTaskId, graph)
         },
-        onSuccess: () => {
+        onSuccess: (_data, opts) => {
             markClean()
             setLastSavedAt(new Date())
-            toast.success('Graph saved')
+            if (!opts?.silent) toast.success('Graph saved')
             // Invalidate only the flow-task detail (status/name), NOT the graph query.
             // Invalidating the graph query would trigger a refetch that calls setNodes([]),
             // clearing the canvas with the freshly saved data.
@@ -278,7 +278,7 @@ function FlowCanvas({ flowTaskId }: { flowTaskId: number }) {
         if (!autoSave || !isDirty) return
         if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current)
         autoSaveTimer.current = setTimeout(() => {
-            saveMutation.mutate()
+            saveMutation.mutate({ silent: true })
         }, 2000)
         return () => {
             if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current)
@@ -484,7 +484,7 @@ function FlowCanvas({ flowTaskId }: { flowTaskId: number }) {
                     <Button
                         size="sm"
                         variant="outline"
-                        onClick={() => saveMutation.mutate()}
+                        onClick={() => saveMutation.mutate({})}
                         disabled={saveMutation.isPending || !isDirty}
                     >
                         {saveMutation.isPending ? (
