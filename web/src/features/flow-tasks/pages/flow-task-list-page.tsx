@@ -51,6 +51,7 @@ import {
     Trash2,
     ExternalLink,
     Play,
+    Copy,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { formatDistanceToNow } from 'date-fns'
@@ -212,6 +213,15 @@ export default function FlowTaskListPage() {
             setRunningId(null)
             toast.error('Failed to trigger flow task')
         },
+    })
+
+    const duplicateMutation = useMutation({
+        mutationFn: (id: number) => flowTasksRepo.duplicate(id),
+        onSuccess: () => {
+            toast.success('Flow task duplicated')
+            queryClient.invalidateQueries({ queryKey: ['flow-tasks'] })
+        },
+        onError: () => toast.error('Failed to duplicate flow task'),
     })
 
     const openCreate = useCallback(() => {
@@ -405,6 +415,13 @@ export default function FlowTaskListPage() {
                                                 >
                                                     <Pencil className="h-4 w-4 text-muted-foreground" />
                                                     Edit Settings
+                                                </DropdownMenuItem>
+                                                <DropdownMenuItem
+                                                    onClick={() => duplicateMutation.mutate(ft.id)}
+                                                    className="flex items-center gap-2 cursor-pointer"
+                                                >
+                                                    <Copy className="h-4 w-4 text-muted-foreground" />
+                                                    Duplicate
                                                 </DropdownMenuItem>
                                                 <DropdownMenuItem
                                                     className="text-destructive focus:text-destructive flex items-center gap-2 cursor-pointer"

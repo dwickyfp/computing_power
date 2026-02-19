@@ -105,6 +105,42 @@ class FlowTaskService:
         self.db.commit()
         logger.info(f"FlowTask deleted: id={flow_task_id}")
 
+    def duplicate_flow_task(self, flow_task_id: int) -> FlowTask:
+        """
+        Duplicate a flow task and its graph.
+        
+        Creates a new task with name "{original_name} - copy".
+        Copies the graph structure (nodes, edges) if it exists.
+        Resulting task is IDLE and has no history.
+        """
+        original = self.get_flow_task(flow_task_id)
+        
+        # 1. Create new task metadata
+        new_name = c = f"{original.name} - copy"
+        # If name is too long, truncate? For now typical usage won't hit limits quickly.
+        
+        new_task = self.flow_task_repo.create(
+            name=new_name,
+            description=original.description,
+            status=FlowTaskStatus.IDLE,
+            trigger_type=original.trigger_type,
+        )
+        self.db.flush()
+        
+        # 2. Copy graph if exists
+        original_graph = self.graph_repo.get_by_flow_task_id(flow_task_id)
+        if original_graph:
+            self.graph_repo.upsert_graph(
+                flow_task_id=new_task.id,
+                nodes_json=original_graph.nodes_json,
+                edges_json=original_graph.edges_json,
+            )
+        
+        self.db.commit()
+        self.db.refresh(new_task)
+        logger.info(f"FlowTask duplicated: src={flow_task_id} dst={new_task.id}")
+        return new_task
+
     # ─── Graph ─────────────────────────────────────────────────────────────────
 
     def save_graph(self, flow_task_id: int, data: FlowTaskGraphSave) -> FlowTaskGraph:

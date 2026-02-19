@@ -252,6 +252,10 @@ export const flowTasksRepo = {
         return api.delete<{ message: string }>(`/flow-tasks/${id}`)
     },
 
+    duplicate(id: number) {
+        return api.post<FlowTask>(`/flow-tasks/${id}/duplicate`)
+    },
+
     // Graph
     getGraph(id: number) {
         return api.get<FlowTaskGraphResponse>(`/flow-tasks/${id}/graph`)
