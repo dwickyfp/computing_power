@@ -1,35 +1,16 @@
 import { useEffect, useState } from 'react'
-import { useForm } from 'react-hook-form'
-import { zodResolver } from '@hookform/resolvers/zod'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { useParams, useNavigate, Link } from '@tanstack/react-router'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { Link, useNavigate, useParams } from '@tanstack/react-router'
 import {
-  flexRender,
-  getCoreRowModel,
-  useReactTable,
-  getSortedRowModel,
-  type SortingState,
-} from '@tanstack/react-table'
-import { flowTasksRepo } from '@/repo/flow-tasks'
-import { linkedTasksRepo } from '@/repo/linked-tasks'
-import {
-  schedulesRepo,
-  type ScheduleCreate,
-  type ScheduleUpdate,
-} from '@/repo/schedules'
-import cronstrue from 'cronstrue'
-import {
-  Loader2,
-  Save,
-  Clock,
+  CalendarClock,
   MoreVertical,
   Star,
   Trash2,
-  CalendarClock,
-  RotateCw
+  ArrowLeft,
+  Settings,
+  Activity
 } from 'lucide-react'
 import { toast } from 'sonner'
-import { cn } from '@/lib/utils'
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -40,85 +21,23 @@ import {
 } from '@/components/ui/breadcrumb'
 import { Button } from '@/components/ui/button'
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card'
-import {
-  Form,
-  FormControl,
-  FormDescription,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from '@/components/ui/form'
-import { Input } from '@/components/ui/input'
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
-import { Textarea } from '@/components/ui/textarea'
-import { Header } from '@/components/layout/header'
-import { Main } from '@/components/layout/main'
-import { Search } from '@/components/search'
-import { ThemeSwitch } from '@/components/theme-switch'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Switch } from '@/components/ui/switch'
-import { Badge } from '@/components/ui/badge'
-import { historyColumns } from '../data/history-columns'
-import { scheduleFormSchema, type ScheduleFormValues } from '../data/schema'
-import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-
-// ─── Cron presets ─────────────────────────────────────────────────────────────
-
-const CRON_PRESETS = [
-  { label: 'Every 5 minutes', value: '*/5 * * * *' },
-  { label: 'Every 30 minutes', value: '*/30 * * * *' },
-  { label: 'Every hour', value: '0 * * * *' },
-  { label: 'Daily', value: 'DAILY' },
-  { label: 'Weekly', value: 'WEEKLY' },
-  { label: 'Monthly', value: 'MONTHLY' },
-]
-
-const HOURS = Array.from({ length: 24 }, (_, i) => ({
-  label: `${i}:00`,
-  value: String(i),
-}))
-const DAYS_OF_MONTH = Array.from({ length: 31 }, (_, i) => ({
-  label: String(i + 1),
-  value: String(i + 1),
-}))
-const DAYS_OF_WEEK = [
-  { label: 'Sunday', value: '0' },
-  { label: 'Monday', value: '1' },
-  { label: 'Tuesday', value: '2' },
-  { label: 'Wednesday', value: '3' },
-  { label: 'Thursday', value: '4' },
-  { label: 'Friday', value: '5' },
-  { label: 'Saturday', value: '6' },
-]
-
-// ─── Page component ───────────────────────────────────────────────────────────
+import { Header } from '@/components/layout/header'
+import { Main } from '@/components/layout/main'
+import { Search } from '@/components/search'
+import { ThemeSwitch } from '@/components/theme-switch'
+import { Badge } from '@/components/ui/badge'
+import { Switch } from '@/components/ui/switch'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { schedulesRepo, type ScheduleCreate, type ScheduleUpdate } from '@/repo/schedules'
+import { ScheduleForm } from '../components/schedule-form'
+import { ScheduleRuns } from '../components/schedule-runs'
+import { type ScheduleFormValues } from '../data/schema'
+import cronstrue from 'cronstrue'
 
 export default function ScheduleDetailPage() {
   const { scheduleId } = useParams({
@@ -127,15 +46,7 @@ export default function ScheduleDetailPage() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const isNew = scheduleId === 'new'
-
-  const [cronMode, setCronMode] = useState<'preset' | 'manual'>('preset')
-  const [presetType, setPresetType] = useState<
-    'simple' | 'DAILY' | 'WEEKLY' | 'MONTHLY'
-  >('simple')
-  const [hour, setHour] = useState('0')
-  const [dayOfMonth, setDayOfMonth] = useState('1')
-  const [dayOfWeek, setDayOfWeek] = useState('1')
-  const [sorting, setSorting] = useState<SortingState>([])
+  const [activeTab, setActiveTab] = useState('overview')
 
   // ── Queries ───────────────────────────────────────────────────────────
 
@@ -145,51 +56,13 @@ export default function ScheduleDetailPage() {
     enabled: !isNew && !Number.isNaN(Number(scheduleId)),
   })
 
-  // We only enable history fetching if we're not creating a new schedule
-  const { data: historyData, isLoading: historyLoading } = useQuery({
+  const { data: historyData, isLoading: historyLoading, refetch: refetchHistory } = useQuery({
     queryKey: ['schedules', Number(scheduleId), 'history'],
     queryFn: () =>
-      schedulesRepo.getHistory(Number(scheduleId), { skip: 0, limit: 50 }),
+      schedulesRepo.getHistory(Number(scheduleId), { skip: 0, limit: 100 }),
     enabled: !isNew && !Number.isNaN(Number(scheduleId)),
     refetchInterval: 30_000,
   })
-
-  const { data: flowTasksData } = useQuery({
-    queryKey: ['flow-tasks'],
-    queryFn: () => flowTasksRepo.list(1, 200),
-  })
-
-  const { data: linkedTasksData } = useQuery({
-    queryKey: ['linked-tasks'],
-    queryFn: () => linkedTasksRepo.list(1, 100),
-  })
-
-  // ── Form ──────────────────────────────────────────────────────────────
-
-  const form = useForm<ScheduleFormValues>({
-    resolver: zodResolver(scheduleFormSchema),
-    defaultValues: {
-      name: '',
-      description: null,
-      task_type: 'FLOW_TASK',
-      task_id: 0,
-      cron_expression: '*/5 * * * *',
-      status: 'ACTIVE',
-    },
-  })
-
-  useEffect(() => {
-    if (schedule) {
-      form.reset({
-        name: schedule.name,
-        description: schedule.description,
-        task_type: schedule.task_type,
-        task_id: schedule.task_id,
-        cron_expression: schedule.cron_expression,
-        status: schedule.status,
-      })
-    }
-  }, [schedule, form])
 
   // ── Mutations ─────────────────────────────────────────────────────────
 
@@ -219,32 +92,32 @@ export default function ScheduleDetailPage() {
     onError: (err: any) =>
       toast.error(err?.response?.data?.detail || 'Failed to update schedule'),
   })
-  
+
   const pauseMutation = useMutation({
-      mutationFn: () => schedulesRepo.pause(Number(scheduleId)),
-      onSuccess: () => {
-        toast.success('Schedule paused')
-        queryClient.invalidateQueries({ queryKey: ['schedules', Number(scheduleId)] })
-      },
-      onError: () => toast.error('Failed to pause schedule')
+    mutationFn: () => schedulesRepo.pause(Number(scheduleId)),
+    onSuccess: () => {
+      toast.success('Schedule paused')
+      queryClient.invalidateQueries({ queryKey: ['schedules', Number(scheduleId)] })
+    },
+    onError: () => toast.error('Failed to pause schedule')
   })
 
   const resumeMutation = useMutation({
-      mutationFn: () => schedulesRepo.resume(Number(scheduleId)),
-      onSuccess: () => {
-        toast.success('Schedule resumed')
-        queryClient.invalidateQueries({ queryKey: ['schedules', Number(scheduleId)] })
-      },
-      onError: () => toast.error('Failed to resume schedule')
+    mutationFn: () => schedulesRepo.resume(Number(scheduleId)),
+    onSuccess: () => {
+      toast.success('Schedule resumed')
+      queryClient.invalidateQueries({ queryKey: ['schedules', Number(scheduleId)] })
+    },
+    onError: () => toast.error('Failed to resume schedule')
   })
 
   const deleteMutation = useMutation({
-      mutationFn: () => schedulesRepo.delete(Number(scheduleId)),
-      onSuccess: () => {
-          toast.success('Schedule deleted')
-          navigate({ to: '/schedules' })
-      },
-       onError: () => toast.error('Failed to delete schedule')
+    mutationFn: () => schedulesRepo.delete(Number(scheduleId)),
+    onSuccess: () => {
+      toast.success('Schedule deleted')
+      navigate({ to: '/schedules' })
+    },
+    onError: () => toast.error('Failed to delete schedule')
   })
 
   function onSubmit(values: ScheduleFormValues) {
@@ -254,46 +127,6 @@ export default function ScheduleDetailPage() {
       updateMutation.mutate(values)
     }
   }
-
-  // ── Cron builder helpers ──────────────────────────────────────────────
-
-  function handlePresetClick(preset: string) {
-    if (['DAILY', 'WEEKLY', 'MONTHLY'].includes(preset)) {
-      setPresetType(preset as any)
-    } else {
-      setPresetType('simple')
-      form.setValue('cron_expression', preset)
-    }
-  }
-
-  useEffect(() => {
-    if (presetType === 'DAILY') {
-      form.setValue('cron_expression', `0 ${hour} * * *`)
-    } else if (presetType === 'WEEKLY') {
-      form.setValue('cron_expression', `0 ${hour} * * ${dayOfWeek}`)
-    } else if (presetType === 'MONTHLY') {
-      form.setValue('cron_expression', `0 ${hour} ${dayOfMonth} * *`)
-    }
-  }, [presetType, hour, dayOfMonth, dayOfWeek, form])
-
-  function getCronHuman(expr: string): string {
-    try {
-      return cronstrue.toString(expr, { verbose: false })
-    } catch {
-      return 'Invalid cron expression'
-    }
-  }
-
-  // ── History table ─────────────────────────────────────────────────────
-
-  const historyTable = useReactTable({
-    data: historyData?.items ?? [],
-    columns: historyColumns,
-    state: { sorting },
-    onSortingChange: setSorting,
-    getCoreRowModel: getCoreRowModel(),
-    getSortedRowModel: getSortedRowModel(),
-  })
 
   // ── Render ────────────────────────────────────────────────────────────
 
@@ -306,228 +139,21 @@ export default function ScheduleDetailPage() {
     }
   }, [isNew, schedule])
 
+  const cronHuman = schedule ? (() => {
+    try {
+      return cronstrue.toString(schedule.cron_expression, { verbose: false })
+    } catch {
+      return schedule.cron_expression
+    }
+  })() : ''
+
   if (isLoading) {
     return (
       <div className='flex h-screen items-center justify-center'>
-        <Loader2 className='h-8 w-8 animate-spin text-muted-foreground' />
+        {/* Minimal loader */}
       </div>
     )
   }
-
-  const flowTasks = flowTasksData?.data.items ?? []
-  const linkedTasks = linkedTasksData?.data.items ?? []
-  const taskType = form.watch('task_type')
-  const availableTasks = taskType === 'FLOW_TASK' ? flowTasks : linkedTasks
-  
-  // Custom form layout for "Configurations"
-  const ConfigurationForm = () => (
-      <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit)} className='space-y-6'>
-            <div className='grid grid-cols-1 gap-4 md:grid-cols-2'>
-                <FormField
-                    control={form.control}
-                    name='name'
-                    render={({ field }) => (
-                        <FormItem>
-                            <FormLabel>Name</FormLabel>
-                            <FormControl>
-                                <Input {...field} placeholder='daily_sync' />
-                            </FormControl>
-                            <FormDescription>Unique name (no spaces)</FormDescription>
-                            <FormMessage />
-                        </FormItem>
-                    )}
-                />
-                <FormField
-                    control={form.control}
-                    name='description'
-                    render={({ field }) => (
-                        <FormItem>
-                            <FormLabel>Description</FormLabel>
-                            <FormControl>
-                                <Textarea {...field} value={field.value ?? ''} placeholder='Optional description' rows={1} />
-                            </FormControl>
-                            <FormMessage />
-                        </FormItem>
-                    )}
-                />
-            </div>
-
-            <div className='grid grid-cols-1 gap-4 md:grid-cols-2'>
-                <FormField
-                    control={form.control}
-                    name='task_type'
-                    render={({ field }) => (
-                        <FormItem>
-                            <FormLabel>Task Type</FormLabel>
-                            <Select
-                                onValueChange={(v) => {
-                                    field.onChange(v)
-                                    form.setValue('task_id', 0)
-                                }}
-                                value={field.value}
-                            >
-                                <FormControl>
-                                    <SelectTrigger>
-                                        <SelectValue />
-                                    </SelectTrigger>
-                                </FormControl>
-                                <SelectContent>
-                                    <SelectItem value='FLOW_TASK'>Flow Task</SelectItem>
-                                    <SelectItem value='LINKED_TASK'>Linked Task</SelectItem>
-                                </SelectContent>
-                            </Select>
-                            <FormMessage />
-                        </FormItem>
-                    )}
-                />
-                <FormField
-                    control={form.control}
-                    name='task_id'
-                    render={({ field }) => (
-                        <FormItem>
-                            <FormLabel>Task</FormLabel>
-                            <Select
-                                onValueChange={(v) => field.onChange(Number(v))}
-                                value={field.value ? String(field.value) : ''}
-                            >
-                                <FormControl>
-                                    <SelectTrigger>
-                                        <SelectValue placeholder='Select a task…' />
-                                    </SelectTrigger>
-                                </FormControl>
-                                <SelectContent>
-                                    {availableTasks.map((t: any) => (
-                                        <SelectItem key={t.id} value={String(t.id)}>
-                                            {t.name}
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                            <FormMessage />
-                        </FormItem>
-                    )}
-                />
-            </div>
-
-            <div className='space-y-4'>
-                <FormLabel>Schedule (Cron)</FormLabel>
-                <RadioGroup value={cronMode} onValueChange={(v: any) => setCronMode(v)} className='flex gap-4'>
-                    <div className='flex items-center gap-2'>
-                        <RadioGroupItem value='preset' id='preset' />
-                        <label htmlFor='preset' className='cursor-pointer text-sm'>Preset</label>
-                    </div>
-                    <div className='flex items-center gap-2'>
-                        <RadioGroupItem value='manual' id='manual' />
-                        <label htmlFor='manual' className='cursor-pointer text-sm'>Manual (Crontab)</label>
-                    </div>
-                </RadioGroup>
-
-                {cronMode === 'preset' && (
-                    <div className='space-y-3'>
-                        <div className='grid grid-cols-2 gap-2 md:grid-cols-3'>
-                            {CRON_PRESETS.map((p) => (
-                                <Button
-                                    key={p.value}
-                                    type='button'
-                                    size='sm'
-                                    variant={form.watch('cron_expression') === p.value || presetType === p.value ? 'default' : 'outline'}
-                                    onClick={() => handlePresetClick(p.value)}
-                                >
-                                    {p.label}
-                                </Button>
-                            ))}
-                        </div>
-                        {/* Preset options logic preserved from original... */}
-                        {presetType === 'DAILY' && (
-                             <div className='flex items-center gap-2'>
-                                  <span className='text-sm text-muted-foreground'>At hour:</span>
-                                  <Select value={hour} onValueChange={setHour}>
-                                      <SelectTrigger className='w-[120px]'><SelectValue /></SelectTrigger>
-                                      <SelectContent>
-                                          {HOURS.map((h) => <SelectItem key={h.value} value={h.value}>{h.label}</SelectItem>)}
-                                      </SelectContent>
-                                  </Select>
-                             </div>
-                        )}
-                        {/* ... Weekly/Monthly logic omitted for brevity in recreation, assuming mostly user uses Manual or simple presets */}
-                        {/* Actually need to include it if we want full parity. I'll include simplified version of logic or full if room. */}
-                        {/* Full logic: */}
-                        {presetType === 'WEEKLY' && (
-                            <div className='space-y-2'>
-                                <div className='flex items-center gap-2'>
-                                    <span className='text-sm text-muted-foreground'>At hour:</span>
-                                    <Select value={hour} onValueChange={setHour}>
-                                        <SelectTrigger className='w-[120px]'><SelectValue /></SelectTrigger>
-                                        <SelectContent>{HOURS.map((h) => <SelectItem key={h.value} value={h.value}>{h.label}</SelectItem>)}</SelectContent>
-                                    </Select>
-                                </div>
-                                <div className='flex items-center gap-2'>
-                                    <span className='text-sm text-muted-foreground'>On day:</span>
-                                    <Select value={dayOfWeek} onValueChange={setDayOfWeek}>
-                                        <SelectTrigger className='w-[150px]'><SelectValue /></SelectTrigger>
-                                        <SelectContent>{DAYS_OF_WEEK.map((d) => <SelectItem key={d.value} value={d.value}>{d.label}</SelectItem>)}</SelectContent>
-                                    </Select>
-                                </div>
-                            </div>
-                        )}
-                        {presetType === 'MONTHLY' && (
-                            <div className='space-y-2'>
-                                <div className='flex items-center gap-2'>
-                                    <span className='text-sm text-muted-foreground'>At hour:</span>
-                                     <Select value={hour} onValueChange={setHour}>
-                                        <SelectTrigger className='w-[120px]'><SelectValue /></SelectTrigger>
-                                        <SelectContent>{HOURS.map((h) => <SelectItem key={h.value} value={h.value}>{h.label}</SelectItem>)}</SelectContent>
-                                    </Select>
-                                </div>
-                                <div className='flex items-center gap-2'>
-                                    <span className='text-sm text-muted-foreground'>On day:</span>
-                                    <Select value={dayOfMonth} onValueChange={setDayOfMonth}>
-                                        <SelectTrigger className='w-[150px]'><SelectValue /></SelectTrigger>
-                                        <SelectContent>{DAYS_OF_MONTH.map((d) => <SelectItem key={d.value} value={d.value}>{d.label}</SelectItem>)}</SelectContent>
-                                    </Select>
-                                </div>
-                            </div>
-                        )}
-                    </div>
-                )}
-
-                {cronMode === 'manual' && (
-                    <FormField
-                        control={form.control}
-                        name='cron_expression'
-                        render={({ field }) => (
-                            <FormItem>
-                                <FormControl>
-                                    <Input {...field} placeholder='*/5 * * * *' className='font-mono' />
-                                </FormControl>
-                                <FormDescription>5-part crontab: minute hour day month weekday</FormDescription>
-                                <FormMessage />
-                            </FormItem>
-                        )}
-                    />
-                )}
-                
-                <div className='rounded-md bg-muted px-3 py-2'>
-                    <p className='text-sm text-muted-foreground'>
-                        <Clock className='-mt-0.5 mr-1.5 inline h-3.5 w-3.5' />
-                        {getCronHuman(form.watch('cron_expression'))}
-                    </p>
-                </div>
-            </div>
-
-            <div className='flex items-center gap-3'>
-                <Button type='submit' disabled={createMutation.isPending || updateMutation.isPending}>
-                    {createMutation.isPending || updateMutation.isPending ? (
-                        <><Loader2 className='mr-2 h-4 w-4 animate-spin' />Saving…</>
-                    ) : (
-                        <><Save className='mr-2 h-4 w-4' />Save Changes</>
-                    )}
-                </Button>
-            </div>
-        </form>
-      </Form>
-  )
 
   return (
     <>
@@ -538,179 +164,127 @@ export default function ScheduleDetailPage() {
         </div>
       </Header>
 
-      <Main className='flex flex-1 flex-col gap-6'>
+      <Main className='flex flex-1 flex-col gap-8 pb-10'>
         {/* Top Breadcrumb */}
-        <Breadcrumb>
+        <div className="flex items-center gap-4">
+          <Button variant="ghost" size="icon" className="h-8 w-8 -ml-2" onClick={() => navigate({ to: '/schedules' })}>
+            <ArrowLeft className="h-4 w-4" />
+          </Button>
+          <Breadcrumb>
             <BreadcrumbList>
-            <BreadcrumbItem>
+              <BreadcrumbItem>
                 <BreadcrumbLink asChild>
-                <Link to='/schedules'>Schedules</Link>
+                  <Link to='/schedules'>Schedules</Link>
                 </BreadcrumbLink>
-            </BreadcrumbItem>
-            <BreadcrumbSeparator />
-            <BreadcrumbItem>
+              </BreadcrumbItem>
+              <BreadcrumbSeparator />
+              <BreadcrumbItem>
                 <BreadcrumbPage>
-                {isNew ? 'New Schedule' : schedule?.name}
+                  {isNew ? 'New Schedule' : schedule?.name}
                 </BreadcrumbPage>
-            </BreadcrumbItem>
+              </BreadcrumbItem>
             </BreadcrumbList>
-        </Breadcrumb>
-        
-        {/* Header Area */}
-        <div className='flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between'>
-            <div className='flex items-center gap-3'>
-                {/* Icon Box */}
-                <div className='flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10 text-primary'>
-                    <CalendarClock className='h-6 w-6' />
-                </div>
-                <div>
-                    <h1 className='text-xl font-bold tracking-tight flex items-center gap-2'>
-                        {isNew ? 'Create Schedule' : schedule?.name}
-                        {schedule && (
-                             <Switch 
-                                checked={schedule.status === 'ACTIVE'} 
-                                onCheckedChange={(c) => c ? resumeMutation.mutate() : pauseMutation.mutate()}
-                                className="ml-2"
-                             />
-                        )}
-                    </h1>
-                     <div className='flex items-center gap-2 text-sm text-muted-foreground'>
-                        <span className='font-mono'>{schedule?.cron_expression}</span>
-                        {schedule && (
-                            <>
-                             <span>•</span>
-                             <Badge variant='outline'>{schedule.task_type === 'FLOW_TASK' ? 'flow' : 'linked'}</Badge>
-                            </>
-                        )}
-                     </div>
-                </div>
-            </div>
+          </Breadcrumb>
+        </div>
 
-            {!isNew && (
-                <div className='flex items-center gap-2'>
-                    <Button variant='outline' size='sm'>
-                         <Star className='mr-2 h-4 w-4' />
-                         Favorite Dag
-                    </Button>
-                    <DropdownMenu>
-                         <DropdownMenuTrigger asChild>
-                             <Button variant='outline' size='icon'>
-                                 <MoreVertical className='h-4 w-4' />
-                             </Button>
-                         </DropdownMenuTrigger>
-                         <DropdownMenuContent align='end'>
-                             <DropdownMenuItem onClick={() => deleteMutation.mutate()} className='text-destructive'>
-                                 <Trash2 className='mr-2 h-4 w-4' />
-                                 Delete Schedule
-                             </DropdownMenuItem>
-                         </DropdownMenuContent>
-                    </DropdownMenu>
-                </div>
-            )}
+        {/* Header Area */}
+        <div className='flex flex-col gap-6 md:flex-row md:items-start md:justify-between'>
+          <div className='flex items-start gap-4'>
+            <div className='flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary mt-1'>
+              <CalendarClock className='h-6 w-6' />
+            </div>
+            <div className="space-y-1">
+              <h1 className='text-2xl font-bold tracking-tight flex items-center gap-3'>
+                {isNew ? 'Create Schedule' : schedule?.name}
+                {schedule && (
+                  <Badge variant={schedule.status === 'ACTIVE' ? 'default' : 'secondary'} className="rounded-sm">
+                    {schedule.status}
+                  </Badge>
+                )}
+              </h1>
+              <div className='flex items-center gap-3 text-sm text-muted-foreground'>
+                {schedule ? (
+                  <>
+                    <span className='font-mono bg-muted px-1 rounded-sm'>{schedule.cron_expression}</span>
+                    <span>•</span>
+                    <span>{cronHuman}</span>
+                    <span>•</span>
+                    <span className="capitalize">{schedule.task_type.toLowerCase().replace('_', ' ')}</span>
+                  </>
+                ) : (
+                  <span>Define your new schedule execution plan.</span>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {!isNew && (
+            <div className='flex items-center gap-3'>
+              <div className="flex items-center gap-2 mr-2 bg-muted/50 p-1 pl-3 pr-2 rounded-full border">
+                <span className="text-xs font-medium text-muted-foreground">Enabled</span>
+                <Switch
+                  checked={schedule?.status === 'ACTIVE'}
+                  onCheckedChange={(c) => c ? resumeMutation.mutate() : pauseMutation.mutate()}
+                  className="scale-90"
+                />
+              </div>
+
+              <Button variant='outline' size='sm'>
+                <Star className='mr-2 h-4 w-4' />
+                Favorite
+              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant='outline' size='icon'>
+                    <MoreVertical className='h-4 w-4' />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align='end'>
+                  <DropdownMenuItem onClick={() => deleteMutation.mutate()} className='text-destructive focus:text-destructive'>
+                    <Trash2 className='mr-2 h-4 w-4' />
+                    Delete Schedule
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          )}
         </div>
 
         {/* Content Tabs */}
         {isNew ? (
-            <Card>
-                <CardHeader>
-                     <CardTitle>Configuration</CardTitle>
-                </CardHeader>
-                <CardContent>
-                    <ConfigurationForm />
-                </CardContent>
-            </Card>
+          <div className="max-w-3xl">
+            <ScheduleForm isNew={true} onSubmit={onSubmit} isSubmitting={createMutation.isPending} />
+          </div>
         ) : (
-            <Tabs defaultValue="runs" className="space-y-4">
-                <TabsList>
-                    <TabsTrigger value="overview">Overview</TabsTrigger>
-                    <TabsTrigger value="runs">Runs</TabsTrigger>
-                </TabsList>
-                
-                <TabsContent value="overview">
-                    <Card>
-                        <CardHeader>
-                             <CardTitle>Configuration</CardTitle>
-                             <CardDescription>Manage schedule settings and cron expression.</CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                            <ConfigurationForm />
-                        </CardContent>
-                    </Card>
-                </TabsContent>
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+            <TabsList className="grid w-full grid-cols-2 lg:w-[400px]">
+              <TabsTrigger value="overview" className="gap-2"><Settings className="h-4 w-4" /> Configuration</TabsTrigger>
+              <TabsTrigger value="runs" className="gap-2"><Activity className="h-4 w-4" /> Run History</TabsTrigger>
+            </TabsList>
 
-                <TabsContent value="runs">
-                     <Card>
-                        <CardHeader>
-                            <div className='flex items-center justify-between'>
-                                <div>
-                                    <CardTitle>Run History</CardTitle>
-                                    <CardDescription>Recent executions triggered by this schedule.</CardDescription>
-                                </div>
-                                <Button variant='outline' size='sm' onClick={() => queryClient.invalidateQueries({queryKey: ['schedules', Number(scheduleId), 'history']})}>
-                                     <RotateCw className='mr-2 h-4 w-4' />
-                                     Refresh
-                                </Button>
-                            </div>
-                        </CardHeader>
-                        <CardContent>
-                            {historyLoading ? (
-                                <div className='flex items-center justify-center py-8'>
-                                    <Loader2 className='h-6 w-6 animate-spin text-muted-foreground' />
-                                </div>
-                            ) : (
-                                <div className='rounded-md border border-border/50'>
-                                <Table>
-                                    <TableHeader>
-                                        {historyTable.getHeaderGroups().map((hg) => (
-                                            <TableRow key={hg.id}>
-                                                {hg.headers.map((h) => (
-                                                    <TableHead key={h.id} className={cn(h.column.columnDef.meta?.className)}>
-                                                        {h.isPlaceholder ? null : flexRender(h.column.columnDef.header, h.getContext())}
-                                                    </TableHead>
-                                                ))}
-                                            </TableRow>
-                                        ))}
-                                    </TableHeader>
-                                    <TableBody>
-                                        {historyTable.getRowModel().rows.length ? (
-                                            historyTable.getRowModel().rows.map((row) => (
-                                                <TableRow key={row.id}>
-                                                    {row.getVisibleCells().map((cell) => (
-                                                        <TableCell key={cell.id} className={cn(cell.column.columnDef.meta?.className)}>
-                                                            {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                                                        </TableCell>
-                                                    ))}
-                                                </TableRow>
-                                            ))
-                                        ) : (
-                                            <TableRow>
-                                                <TableCell colSpan={historyColumns.length} className='h-24 text-center'>
-                                                    No runs found.
-                                                </TableCell>
-                                            </TableRow>
-                                        )}
-                                    </TableBody>
-                                </Table>
-                                </div>
-                            )}
-                        </CardContent>
-                     </Card>
-                </TabsContent>
-                
-                <TabsContent value="tasks">
-                     <div className='flex h-32 items-center justify-center rounded-lg border border-dashed text-muted-foreground'>
-                         Tasks view placeholder
-                     </div>
-                </TabsContent>
-                
-                {/* Placeholders for other tabs */}
-                <TabsContent value="calendar"><div className='flex h-32 items-center justify-center rounded-lg border border-dashed text-muted-foreground'>Calendar view placeholder</div></TabsContent>
-                <TabsContent value="backfills"><div className='flex h-32 items-center justify-center rounded-lg border border-dashed text-muted-foreground'>Backfills view placeholder</div></TabsContent>
-                <TabsContent value="audit"><div className='flex h-32 items-center justify-center rounded-lg border border-dashed text-muted-foreground'>Audit Log view placeholder</div></TabsContent>
-                <TabsContent value="code"><div className='flex h-32 items-center justify-center rounded-lg border border-dashed text-muted-foreground'>Code view placeholder</div></TabsContent>
-                <TabsContent value="details"><div className='flex h-32 items-center justify-center rounded-lg border border-dashed text-muted-foreground'>Details view placeholder</div></TabsContent>
+            <TabsContent value="overview" className="max-w-3xl focus-visible:outline-none focus-visible:ring-0">
+              <p className="text-sm text-muted-foreground mb-6">
+                Configure the schedule execution frequency and target task.
+              </p>
+              <ScheduleForm
+                schedule={schedule}
+                isNew={false}
+                onSubmit={onSubmit}
+                isSubmitting={updateMutation.isPending}
+              />
+            </TabsContent>
 
-            </Tabs>
+            <TabsContent value="runs" className="focus-visible:outline-none focus-visible:ring-0">
+              <p className="text-sm text-muted-foreground mb-6">
+                View the execution history of this schedule.
+              </p>
+              <ScheduleRuns
+                data={historyData?.items ?? []}
+                isLoading={historyLoading}
+                onRefresh={refetchHistory}
+              />
+            </TabsContent>
+          </Tabs>
         )}
       </Main>
     </>
