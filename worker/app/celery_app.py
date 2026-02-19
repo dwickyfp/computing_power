@@ -66,4 +66,9 @@ celery_app.conf.update(
 )
 
 # Auto-discover tasks from the tasks package
-celery_app.autodiscover_tasks(["app.tasks.preview", "app.tasks.lineage"])
+celery_app.autodiscover_tasks([
+    "app.tasks.preview",
+    "app.tasks.lineage",
+    "app.tasks.flow_task",
+    "app.tasks.destination_table_list",
+])

@@ -8,6 +8,8 @@ export const destinationSchema = z.object({
     created_at: z.string(),
     updated_at: z.string(),
     is_used_in_active_pipeline: z.boolean().optional(),
+    total_tables: z.number().optional().default(0),
+    last_table_check_at: z.string().nullable().optional(),
 })
 
 export type Destination = z.infer<typeof destinationSchema>

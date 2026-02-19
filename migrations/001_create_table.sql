@@ -492,7 +492,108 @@ CREATE INDEX IF NOT EXISTS idx_worker_health_status_last_check_at ON worker_heal
 -- Add comment
 COMMENT ON TABLE worker_health_status IS 'Stores periodic Celery worker health check results updated every 10 seconds by background task';
 
+-- ============================================================
+-- Migration 009: Flow Task — DuckDB Visual ETL Transform Engine
+-- ============================================================
 
+-- Table: flow_tasks — master record for each visual ETL flow
+CREATE TABLE IF NOT EXISTS flow_tasks (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(255) NOT NULL UNIQUE,
+    description TEXT NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'IDLE',       -- IDLE, RUNNING, SUCCESS, FAILED
+    trigger_type VARCHAR(20) NOT NULL DEFAULT 'MANUAL', -- MANUAL, SCHEDULED
+    last_run_at TIMESTAMPTZ NULL,
+    last_run_status VARCHAR(20) NULL,                  -- SUCCESS, FAILED, NULL if never run
+    last_run_record_count BIGINT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE flow_tasks ADD COLUMN IF NOT EXISTS description TEXT NULL;
+ALTER TABLE flow_tasks ADD COLUMN IF NOT EXISTS last_run_at TIMESTAMPTZ NULL;
+ALTER TABLE flow_tasks ADD COLUMN IF NOT EXISTS last_run_status VARCHAR(20) NULL;
+ALTER TABLE flow_tasks ADD COLUMN IF NOT EXISTS last_run_record_count BIGINT NULL;
+
+CREATE INDEX IF NOT EXISTS idx_flow_tasks_status ON flow_tasks(status);
+CREATE INDEX IF NOT EXISTS idx_flow_tasks_last_run_at ON flow_tasks(last_run_at DESC);
+COMMENT ON TABLE flow_tasks IS 'Visual ETL flow task definitions — each row is one user-built transform graph';
+
+-- Table: flow_task_graph — persisted node + edge graph (one per flow task, upserted on save)
+CREATE TABLE IF NOT EXISTS flow_task_graph (
+    id SERIAL PRIMARY KEY,
+    flow_task_id INTEGER NOT NULL REFERENCES flow_tasks(id) ON DELETE CASCADE,
+    nodes_json JSONB NOT NULL DEFAULT '[]',  -- ReactFlow nodes with position + data
+    edges_json JSONB NOT NULL DEFAULT '[]',  -- ReactFlow edges
+    version INTEGER NOT NULL DEFAULT 1,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    CONSTRAINT uq_flow_task_graph_flow_task_id UNIQUE (flow_task_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_flow_task_graph_flow_task_id ON flow_task_graph(flow_task_id);
+COMMENT ON TABLE flow_task_graph IS 'Persisted ReactFlow node/edge graph for each flow task including node coordinates';
+COMMENT ON COLUMN flow_task_graph.nodes_json IS 'JSON array of ReactFlow nodes: [{id, type, position:{x,y}, data:{...node config}}]';
+COMMENT ON COLUMN flow_task_graph.edges_json IS 'JSON array of ReactFlow edges: [{id, source, target, sourceHandle, targetHandle}]';
+
+-- Table: flow_task_run_history — one row per execution run
+CREATE TABLE IF NOT EXISTS flow_task_run_history (
+    id SERIAL PRIMARY KEY,
+    flow_task_id INTEGER NOT NULL REFERENCES flow_tasks(id) ON DELETE CASCADE,
+    trigger_type VARCHAR(20) NOT NULL DEFAULT 'MANUAL',   -- MANUAL, SCHEDULED
+    status VARCHAR(20) NOT NULL DEFAULT 'RUNNING',        -- RUNNING, SUCCESS, FAILED, CANCELLED
+    celery_task_id VARCHAR(255) NULL,
+    started_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    finished_at TIMESTAMPTZ NULL,
+    error_message TEXT NULL,
+    total_input_records BIGINT NULL DEFAULT 0,
+    total_output_records BIGINT NULL DEFAULT 0,
+    run_metadata JSONB NULL,   -- arbitrary per-run context (graph snapshot, etc.)
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE flow_task_run_history ADD COLUMN IF NOT EXISTS celery_task_id VARCHAR(255) NULL;
+ALTER TABLE flow_task_run_history ADD COLUMN IF NOT EXISTS run_metadata JSONB NULL;
+ALTER TABLE flow_task_run_history ADD COLUMN IF NOT EXISTS total_input_records BIGINT NULL DEFAULT 0;
+ALTER TABLE flow_task_run_history ADD COLUMN IF NOT EXISTS total_output_records BIGINT NULL DEFAULT 0;
+
+CREATE INDEX IF NOT EXISTS idx_flow_task_run_history_flow_task_id ON flow_task_run_history(flow_task_id);
+CREATE INDEX IF NOT EXISTS idx_flow_task_run_history_status ON flow_task_run_history(status);
+CREATE INDEX IF NOT EXISTS idx_flow_task_run_history_started_at ON flow_task_run_history(started_at DESC);
+CREATE INDEX IF NOT EXISTS idx_flow_task_run_history_celery_task_id ON flow_task_run_history(celery_task_id);
+COMMENT ON TABLE flow_task_run_history IS 'Execution history for flow tasks — one row per triggered run';
+
+-- Table: flow_task_run_node_log — per-node execution stats within a run
+CREATE TABLE IF NOT EXISTS flow_task_run_node_log (
+    id SERIAL PRIMARY KEY,
+    run_history_id INTEGER NOT NULL REFERENCES flow_task_run_history(id) ON DELETE CASCADE,
+    flow_task_id INTEGER NOT NULL REFERENCES flow_tasks(id) ON DELETE CASCADE,
+    node_id VARCHAR(255) NOT NULL,     -- ReactFlow node id
+    node_type VARCHAR(50) NOT NULL,    -- input, clean, aggregate, join, union, pivot, new_rows, output
+    node_label VARCHAR(255) NULL,
+    row_count_in BIGINT NULL DEFAULT 0,
+    row_count_out BIGINT NULL DEFAULT 0,
+    duration_ms INTEGER NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'PENDING', -- PENDING, RUNNING, SUCCESS, FAILED, SKIPPED
+    error_message TEXT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_flow_task_run_node_log_run_history_id ON flow_task_run_node_log(run_history_id);
+CREATE INDEX IF NOT EXISTS idx_flow_task_run_node_log_flow_task_id ON flow_task_run_node_log(flow_task_id);
+CREATE INDEX IF NOT EXISTS idx_flow_task_run_node_log_node_type ON flow_task_run_node_log(node_type);
+COMMENT ON TABLE flow_task_run_node_log IS 'Per-node execution stats for each flow run — tracks row counts and timing per node';
+
+
+-- Migration: Add table list tracking to destinations
+-- Adds list_tables (JSONB), total_tables (INT), last_table_check_at (TIMESTAMPTZ) to destinations
+
+ALTER TABLE destinations
+    ADD COLUMN IF NOT EXISTS list_tables JSONB NOT NULL DEFAULT '[]',
+    ADD COLUMN IF NOT EXISTS total_tables INTEGER NOT NULL DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS last_table_check_at TIMESTAMPTZ NULL;
 
 
 

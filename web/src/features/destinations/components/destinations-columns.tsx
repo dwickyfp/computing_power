@@ -2,10 +2,41 @@ import { type ColumnDef } from '@tanstack/react-table'
 import { DataTableColumnHeader } from '@/components/data-table'
 import { type Destination } from '../data/schema'
 import { DestinationsRowActions } from './destinations-row-actions'
-import { Snowflake, Database } from 'lucide-react'
+import { Snowflake, Database, Eye, Table2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatDistanceToNow } from 'date-fns'
 import { CopyButton } from '@/components/copy-button'
+import { Button } from '@/components/ui/button'
+import { useDestinations } from './destinations-provider'
+
+function TotalTablesCell({ row }: { row: { original: Destination } }) {
+    const { setOpen, setCurrentRow } = useDestinations()
+    const total = row.original.total_tables ?? 0
+
+    return (
+        <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5 text-sm">
+                <Table2 className="h-3.5 w-3.5 text-muted-foreground" />
+                <span className={cn(total === 0 ? 'text-muted-foreground' : 'text-foreground font-medium')}>
+                    {total}
+                </span>
+            </div>
+            <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6 opacity-60 hover:opacity-100"
+                title="View table list"
+                onClick={(e) => {
+                    e.stopPropagation()
+                    setCurrentRow(row.original)
+                    setOpen('table-list')
+                }}
+            >
+                <Eye className="h-3.5 w-3.5" />
+            </Button>
+        </div>
+    )
+}
 
 export const destinationsColumns: ColumnDef<Destination>[] = [
     {
@@ -74,6 +105,14 @@ export const destinationsColumns: ColumnDef<Destination>[] = [
         meta: { title: 'Connection' },
     },
     {
+        id: 'total_tables',
+        header: ({ column }) => (
+            <DataTableColumnHeader column={column} title='Tables' />
+        ),
+        cell: ({ row }) => <TotalTablesCell row={row} />,
+        meta: { title: 'Tables' },
+    },
+    {
         accessorKey: 'created_at',
         header: ({ column }) => (
             <DataTableColumnHeader column={column} title='Created' />
@@ -93,4 +132,3 @@ export const destinationsColumns: ColumnDef<Destination>[] = [
         meta: { title: 'Actions' },
     },
 ]
-

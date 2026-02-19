@@ -235,3 +235,30 @@
 .animate-pulse-glow {
   animation: pulse-glow 2s ease-in-out infinite;
 }
+
+/* Reset the global border/outline that the * rule applies to ReactFlow node wrappers */
+.react-flow__node,
+.react-flow__node-input,
+.react-flow__node-output,
+.react-flow__node-default {
+  border: none !important;
+  outline: none !important;
+  padding: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  width: auto !important;
+  --xy-node-border: none;
+  --xy-node-boxshadow-hover-default: none;
+  --xy-node-boxshadow-selected-default: none;
+}
+
+.react-flow__node:focus,
+.react-flow__node:focus-visible,
+.react-flow__node-input:focus,
+.react-flow__node-input:focus-visible,
+.react-flow__node-output:focus,
+.react-flow__node-output:focus-visible {
+  outline: none !important;
+  border: none !important;
+  box-shadow: none !important;
+}

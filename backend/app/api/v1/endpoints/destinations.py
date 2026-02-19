@@ -219,3 +219,48 @@ def get_destination_schema(
     """
     only_tables = scope == "tables"
     return service.fetch_schema(destination_id, table_name=table, only_tables=only_tables)
+
+
+@router.get(
+    "/{destination_id}/tables",
+    response_model=dict,
+    summary="Get cached destination table list",
+    description="Return the persisted table list (list_tables) for a destination",
+)
+def get_destination_table_list(
+    destination_id: int,
+    service: DestinationService = Depends(get_destination_service),
+) -> dict:
+    """
+    Get the cached table list for a destination.
+
+    Returns the list_tables, total_tables, and last_table_check_at stored in DB.
+    To trigger a fresh fetch, call POST /{destination_id}/tables/refresh.
+    """
+    return service.get_table_list(destination_id)
+
+
+@router.post(
+    "/{destination_id}/tables/refresh",
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Dispatch destination table list refresh",
+    description="Enqueue a worker task to refresh the table list for a destination",
+)
+def refresh_destination_table_list(
+    destination_id: int,
+    service: DestinationService = Depends(get_destination_service),
+) -> dict:
+    """
+    Dispatch a Celery task to refresh the table list for a destination.
+
+    The task runs asynchronously in the worker.  Poll GET /{destination_id}/tables
+    to check when results have been persisted.
+
+    Returns:
+        task_id if worker is available.
+    """
+    task_id = service.dispatch_table_list_task(destination_id)
+    if task_id:
+        return {"message": "Table list refresh dispatched", "task_id": task_id}
+    return {"message": "Worker is disabled; table list refresh not dispatched", "task_id": None}
+

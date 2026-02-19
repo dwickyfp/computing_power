@@ -9,9 +9,6 @@ from app.api.v1.endpoints import (
     wal_monitor,
     system_metrics,
     credits,
-    wal_monitor,
-    system_metrics,
-    credits,
     configuration,
     dashboard,
     table_sync,
@@ -20,6 +17,7 @@ from app.api.v1.endpoints import (
     backfill,
     tags,
     lineage,
+    flow_tasks,
 )
 
 # Create v1 router
@@ -61,3 +59,7 @@ api_router.include_router(notification_logs.router, tags=["notification-logs"])
 api_router.include_router(backfill.router, tags=["backfill"])
 
 api_router.include_router(tags.router, prefix="/tags", tags=["tags"])
+
+api_router.include_router(
+    flow_tasks.router, prefix="/flow-tasks", tags=["flow-tasks"]
+)

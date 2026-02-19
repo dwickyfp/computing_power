@@ -8,6 +8,14 @@ export interface Destination {
     created_at: string
     updated_at: string
     is_used_in_active_pipeline?: boolean
+    total_tables?: number
+    last_table_check_at?: string | null
+}
+
+export interface DestinationTableList {
+    tables: string[]
+    total_tables: number
+    last_table_check_at: string | null
 }
 
 export interface DestinationCreate {
@@ -63,5 +71,13 @@ export const destinationsRepo = {
     duplicate: async (id: number) => {
         const { data } = await api.post<Destination>(`/destinations/${id}/duplicate`)
         return data
-    }
+    },
+    getTableList: async (id: number) => {
+        const { data } = await api.get<DestinationTableList>(`/destinations/${id}/tables`)
+        return data
+    },
+    refreshTableList: async (id: number) => {
+        const { data } = await api.post<{ message: string; task_id: string | null }>(`/destinations/${id}/tables/refresh`)
+        return data
+    },
 }

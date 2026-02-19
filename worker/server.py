@@ -6,11 +6,12 @@ Provides health check endpoint for monitoring.
 
 import logging
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Any, Dict, List, Optional
 import time
 
 import uvicorn
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
 from celery import Celery
 
 from app.config.settings import settings
@@ -174,6 +175,47 @@ def run_server() -> None:
         )
     except Exception as e:
         logger.error(f"Failed to start health API server: {e}")
+
+
+# ─── Schema endpoint ──────────────────────────────────────────────────────────
+
+class NodeSchemaRequest(BaseModel):
+    node_id: str
+    nodes: List[Dict[str, Any]]
+    edges: List[Dict[str, Any]]
+
+
+class ColumnSchemaItem(BaseModel):
+    column_name: str
+    data_type: str
+
+
+class NodeSchemaResponse(BaseModel):
+    columns: List[ColumnSchemaItem]
+
+
+@app.post("/schema", response_model=NodeSchemaResponse)
+def get_node_schema(request: NodeSchemaRequest):
+    """
+    Synchronously execute the DuckDB CTE chain up to the target node with
+    LIMIT 0 and return the output column names + types.
+
+    No rows are fetched — only Arrow schema metadata is read, so this is
+    fast regardless of upstream table size or transformation complexity.
+    """
+    try:
+        from app.tasks.flow_task.preview_executor import execute_node_schema
+
+        result = execute_node_schema(
+            node_id=request.node_id,
+            graph_snapshot={"nodes": request.nodes, "edges": request.edges},
+        )
+        return NodeSchemaResponse(columns=result["columns"])
+    except Exception as e:
+        # Return empty columns instead of crashing — the UI handles the empty state
+        # gracefully. Common causes: source DB not reachable, node not yet configured.
+        logger.warning(f"Node schema resolution returned empty (non-fatal): {e}")
+        return NodeSchemaResponse(columns=[])
 
 
 if __name__ == "__main__":
