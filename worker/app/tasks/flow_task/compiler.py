@@ -500,6 +500,10 @@ class GraphCompiler:
                 # Output nodes don't produce a CTE
                 continue
 
+            if node_type == "note":
+                # Note nodes are purely visual annotations — no SQL, no CTE.
+                continue
+
             cte_name = _cte_name(node_id, node_type)
             self.cte_map[node_id] = cte_name
 
