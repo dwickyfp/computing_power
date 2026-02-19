@@ -9,6 +9,9 @@ import {
   BellRing,
   Server,
   Hash,
+  GitBranch,
+  Link2,
+  Calendar,
 } from 'lucide-react'
 import { type SidebarData } from '../types'
 
@@ -58,6 +61,26 @@ export const sidebarData: SidebarData = {
           title: 'Pipelines',
           icon: Workflow,
           url: '/pipelines',
+        },
+      ],
+    },
+    {
+      title: 'Transformation',
+      items: [
+        {
+          title: 'Flow Task',
+          icon: GitBranch,
+          url: '/flow-tasks',
+        },
+        {
+          title: 'Linked Task (Soon)',
+          icon: Link2,
+          url: '#',
+        },
+        {
+          title: 'Schedule (Soon)',
+          icon: Calendar,
+          url: '#',
         },
       ],
     },

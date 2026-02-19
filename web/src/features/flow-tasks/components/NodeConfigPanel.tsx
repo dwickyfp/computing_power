@@ -1,0 +1,1035 @@
+/**
+ * NodeConfigPanel — right-side drawer showing the config form for the selected node.
+ * Opens when a node is selected on the canvas.
+ *
+ * Column selectors use useNodeSchema() which runs the DuckDB CTE chain
+ * up to the target node (LIMIT 0) in the worker to derive the real output schema —
+ * correctly reflecting post-aggregate, post-clean, post-pivot columns.
+ */
+
+import { useFlowTaskStore } from '../store/flow-task-store'
+import { useQuery } from '@tanstack/react-query'
+import { useRef, useState, useEffect, useCallback } from 'react'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select'
+import { Switch } from '@/components/ui/switch'
+import { Separator } from '@/components/ui/separator'
+import { X, Trash2, Eye, Loader2, Plus, GripVertical } from 'lucide-react'
+import type { FlowNodeType, FlowNodeData, WriteMode } from '@/repo/flow-tasks'
+import type { ColumnInfo } from '@/repo/flow-tasks'
+import { sourcesRepo } from '@/repo/sources'
+import { destinationsRepo } from '@/repo/destinations'
+import { useNodeSchema } from '../hooks/useNodeSchema'
+import { useParams } from '@tanstack/react-router'
+
+// ─── Shared helper components ─────────────────────────────────────────────────
+
+function ColumnSelect({
+    columns,
+    value,
+    onChange,
+    placeholder = 'Select column…',
+    isLoading = false,
+}: {
+    columns: ColumnInfo[]
+    value: string
+    onChange: (v: string) => void
+    placeholder?: string
+    isLoading?: boolean
+}) {
+    if (isLoading) {
+        return (
+            <div className="flex items-center gap-1.5 h-7 text-xs text-muted-foreground">
+                <Loader2 className="h-3 w-3 animate-spin" /> Resolving schema…
+            </div>
+        )
+    }
+    return (
+        <Select value={value || ''} onValueChange={onChange}>
+            <SelectTrigger className="h-7 text-xs">
+                <SelectValue placeholder={placeholder} />
+            </SelectTrigger>
+            <SelectContent>
+                {columns.length === 0 ? (
+                    <div className="px-2 py-1.5 text-xs text-muted-foreground">
+                        No columns — check upstream config
+                    </div>
+                ) : (
+                    columns.map((c) => (
+                        <SelectItem key={c.column_name} value={c.column_name}>
+                            <span>{c.column_name}</span>
+                            <span className="ml-1.5 text-[10px] text-muted-foreground font-mono">
+                                {c.data_type}
+                            </span>
+                        </SelectItem>
+                    ))
+                )}
+            </SelectContent>
+        </Select>
+    )
+}
+
+function MultiColumnSelect({
+    columns,
+    selected,
+    onChange,
+    isLoading = false,
+}: {
+    columns: ColumnInfo[]
+    selected: string[]
+    onChange: (cols: string[]) => void
+    isLoading?: boolean
+}) {
+    if (isLoading) {
+        return (
+            <div className="flex items-center gap-1.5 h-7 text-xs text-muted-foreground">
+                <Loader2 className="h-3 w-3 animate-spin" /> Resolving schema…
+            </div>
+        )
+    }
+    if (columns.length === 0) {
+        return (
+            <div className="text-xs text-muted-foreground">No columns — check upstream</div>
+        )
+    }
+    return (
+        <div className="flex flex-wrap gap-1 pt-0.5">
+            {columns.map((c) => {
+                const active = selected.includes(c.column_name)
+                return (
+                    <button
+                        key={c.column_name}
+                        type="button"
+                        onClick={() =>
+                            onChange(
+                                active
+                                    ? selected.filter((s) => s !== c.column_name)
+                                    : [...selected, c.column_name],
+                            )
+                        }
+                        className={`rounded px-1.5 py-0.5 text-[10px] border transition-colors ${
+                            active
+                                ? 'bg-violet-600 border-violet-600 text-white'
+                                : 'border-border text-muted-foreground hover:border-violet-400'
+                        }`}
+                    >
+                        {c.column_name}
+                    </button>
+                )
+            })}
+        </div>
+    )
+}
+
+// ─── Main panel ────────────────────────────────────────────────────────────────
+
+export function NodeConfigPanel() {
+    const { nodes, selectedNodeId, selectNode, updateNodeData, removeNode, requestPreview } =
+        useFlowTaskStore()
+
+    // Extract flow task ID from route params
+    let flowTaskId: number | null = null
+    try {
+        const params = useParams({ strict: false }) as Record<string, string>
+        const raw = params['flowTaskId'] ?? params['flow_task_id'] ?? params['id'] ?? ''
+        flowTaskId = raw ? parseInt(raw) : null
+    } catch {
+        flowTaskId = null
+    }
+
+    // ── Resizable panel ───────────────────────────────────────────────────────
+    // Strategy: write width directly to DOM via RAF (no React state during drag
+    // = zero re-renders of form content). `will-change: width` promotes the
+    // panel to its own GPU layer so the browser composites it independently.
+    // RAF throttles updates to exactly 1 per display frame (max 60fps).
+    // Only on mouseup do we commit to React state (one re-render total).
+    const MIN_WIDTH = 256
+    const MAX_WIDTH = 640
+    const DEFAULT_WIDTH = 288
+    const [panelWidth, setPanelWidth] = useState(DEFAULT_WIDTH)
+    const innerRef = useRef<HTMLDivElement>(null)
+    const dragging = useRef(false)
+    const startX = useRef(0)
+    const startW = useRef(0)
+    const rafId = useRef<number | null>(null)
+
+    const onResizeMouseDown = useCallback((e: React.MouseEvent) => {
+        e.preventDefault()
+        dragging.current = true
+        startX.current = e.clientX
+        startW.current = innerRef.current ? innerRef.current.offsetWidth : panelWidth
+        // Lock cursor globally so it doesn't flicker when moving off the handle
+        document.body.style.cursor = 'col-resize'
+        document.body.style.userSelect = 'none'
+    }, [panelWidth])
+
+    useEffect(() => {
+        const onMove = (e: MouseEvent) => {
+            if (!dragging.current || !innerRef.current) return
+            // Cancel any pending frame — use latest mouse position only
+            if (rafId.current !== null) cancelAnimationFrame(rafId.current)
+            rafId.current = requestAnimationFrame(() => {
+                if (!innerRef.current) return
+                const delta = startX.current - e.clientX
+                const next = Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, startW.current + delta))
+                innerRef.current.style.width = `${next}px`
+                rafId.current = null
+            })
+        }
+        const onUp = () => {
+            if (!dragging.current) return
+            dragging.current = false
+            document.body.style.cursor = ''
+            document.body.style.userSelect = ''
+            if (rafId.current !== null) {
+                cancelAnimationFrame(rafId.current)
+                rafId.current = null
+            }
+            // Commit final value to state — one re-render, panel keeps its size on remount
+            if (innerRef.current) setPanelWidth(innerRef.current.offsetWidth)
+        }
+        window.addEventListener('mousemove', onMove)
+        window.addEventListener('mouseup', onUp)
+        return () => {
+            window.removeEventListener('mousemove', onMove)
+            window.removeEventListener('mouseup', onUp)
+        }
+    }, [])
+
+    const selectedNode = (nodes ?? []).find((n) => n.id === selectedNodeId)
+    if (!selectedNode) return null
+
+    const update = (patch: Partial<FlowNodeData>) =>
+        updateNodeData(selectedNode.id, patch)
+
+    return (
+        // Outer shell: absolute right-0, full height, no own width — overlays canvas
+        // Width changes to the inner div never trigger canvas reflow.
+        <div className="absolute top-0 right-0 h-full z-20 pointer-events-none">
+            <div
+                ref={innerRef}
+                className="relative flex flex-col h-full border-l border-border bg-background overflow-y-auto animate-in slide-in-from-right duration-200 pointer-events-auto"
+                style={{ width: panelWidth, willChange: 'width' }}
+            >
+                {/* Drag-to-resize handle */}
+                <div
+                    onMouseDown={onResizeMouseDown}
+                    className="absolute left-0 top-0 h-full w-3 cursor-col-resize flex items-center justify-center hover:bg-muted/50 transition-colors z-10 group"
+                    title="Drag to resize"
+                >
+                    <GripVertical className="h-4 w-4 text-muted-foreground/40 group-hover:text-muted-foreground transition-colors" />
+                </div>
+            {/* Header */}
+            <div className="flex items-center justify-between px-3 py-2 border-b border-border/50">
+                <p className="text-sm font-semibold capitalize">
+                    {selectedNode.type} Config
+                </p>
+                <div className="flex gap-1">
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6 text-violet-500 hover:text-violet-600"
+                        title="Preview node output"
+                        onClick={() =>
+                            requestPreview?.(
+                                selectedNode.id,
+                                selectedNode.data.label ?? selectedNode.type,
+                            )
+                        }
+                    >
+                        <Eye className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6 text-destructive hover:text-destructive"
+                        title="Delete node"
+                        onClick={() => removeNode(selectedNode.id)}
+                    >
+                        <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6"
+                        onClick={() => selectNode(null)}
+                    >
+                        <X className="h-3.5 w-3.5" />
+                    </Button>
+                </div>
+            </div>
+
+            {/* Common: Label */}
+            <div className="px-3 py-3 space-y-3">
+                <Field label="Label">
+                    <Input
+                        className="h-7 text-xs"
+                        value={(selectedNode.data.label as string) || ''}
+                        onChange={(e) => update({ label: e.target.value })}
+                        placeholder="Node label"
+                    />
+                </Field>
+            </div>
+
+            <Separator />
+
+            {/* Type-specific config */}
+            <div className="px-3 py-3 space-y-3">
+                <NodeTypeConfig
+                    type={selectedNode.type}
+                    data={selectedNode.data}
+                    update={update}
+                    nodeId={selectedNode.id}
+                    flowTaskId={flowTaskId}
+                />
+            </div>
+            </div>{/* end inner panel */}
+        </div> // end outer shell
+    )
+}
+
+// ─── Per-type config forms ─────────────────────────────────────────────────────
+
+type ConfigFormProps = {
+    data: FlowNodeData
+    update: (patch: Partial<FlowNodeData>) => void
+    nodeId: string
+    flowTaskId: number | null
+}
+
+function NodeTypeConfig({
+    type,
+    data,
+    update,
+    nodeId,
+    flowTaskId,
+}: {
+    type: FlowNodeType
+    data: FlowNodeData
+    update: (patch: Partial<FlowNodeData>) => void
+    nodeId: string
+    flowTaskId: number | null
+}) {
+    switch (type) {
+        case 'input':
+            return <InputConfig data={data} update={update} nodeId={nodeId} flowTaskId={flowTaskId} />
+        case 'clean':
+            return <CleanConfig data={data} update={update} nodeId={nodeId} flowTaskId={flowTaskId} />
+        case 'aggregate':
+            return <AggregateConfig data={data} update={update} nodeId={nodeId} flowTaskId={flowTaskId} />
+        case 'join':
+            return <JoinConfig data={data} update={update} nodeId={nodeId} flowTaskId={flowTaskId} />
+        case 'union':
+            return <UnionConfig data={data} update={update} nodeId={nodeId} flowTaskId={flowTaskId} />
+        case 'pivot':
+            return <PivotConfig data={data} update={update} nodeId={nodeId} flowTaskId={flowTaskId} />
+        case 'output':
+            return <OutputConfig data={data} update={update} nodeId={nodeId} flowTaskId={flowTaskId} />
+        default:
+            return (
+                <p className="text-xs text-muted-foreground">No config for this node type.</p>
+            )
+    }
+}
+
+// ─── Input ─────────────────────────────────────────────────────────────────────
+
+function InputConfig({ data, update, nodeId: _nodeId, flowTaskId: _flowTaskId }: ConfigFormProps) {
+    const sourceType = (data.source_type as 'POSTGRES' | 'SNOWFLAKE') || 'POSTGRES'
+    const sourceId = data.source_id as number | undefined
+    const destinationId = data.destination_id as number | undefined
+
+    // Fetch all postgres sources (always fetched when type is POSTGRES)
+    const { data: sourcesData, isLoading: sourcesLoading } = useQuery({
+        queryKey: ['sources'],
+        queryFn: () => sourcesRepo.getAll(),
+        enabled: sourceType === 'POSTGRES',
+        staleTime: 30_000,
+    })
+
+    // Fetch all destinations (used for both SNOWFLAKE and POSTGRES destination options)
+    const { data: destsData, isLoading: destsLoading } = useQuery({
+        queryKey: ['destinations'],
+        queryFn: () => destinationsRepo.getAll(),
+        enabled: true,
+        staleTime: 30_000,
+    })
+
+    const snowflakeDests = destsData?.destinations.filter(
+        (d) => d.type.toLowerCase().includes('snowflake')
+    ) ?? []
+
+    // Postgres destinations (target DBs that can also be read from)
+    const postgresDests = destsData?.destinations.filter(
+        (d) => d.type.toLowerCase().includes('postgres') || d.type.toLowerCase().includes('postgresql')
+    ) ?? []
+
+    // For POSTGRES mode: encode selection as "src:<id>" or "dst:<id>" in a single dropdown
+    const pgConnectionValue =
+        sourceType === 'POSTGRES'
+            ? sourceId != null
+                ? `src:${sourceId}`
+                : destinationId != null
+                    ? `dst:${destinationId}`
+                    : ''
+            : ''
+
+    const handlePgConnectionChange = (v: string) => {
+        if (v.startsWith('src:')) {
+            update({ source_id: parseInt(v.slice(4)), destination_id: undefined, table_name: undefined })
+        } else if (v.startsWith('dst:')) {
+            update({ destination_id: parseInt(v.slice(4)), source_id: undefined, table_name: undefined })
+        }
+    }
+
+    // Determine which id to use for table fetching
+    // For POSTGRES: source_id → sourcesRepo.getAvailableTables, destination_id → destinationsRepo.getTableList
+    const pgUseDestTable = sourceType === 'POSTGRES' && !sourceId && !!destinationId
+
+    // Fetch available tables for selected source (postgres)
+    const { data: pgTables, isLoading: pgTablesLoading } = useQuery({
+        queryKey: ['source-available-tables', sourceId],
+        queryFn: () => sourcesRepo.getAvailableTables(sourceId!),
+        enabled: sourceType === 'POSTGRES' && !!sourceId,
+        staleTime: 30_000,
+    })
+
+    // Fetch table list for postgres destination (when destination is selected in POSTGRES mode)
+    const { data: pgDestTableData, isLoading: pgDestTablesLoading } = useQuery({
+        queryKey: ['destination-tables', destinationId],
+        queryFn: () => destinationsRepo.getTableList(destinationId!),
+        enabled: pgUseDestTable,
+        staleTime: 30_000,
+    })
+
+    // Fetch table list for selected snowflake destination
+    const { data: sfTableData, isLoading: sfTablesLoading } = useQuery({
+        queryKey: ['destination-tables', destinationId],
+        queryFn: () => destinationsRepo.getTableList(destinationId!),
+        enabled: sourceType === 'SNOWFLAKE' && !!destinationId,
+        staleTime: 30_000,
+    })
+
+    const tables: string[] =
+        sourceType === 'POSTGRES'
+            ? pgUseDestTable
+                ? (pgDestTableData?.tables ?? [])
+                : (pgTables ?? [])
+            : (sfTableData?.tables ?? [])
+
+    const tablesLoading =
+        sourceType === 'POSTGRES'
+            ? pgUseDestTable ? pgDestTablesLoading : pgTablesLoading
+            : sfTablesLoading
+
+    const activeId = sourceType === 'POSTGRES' ? (sourceId ?? destinationId) : destinationId
+    const pgLoading = sourcesLoading || destsLoading
+
+    return (
+        <>
+            <Field label="Source Type">
+                <Select
+                    value={sourceType}
+                    onValueChange={(v) =>
+                        update({
+                            source_type: v as 'POSTGRES' | 'SNOWFLAKE',
+                            source_id: undefined,
+                            destination_id: undefined,
+                            table_name: undefined,
+                            schema_name: undefined,
+                        })
+                    }
+                >
+                    <SelectTrigger className="h-7 text-xs">
+                        <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="POSTGRES">PostgreSQL</SelectItem>
+                        <SelectItem value="SNOWFLAKE">Snowflake</SelectItem>
+                    </SelectContent>
+                </Select>
+            </Field>
+
+            {/* Source / Destination selector */}
+            <Field label={sourceType === 'POSTGRES' ? 'Connection' : 'Destination'}>
+                {sourceType === 'POSTGRES' && pgLoading && (
+                    <div className="flex items-center gap-1.5 h-7 text-xs text-muted-foreground">
+                        <Loader2 className="h-3 w-3 animate-spin" /> Loading connections…
+                    </div>
+                )}
+                {sourceType === 'SNOWFLAKE' && destsLoading && (
+                    <div className="flex items-center gap-1.5 h-7 text-xs text-muted-foreground">
+                        <Loader2 className="h-3 w-3 animate-spin" /> Loading destinations…
+                    </div>
+                )}
+                {sourceType === 'POSTGRES' && !pgLoading && (
+                    <Select
+                        value={pgConnectionValue}
+                        onValueChange={handlePgConnectionChange}
+                    >
+                        <SelectTrigger className="h-7 text-xs">
+                            <SelectValue placeholder="Select connection…" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {(sourcesData?.sources ?? []).length > 0 && (
+                                <>
+                                    <div className="px-2 py-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
+                                        Sources
+                                    </div>
+                                    {(sourcesData?.sources ?? []).map((s) => (
+                                        <SelectItem key={`src:${s.id}`} value={`src:${s.id}`}>
+                                            {s.name}
+                                        </SelectItem>
+                                    ))}
+                                </>
+                            )}
+                            {postgresDests.length > 0 && (
+                                <>
+                                    <div className="px-2 py-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
+                                        Destinations
+                                    </div>
+                                    {postgresDests.map((d) => (
+                                        <SelectItem key={`dst:${d.id}`} value={`dst:${d.id}`}>
+                                            {d.name}
+                                        </SelectItem>
+                                    ))}
+                                </>
+                            )}
+                        </SelectContent>
+                    </Select>
+                )}
+                {sourceType === 'SNOWFLAKE' && !destsLoading && (
+                    <Select
+                        value={destinationId != null ? String(destinationId) : ''}
+                        onValueChange={(v) =>
+                            update({ destination_id: parseInt(v), table_name: undefined })
+                        }
+                    >
+                        <SelectTrigger className="h-7 text-xs">
+                            <SelectValue placeholder="Select destination…" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {snowflakeDests.map((d) => (
+                                <SelectItem key={d.id} value={String(d.id)}>
+                                    {d.name}
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                )}
+            </Field>
+
+            {/* Table selector — shown only when a source/destination is selected */}
+            {!!activeId && (
+                <Field label="Table">
+                    {tablesLoading ? (
+                        <div className="flex items-center gap-1.5 h-7 text-xs text-muted-foreground">
+                            <Loader2 className="h-3 w-3 animate-spin" /> Loading tables…
+                        </div>
+                    ) : (
+                        <Select
+                            value={(data.table_name as string) || ''}
+                            onValueChange={(v) => update({ table_name: v })}
+                        >
+                            <SelectTrigger className="h-7 text-xs">
+                                <SelectValue placeholder="Select table…" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {tables.length === 0 ? (
+                                    <div className="px-2 py-1.5 text-xs text-muted-foreground">
+                                        No tables found
+                                    </div>
+                                ) : (
+                                    tables.map((t) => (
+                                        <SelectItem key={t} value={t}>
+                                            {t}
+                                        </SelectItem>
+                                    ))
+                                )}
+                            </SelectContent>
+                        </Select>
+                    )}
+                </Field>
+            )}
+
+            {/* Schema — only relevant for postgres */}
+            {sourceType === 'POSTGRES' && (
+                <Field label="Schema">
+                    <Input
+                        className="h-7 text-xs"
+                        value={(data.schema_name as string) || 'public'}
+                        onChange={(e) => update({ schema_name: e.target.value })}
+                    />
+                </Field>
+            )}
+
+            <Field label="Alias (optional)">
+                <Input
+                    className="h-7 text-xs"
+                    value={(data.alias as string) || ''}
+                    onChange={(e) => update({ alias: e.target.value })}
+                    placeholder="cte_alias"
+                />
+            </Field>
+        </>
+    )
+}
+
+// ─── Clean ─────────────────────────────────────────────────────────────────────
+
+const FILTER_OPERATORS = [
+    '=', '!=', '>', '<', '>=', '<=',
+    'LIKE', 'NOT LIKE', 'IS NULL', 'IS NOT NULL', 'IN',
+]
+
+interface FilterRow { col: string; op: string; val: string }
+
+function CleanConfig({ data, update, nodeId, flowTaskId }: ConfigFormProps) {
+    const { columns, isLoading } = useNodeSchema(flowTaskId, nodeId)
+    const filterRows: FilterRow[] = (data.filter_rows as FilterRow[]) || []
+    const selectColumns: string[] = (data.select_columns as string[]) || []
+
+    const setFilterRows = (rows: FilterRow[]) => {
+        const expr = rows
+            .filter((r) => r.col && r.op)
+            .map((r) => {
+                if (r.op === 'IS NULL') return `${r.col} IS NULL`
+                if (r.op === 'IS NOT NULL') return `${r.col} IS NOT NULL`
+                if (r.op === 'IN') return `${r.col} IN (${r.val})`
+                return `${r.col} ${r.op} '${r.val}'`
+            })
+            .join(' AND ')
+        update({ filter_rows: rows, filter_expr: expr || undefined })
+    }
+
+    return (
+        <>
+            <SwitchField
+                label="Drop nulls"
+                checked={!!(data.drop_nulls)}
+                onChange={(v) => update({ drop_nulls: v })}
+            />
+            <SwitchField
+                label="Deduplicate rows"
+                checked={!!(data.deduplicate)}
+                onChange={(v) => update({ deduplicate: v })}
+            />
+
+            <Field label="Filter rows">
+                <div className="space-y-1.5">
+                    {filterRows.map((row, i) => (
+                        <div key={i} className="flex gap-1 items-center">
+                            <Select
+                                value={row.col}
+                                onValueChange={(v) => {
+                                    const next = [...filterRows]
+                                    next[i] = { ...next[i], col: v }
+                                    setFilterRows(next)
+                                }}
+                            >
+                                <SelectTrigger className="!h-7 px-2 text-[11px] flex-1 min-w-0">
+                                    <SelectValue placeholder="col" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {isLoading ? (
+                                        <div className="px-2 py-1 text-xs flex items-center gap-1">
+                                            <Loader2 className="h-3 w-3 animate-spin" /> Loading…
+                                        </div>
+                                    ) : (
+                                        columns.map((c) => (
+                                            <SelectItem key={c.column_name} value={c.column_name}>
+                                                {c.column_name}
+                                            </SelectItem>
+                                        ))
+                                    )}
+                                </SelectContent>
+                            </Select>
+                            <Select
+                                value={row.op}
+                                onValueChange={(v) => {
+                                    const next = [...filterRows]
+                                    next[i] = { ...next[i], op: v }
+                                    setFilterRows(next)
+                                }}
+                            >
+                                <SelectTrigger className="!h-7 px-2 text-[11px] w-20 shrink-0">
+                                    <SelectValue placeholder="op" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {FILTER_OPERATORS.map((op) => (
+                                        <SelectItem key={op} value={op}>{op}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                            {row.op !== 'IS NULL' && row.op !== 'IS NOT NULL' ? (
+                                <Input
+                                    className="!h-7 !py-0 px-2 text-[11px] flex-1 min-w-0"
+                                    value={row.val}
+                                    onChange={(e) => {
+                                        const next = [...filterRows]
+                                        next[i] = { ...next[i], val: e.target.value }
+                                        setFilterRows(next)
+                                    }}
+                                    placeholder="value"
+                                />
+                            ) : (
+                                <div className="flex-1" />
+                            )}
+                            <Button
+                                variant="ghost" size="icon"
+                                className="!h-7 !w-7 shrink-0 hover:text-destructive"
+                                onClick={() => setFilterRows(filterRows.filter((_, j) => j !== i))}
+                            >
+                                <X className="h-3 w-3" />
+                            </Button>
+                        </div>
+                    ))}
+                    <Button
+                        variant="outline" size="sm"
+                        className="h-6 text-[11px] w-full gap-1"
+                        onClick={() => setFilterRows([...filterRows, { col: '', op: '=', val: '' }])}
+                    >
+                        <Plus className="h-3 w-3" /> Add filter
+                    </Button>
+                </div>
+            </Field>
+
+            <Field label="Select columns">
+                <MultiColumnSelect
+                    columns={columns}
+                    selected={selectColumns}
+                    onChange={(cols) => update({ select_columns: cols })}
+                    isLoading={isLoading}
+                />
+                {selectColumns.length > 0 && (
+                    <p className="text-[10px] text-muted-foreground mt-1">
+                        {selectColumns.length} column{selectColumns.length !== 1 ? 's' : ''} selected
+                    </p>
+                )}
+            </Field>
+        </>
+    )
+}
+
+// ─── Aggregate ─────────────────────────────────────────────────────────────────
+
+const AGG_FUNCTIONS = ['COUNT', 'COUNT_DISTINCT', 'SUM', 'AVG', 'MIN', 'MAX', 'FIRST', 'LAST']
+
+interface AggRow { column: string; function: string; alias: string }
+
+function AggregateConfig({ data, update, nodeId, flowTaskId }: ConfigFormProps) {
+    const { columns, isLoading } = useNodeSchema(flowTaskId, nodeId)
+    const groupBy: string[] = (data.group_by as string[]) || []
+    const aggregations: AggRow[] = (data.aggregations as AggRow[]) || []
+
+    return (
+        <>
+            <Field label="Group by columns">
+                <MultiColumnSelect
+                    columns={columns}
+                    selected={groupBy}
+                    onChange={(cols) => update({ group_by: cols })}
+                    isLoading={isLoading}
+                />
+            </Field>
+
+            <Field label="Aggregations">
+                <div className="space-y-1.5">
+                    {aggregations.map((row, i) => (
+                        <div key={i} className="flex gap-1 items-center">
+                            <ColumnSelect
+                                columns={columns}
+                                value={row.column}
+                                onChange={(v) => {
+                                    const next = [...aggregations]
+                                    next[i] = { ...next[i], column: v }
+                                    update({ aggregations: next })
+                                }}
+                                isLoading={isLoading}
+                                placeholder="column"
+                            />
+                            <Select
+                                value={row.function}
+                                onValueChange={(v) => {
+                                    const next = [...aggregations]
+                                    next[i] = { ...next[i], function: v }
+                                    update({ aggregations: next })
+                                }}
+                            >
+                                <SelectTrigger className="h-7 text-xs w-24 shrink-0">
+                                    <SelectValue placeholder="func" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {AGG_FUNCTIONS.map((f) => (
+                                        <SelectItem key={f} value={f}>{f}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                            <Input
+                                className="h-7 text-xs w-20 shrink-0"
+                                value={row.alias}
+                                onChange={(e) => {
+                                    const next = [...aggregations]
+                                    next[i] = { ...next[i], alias: e.target.value }
+                                    update({ aggregations: next })
+                                }}
+                                placeholder="alias"
+                            />
+                            <Button
+                                variant="ghost" size="icon"
+                                className="h-7 w-7 shrink-0 hover:text-destructive"
+                                onClick={() =>
+                                    update({ aggregations: aggregations.filter((_, j) => j !== i) })
+                                }
+                            >
+                                <X className="h-3 w-3" />
+                            </Button>
+                        </div>
+                    ))}
+                    <Button
+                        variant="outline" size="sm"
+                        className="h-6 text-[11px] w-full gap-1"
+                        onClick={() =>
+                            update({
+                                aggregations: [...aggregations, { column: '', function: 'COUNT', alias: '' }],
+                            })
+                        }
+                    >
+                        <Plus className="h-3 w-3" /> Add aggregation
+                    </Button>
+                </div>
+            </Field>
+        </>
+    )
+}
+
+// ─── Join ──────────────────────────────────────────────────────────────────────
+
+function JoinConfig({ data, update, nodeId: _nodeId, flowTaskId: _flowTaskId }: ConfigFormProps) {
+    return (
+        <>
+            <Field label="Join Type">
+                <Select
+                    value={(data.join_type as string) || 'INNER'}
+                    onValueChange={(v) => update({ join_type: v })}
+                >
+                    <SelectTrigger className="h-7 text-xs">
+                        <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                        {['INNER', 'LEFT', 'RIGHT', 'FULL OUTER', 'CROSS'].map((t) => (
+                            <SelectItem key={t} value={t}>
+                                {t} JOIN
+                            </SelectItem>
+                        ))}
+                    </SelectContent>
+                </Select>
+            </Field>
+            <p className="text-[10px] text-muted-foreground">
+                Connect two nodes to this Join node via edges. The first connected input
+                is the left side; the second is the right side.
+            </p>
+        </>
+    )
+}
+
+// ─── Union ─────────────────────────────────────────────────────────────────────
+
+function UnionConfig({ data, update, nodeId: _nodeId, flowTaskId: _flowTaskId }: ConfigFormProps) {
+    return (
+        <SwitchField
+            label="UNION ALL (keep duplicates)"
+            checked={(data.union_all as boolean) ?? true}
+            onChange={(v) => update({ union_all: v })}
+        />
+    )
+}
+
+// ─── Pivot ─────────────────────────────────────────────────────────────────────
+
+function PivotConfig({ data, update, nodeId, flowTaskId }: ConfigFormProps) {
+    const { columns, isLoading } = useNodeSchema(flowTaskId, nodeId)
+    const pivotType = (data.pivot_type as string) || 'PIVOT'
+
+    return (
+        <>
+            <Field label="Pivot Type">
+                <Select
+                    value={pivotType}
+                    onValueChange={(v) => update({ pivot_type: v as 'PIVOT' | 'UNPIVOT' })}
+                >
+                    <SelectTrigger className="h-7 text-xs">
+                        <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="PIVOT">PIVOT (rows → columns)</SelectItem>
+                        <SelectItem value="UNPIVOT">UNPIVOT (columns → rows)</SelectItem>
+                    </SelectContent>
+                </Select>
+            </Field>
+
+            <Field label="Pivot column">
+                <ColumnSelect
+                    columns={columns}
+                    value={(data.pivot_column as string) || ''}
+                    onChange={(v) => update({ pivot_column: v })}
+                    isLoading={isLoading}
+                />
+            </Field>
+
+            <Field label="Value column">
+                <ColumnSelect
+                    columns={columns}
+                    value={(data.value_column as string) || ''}
+                    onChange={(v) => update({ value_column: v })}
+                    isLoading={isLoading}
+                />
+            </Field>
+
+            <Field label="Pivot values (comma-separated)">
+                <Input
+                    className="h-7 text-xs"
+                    value={((data.pivot_values as string[]) || []).join(', ')}
+                    onChange={(e) =>
+                        update({
+                            pivot_values: e.target.value
+                                ? e.target.value.split(',').map((s) => s.trim())
+                                : [],
+                        })
+                    }
+                    placeholder="val1, val2, val3"
+                />
+            </Field>
+        </>
+    )
+}
+
+// ─── Output ────────────────────────────────────────────────────────────────────
+
+function OutputConfig({ data, update }: ConfigFormProps) {
+    const { data: destsData, isLoading: destsLoading } = useQuery({
+        queryKey: ['destinations'],
+        queryFn: () => destinationsRepo.getAll(),
+        staleTime: 30_000,
+    })
+
+    const upsertKeys: string[] = (data.upsert_keys as string[]) || []
+    const upsertKeysText = upsertKeys.join(', ')
+
+    return (
+        <>
+            <Field label="Destination">
+                {destsLoading ? (
+                    <div className="flex items-center gap-1.5 h-7 text-xs text-muted-foreground">
+                        <Loader2 className="h-3 w-3 animate-spin" /> Loading…
+                    </div>
+                ) : (
+                    <Select
+                        value={data.destination_id != null ? String(data.destination_id) : ''}
+                        onValueChange={(v) => update({ destination_id: parseInt(v) })}
+                    >
+                        <SelectTrigger className="h-7 text-xs">
+                            <SelectValue placeholder="Select destination…" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {(destsData?.destinations ?? []).map((d) => (
+                                <SelectItem key={d.id} value={String(d.id)}>
+                                    {d.name}
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                )}
+            </Field>
+
+            <Field label="Schema">
+                <Input
+                    className="h-7 text-xs"
+                    value={(data.schema_name as string) || 'public'}
+                    onChange={(e) => update({ schema_name: e.target.value })}
+                />
+            </Field>
+
+            <Field label="Target Table">
+                <Input
+                    className="h-7 text-xs"
+                    value={(data.table_name as string) || ''}
+                    onChange={(e) => update({ table_name: e.target.value })}
+                    placeholder="output_table"
+                />
+            </Field>
+
+            <Field label="Write Mode">
+                <Select
+                    value={(data.write_mode as string) || 'APPEND'}
+                    onValueChange={(v) => update({ write_mode: v as WriteMode })}
+                >
+                    <SelectTrigger className="h-7 text-xs">
+                        <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="APPEND">APPEND</SelectItem>
+                        <SelectItem value="UPSERT">UPSERT (MERGE)</SelectItem>
+                        <SelectItem value="REPLACE">REPLACE (truncate + insert)</SelectItem>
+                    </SelectContent>
+                </Select>
+            </Field>
+
+            <Field label="Upsert keys">
+                <Input
+                    className="h-7 text-xs"
+                    value={upsertKeysText}
+                    onChange={(e) => {
+                        const cols = e.target.value
+                            .split(',')
+                            .map((s) => s.trim())
+                            .filter(Boolean)
+                        update({ upsert_keys: cols })
+                    }}
+                    placeholder="e.g. id, user_id"
+                />
+                <p className="text-[10px] text-muted-foreground">
+                    Comma-separated column names
+                </p>
+            </Field>
+        </>
+    )
+}
+
+// ─── Shared helpers ────────────────────────────────────────────────────────────
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+    return (
+        <div className="space-y-1">
+            <Label className="text-[10px] text-muted-foreground uppercase tracking-wider">
+                {label}
+            </Label>
+            {children}
+        </div>
+    )
+}
+
+function SwitchField({
+    label,
+    checked,
+    onChange,
+}: {
+    label: string
+    checked: boolean
+    onChange: (v: boolean) => void
+}) {
+    return (
+        <div className="flex items-center justify-between">
+            <Label className="text-xs">{label}</Label>
+            <Switch checked={checked} onCheckedChange={onChange} />
+        </div>
+    )
+}

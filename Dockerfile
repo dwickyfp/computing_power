@@ -99,11 +99,12 @@ FROM python:3.12-slim-bookworm AS worker-deps
 
 WORKDIR /app
 
-# Install system dependencies for worker (Celery + DuckDB)
+# Install system dependencies for worker (Celery + DuckDB + ADBC Snowflake driver)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     libpq-dev \
     curl \
+    unzip \
     && rm -rf /var/lib/apt/lists/*
 
 # Install uv
@@ -114,6 +115,23 @@ COPY worker/pyproject.toml ./
 
 # Install dependencies (fresh resolution, no lock file)
 RUN uv sync --no-install-project
+
+# Install ADBC Snowflake driver into DuckDB's expected extensions directory.
+# DuckDB looks for the driver at: ~/.duckdb/extensions/<version>/<platform>/libadbc_driver_snowflake.so
+# ref: https://github.com/iqea-ai/duckdb-snowflake#adbc-driver-setup
+RUN DUCKDB_VERSION=$(.venv/bin/python -c "import duckdb; print('v' + duckdb.__version__)") && \
+    ARCH=$(uname -m) && \
+    case "$ARCH" in \
+        x86_64)  PLATFORM="linux_amd64" ;; \
+        aarch64) PLATFORM="linux_arm64" ;; \
+        *)       PLATFORM="linux_amd64" ;; \
+    esac && \
+    DRIVER_SRC=$(.venv/bin/python -c "import adbc_driver_snowflake, os; print(os.path.join(os.path.dirname(adbc_driver_snowflake.__file__), 'libadbc_driver_snowflake.so'))") && \
+    DRIVER_DIR="/root/.duckdb/extensions/${DUCKDB_VERSION}/${PLATFORM}" && \
+    mkdir -p "$DRIVER_DIR" && \
+    cp "$DRIVER_SRC" "$DRIVER_DIR/" && \
+    chmod +x "$DRIVER_DIR/libadbc_driver_snowflake.so" && \
+    echo "Installed ADBC driver to $DRIVER_DIR"
 
 # =============================================================================
 # STAGE 4: COMPUTE-NODE (PYTHON RUNTIME)
@@ -261,14 +279,23 @@ ENV MODE=worker
 ENV PYTHONPATH=/app/worker
 ENV TZ=Asia/Jakarta
 ENV C_FORCE_ROOT=true
+# Set SNOWFLAKE_ADBC_DRIVER_PATH as an explicit fallback path for the driver
+# DuckDB also auto-finds it from ~/.duckdb/extensions/<version>/<platform>/ (installed at build time in worker-deps)
+ENV SNOWFLAKE_ADBC_DRIVER_PATH="/app/.venv/lib/python3.12/site-packages/adbc_driver_snowflake/libadbc_driver_snowflake.so"
+
+# Copy DuckDB extensions (including installed ADBC driver) from worker-deps
+COPY --from=worker-deps /root/.duckdb /root/.duckdb
 
 # Create directories with proper permissions
 RUN useradd -m -u 1001 celeryworker && \
-    chown -R celeryworker:celeryworker /app
+    chown -R celeryworker:celeryworker /app && \
+    cp -r /root/.duckdb /home/celeryworker/.duckdb && \
+    chown -R celeryworker:celeryworker /home/celeryworker/.duckdb
 
 USER celeryworker
 
 # Start both health server and Celery worker via start.sh
+# start.sh also dynamically appends ADBC lib path to LD_LIBRARY_PATH as a safety net
 CMD ["./worker/start.sh"]
 
 # Health check

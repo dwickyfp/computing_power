@@ -2,7 +2,7 @@ import React, { useState } from 'react'
 import useDialogState from '@/hooks/use-dialog-state'
 import { type Destination } from '../data/schema'
 
-type DestinationsDialogType = 'create' | 'update' | 'delete'
+type DestinationsDialogType = 'create' | 'update' | 'delete' | 'table-list'
 
 interface DestinationsContextType {
     open: DestinationsDialogType | null

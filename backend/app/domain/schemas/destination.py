@@ -148,6 +148,14 @@ class DestinationResponse(DestinationBase, TimestampSchema):
         default=False,
         description="Indicates if destination is used in any active pipeline"
     )
+    total_tables: int = Field(
+        default=0,
+        description="Total number of tables cached from the last table list check",
+    )
+    last_table_check_at: Optional[str] = Field(
+        default=None,
+        description="ISO timestamp of the last table list check",
+    )
 
     @validator("config", pre=True, always=True)
     def mask_sensitive_config(cls, v: dict[str, Any]) -> dict[str, Any]:
@@ -175,6 +183,15 @@ class DestinationResponse(DestinationBase, TimestampSchema):
                  masked.pop(key, None)
                  
         return masked
+
+    @validator("last_table_check_at", pre=True, always=True)
+    def serialize_last_table_check_at(cls, v: Any) -> Optional[str]:
+        """Serialize datetime to ISO string."""
+        if v is None:
+            return None
+        if hasattr(v, "isoformat"):
+            return v.isoformat()
+        return str(v)
 
     class Config:
         orm_mode = True

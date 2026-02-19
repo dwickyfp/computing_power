@@ -4,11 +4,13 @@ Destination model - Snowflake data warehouse configurations.
 Represents Snowflake connection configurations for ETL destinations.
 """
 
-from typing import TYPE_CHECKING
+from datetime import datetime
+from typing import TYPE_CHECKING, List, Optional
 
 from sqlalchemy import Integer, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy import DateTime
 
 from app.domain.models.base import Base, TimestampMixin
 
@@ -61,6 +63,28 @@ class Destination(Base, TimestampMixin):
         nullable=False,
         default=dict,
         comment="Destination configuration (JSON)",
+    )
+
+    # Table list tracking
+    list_tables: Mapped[list] = mapped_column(
+        JSONB,
+        nullable=False,
+        default=list,
+        comment="Cached list of tables in this destination",
+    )
+
+    total_tables: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+        comment="Total number of tables in this destination",
+    )
+
+    last_table_check_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        default=None,
+        comment="Timestamp of last table list check",
     )
 
     # Relationships

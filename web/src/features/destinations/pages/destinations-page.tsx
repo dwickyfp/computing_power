@@ -7,13 +7,30 @@ import { DestinationsPrimaryButtons } from '../components/destinations-primary-b
 import { DestinationsProvider } from '../components/destinations-provider'
 import { DestinationsTable } from '../components/destinations-table'
 import { destinationsRepo } from '@/repo/destinations'
-import { useQuery } from '@tanstack/react-query'
-import { useEffect } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useEffect, useState } from 'react'
 
 export function DestinationsPage() {
+    const queryClient = useQueryClient()
+    const [lastRefreshedAt, setLastRefreshedAt] = useState<Date | null>(null)
+
     const { data } = useQuery({
         queryKey: ['destinations'],
         queryFn: destinationsRepo.getAll,
+        refetchInterval: 10_000,
+    })
+
+    const refreshAllMutation = useMutation({
+        mutationFn: async () => {
+            const destinations = data?.destinations ?? []
+            await Promise.allSettled(
+                destinations.map((d) => destinationsRepo.refreshTableList(d.id))
+            )
+        },
+        onSuccess: async () => {
+            setLastRefreshedAt(new Date())
+            await queryClient.refetchQueries({ queryKey: ['destinations'] })
+        },
     })
 
     useEffect(() => {
@@ -23,7 +40,10 @@ export function DestinationsPage() {
         }
     }, [])
 
-    const destinations = data?.destinations || []
+    const destinations = (data?.destinations ?? []).map((d) => ({
+        ...d,
+        total_tables: d.total_tables ?? 0,
+    }))
 
     return (
         <DestinationsProvider>
@@ -43,7 +63,11 @@ export function DestinationsPage() {
                             Manage your Snowflake data destinations.
                         </p>
                     </div>
-                    <DestinationsPrimaryButtons />
+                    <DestinationsPrimaryButtons
+                        onRefreshAll={() => refreshAllMutation.mutate()}
+                        isRefreshing={refreshAllMutation.isPending}
+                        lastRefreshedAt={lastRefreshedAt}
+                    />
                 </div>
                 <DestinationsTable data={destinations} />
             </Main>

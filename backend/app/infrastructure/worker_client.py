@@ -162,6 +162,104 @@ class WorkerClient:
             logger.error(f"Failed to submit preview task: {e}")
             raise ConnectionError(f"Worker unavailable: {e}") from e
 
+    def submit_flow_task_execute(
+        self,
+        flow_task_id: int,
+        run_history_id: int,
+        graph_json: dict,
+    ) -> str:
+        """
+        Submit a flow task execution to the Celery worker.
+
+        Args:
+            flow_task_id: Flow task ID
+            run_history_id: Run history record ID (pre-created)
+            graph_json: Dict with {nodes, edges} for the DuckDB compiler
+
+        Returns:
+            Celery task ID string
+        """
+        try:
+            result = self._send_task_with_retry(
+                "worker.flow_task.execute",
+                args=[flow_task_id, run_history_id, graph_json],
+                queue="default",
+            )
+            logger.info(
+                f"FlowTask execute task submitted: {result.id}",
+                extra={"task_id": result.id, "flow_task_id": flow_task_id},
+            )
+            return result.id
+        except Exception as e:
+            logger.error(f"Failed to submit flow task execute: {e}")
+            raise ConnectionError(f"Worker unavailable: {e}") from e
+
+    def submit_flow_task_preview(
+        self,
+        flow_task_id: int,
+        node_id: str,
+        graph_snapshot: dict,
+        limit: int = 500,
+    ) -> str:
+        """
+        Submit a node preview task to the Celery worker.
+
+        Args:
+            flow_task_id: Flow task ID (for logging context)
+            node_id: Target node ID to preview up to
+            graph_snapshot: Current unsaved graph {nodes, edges}
+            limit: Row limit for the preview query
+
+        Returns:
+            Celery task ID string
+        """
+        try:
+            result = self._send_task_with_retry(
+                "worker.flow_task.preview",
+                args=[flow_task_id, node_id, graph_snapshot, limit],
+                queue="preview",
+            )
+            logger.info(
+                f"FlowTask preview task submitted: {result.id}",
+                extra={
+                    "task_id": result.id,
+                    "flow_task_id": flow_task_id,
+                    "node_id": node_id,
+                },
+            )
+            return result.id
+        except Exception as e:
+            logger.error(f"Failed to submit flow task preview: {e}")
+            raise ConnectionError(f"Worker unavailable: {e}") from e
+
+    def submit_destination_table_list_task(
+        self,
+        destination_id: int,
+    ) -> str:
+        """
+        Submit a task to fetch and persist the table list for a destination.
+
+        Args:
+            destination_id: Destination database ID.
+
+        Returns:
+            Celery task ID string.
+        """
+        try:
+            result = self._send_task_with_retry(
+                "worker.destination_table_list.fetch",
+                args=[destination_id],
+                queue="default",
+            )
+            logger.info(
+                f"Destination table list task submitted: {result.id}",
+                extra={"task_id": result.id, "destination_id": destination_id},
+            )
+            return result.id
+        except Exception as e:
+            logger.error(f"Failed to submit destination table list task: {e}")
+            raise ConnectionError(f"Worker unavailable: {e}") from e
+
     def submit_lineage_task(
         self,
         table_sync_id: int,
@@ -336,3 +434,29 @@ class WorkerClient:
 def get_worker_client() -> WorkerClient:
     """Get the singleton WorkerClient instance."""
     return WorkerClient.get_instance()
+
+
+def get_node_schema_from_worker(
+    node_id: str,
+    nodes: list,
+    edges: list,
+    worker_base_url: str = "http://0.0.0.0:8002",
+) -> list[dict]:
+    """
+    Call the worker's synchronous POST /schema endpoint to resolve the output
+    column schema for a node by executing LIMIT 0 through the DuckDB CTE chain.
+
+    Returns a list of {"column_name": str, "data_type": str} dicts,
+    or an empty list if the worker is unreachable or the graph is incomplete.
+    """
+    import httpx
+
+    payload = {"node_id": node_id, "nodes": nodes, "edges": edges}
+    try:
+        with httpx.Client(timeout=30.0) as client:
+            resp = client.post(f"{worker_base_url}/schema", json=payload)
+            resp.raise_for_status()
+            return resp.json().get("columns", [])
+    except Exception as e:
+        logger.warning(f"Worker /schema call failed (node={node_id}): {e}")
+        return []

@@ -4,7 +4,7 @@ Destination service containing business logic.
 Implements business rules and orchestrates repository operations for destinations.
 """
 
-from typing import List
+from typing import List, Optional
 
 from sqlalchemy.orm import Session
 
@@ -641,3 +641,83 @@ class DestinationService:
             logger.error(f"Failed to fetch schema for destination {destination.name}: {e}")
             raise ValueError(f"Failed to fetch schema: {str(e)}")
 
+    # ------------------------------------------------------------------
+    # Table list (worker-based, async)
+    # ------------------------------------------------------------------
+
+    def dispatch_table_list_task(self, destination_id: int) -> Optional[str]:
+        """
+        Submit a Celery task to the worker to refresh the table list for a destination.
+
+        The task will update list_tables, total_tables, and last_table_check_at
+        in the destinations row when it completes.
+
+        Args:
+            destination_id: Destination identifier.
+
+        Returns:
+            Celery task ID if worker is available, or None if worker is disabled.
+        """
+        from app.core.config import get_settings
+        settings = get_settings()
+
+        if not getattr(settings, "worker_enabled", False):
+            logger.warning(
+                "Worker disabled – skipping destination table list dispatch",
+                extra={"destination_id": destination_id},
+            )
+            return None
+
+        from app.infrastructure.worker_client import WorkerClient
+        try:
+            task_id = WorkerClient.get_instance().submit_destination_table_list_task(
+                destination_id=destination_id
+            )
+            logger.info(
+                "Destination table list task dispatched",
+                extra={"destination_id": destination_id, "task_id": task_id},
+            )
+            return task_id
+        except Exception as e:
+            logger.error(
+                f"Failed to dispatch destination table list task for {destination_id}: {e}"
+            )
+            return None
+
+    def get_table_list(self, destination_id: int) -> dict:
+        """
+        Return the persisted table list for a destination.
+
+        Args:
+            destination_id: Destination identifier.
+
+        Returns:
+            Dict with tables (list[str]), total_tables (int), last_table_check_at (str|None).
+        """
+        destination = self.get_destination(destination_id)
+        tables: list = destination.list_tables if destination.list_tables else []
+        last_check = (
+            destination.last_table_check_at.isoformat()
+            if destination.last_table_check_at
+            else None
+        )
+        return {
+            "tables": tables,
+            "total_tables": len(tables),
+            "last_table_check_at": last_check,
+        }
+
+    def refresh_table_list_all(self) -> None:
+        """
+        Dispatch table list tasks for all destinations.
+
+        Called by the APScheduler job every 30 minutes.
+        """
+        destinations = self.list_destinations(limit=1000)
+        for dest in destinations:
+            try:
+                self.dispatch_table_list_task(dest.id)
+            except Exception as e:
+                logger.error(
+                    f"Failed to dispatch table list task for destination {dest.id}: {e}"
+                )
