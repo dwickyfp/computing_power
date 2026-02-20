@@ -32,6 +32,10 @@ interface FlowTaskStore {
     // Preview state
     preview: PreviewState
 
+    // Drawer state
+    activeDrawerTab: 'config' | 'table' | 'chart' | 'profiling'
+    setActiveDrawerTab: (tab: 'config' | 'table' | 'chart' | 'profiling') => void
+
     // Actions — graph
     setNodes: (nodes: FlowNode[]) => void
     setEdges: (edges: FlowEdge[]) => void
@@ -79,6 +83,9 @@ export const useFlowTaskStore = create<FlowTaskStore>((set) => ({
         error: null,
     },
 
+    activeDrawerTab: 'config',
+    setActiveDrawerTab: (tab) => set({ activeDrawerTab: tab }),
+
     // ─── Graph actions ──────────────────────────────────────────────────────────
 
     setNodes: (nodes) => set({ nodes: nodes ?? [] }),
@@ -124,7 +131,10 @@ export const useFlowTaskStore = create<FlowTaskStore>((set) => ({
             isDirty: true,
         })),
 
-    selectNode: (nodeId) => set({ selectedNodeId: nodeId }),
+    selectNode: (nodeId) => set((state) => ({
+        selectedNodeId: nodeId,
+        activeDrawerTab: (state.selectedNodeId != null || state.preview.isOpen) ? state.activeDrawerTab : 'config'
+    })),
 
     removeNode: (nodeId) =>
         set((state) => ({
@@ -162,6 +172,7 @@ export const useFlowTaskStore = create<FlowTaskStore>((set) => ({
                 result: null,
                 error: null,
             },
+            activeDrawerTab: 'table',
         })
         return previewSessionId
     },

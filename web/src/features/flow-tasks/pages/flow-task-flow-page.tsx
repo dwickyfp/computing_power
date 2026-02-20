@@ -58,8 +58,7 @@ import { useTheme } from '@/context/theme-provider'
 import { Search } from '@/components/search'
 import { ThemeSwitch } from '@/components/theme-switch'
 import { NodePalette } from '../components/NodePalette'
-import { NodeConfigPanel } from '../components/NodeConfigPanel'
-import { PreviewDrawer } from '../components/PreviewDrawer'
+import { NodeEditorDrawer } from '../components/NodeEditorDrawer'
 import { NodeContextMenu } from '../components/NodeContextMenu'
 import { DeletableEdge } from '../components/edges/DeletableEdge'
 import { VersionHistoryDialog } from '../components/VersionHistoryDialog'
@@ -144,7 +143,6 @@ function FlowCanvas({ flowTaskId }: { flowTaskId: number }) {
     const {
         nodes,
         edges,
-        selectedNodeId,
         isDirty,
         setNodes,
         setEdges,
@@ -291,8 +289,8 @@ function FlowCanvas({ flowTaskId }: { flowTaskId: number }) {
         return () => {
             if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current)
         }
-    // saveMutation is stable (useMutation), safe to omit from deps
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+        // saveMutation is stable (useMutation), safe to omit from deps
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [autoSave, isDirty, nodes, edges])
 
     // ─── Run ───────────────────────────────────────────────────────────────────
@@ -606,8 +604,8 @@ function FlowCanvas({ flowTaskId }: { flowTaskId: number }) {
                         </ReactFlow>
                     )}
 
-                    {/* Preview Drawer (absolute bottom) */}
-                    <PreviewDrawer />
+                    {/* Bottom Drawer for config and preview */}
+                    <NodeEditorDrawer />
 
                     {/* Node right-click context menu */}
                     {ctxMenu && (
@@ -626,10 +624,6 @@ function FlowCanvas({ flowTaskId }: { flowTaskId: number }) {
                             onClose={() => setCtxMenu(null)}
                         />
                     )}
-
-                    {/* Right Config Panel — absolutely positioned so it overlays the canvas
-                        without affecting the canvas flex width (no layout reflow on resize) */}
-                    {selectedNodeId && <NodeConfigPanel />}
                 </div>
             </div>
 
