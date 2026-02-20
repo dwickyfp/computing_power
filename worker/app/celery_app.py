@@ -94,7 +94,7 @@ def _preinstall_duckdb_extensions(**kwargs):
         con = duckdb.connect(":memory:")
         # Limit memory during extension install to avoid transient spike
         con.execute("SET memory_limit='256MB';")
-        for ext in ("postgres", "httpfs"):
+        for ext in ("postgres", "httpfs", "spatial"):
             try:
                 con.execute(f"INSTALL {ext};")
                 _logger.info("duckdb_extension_installed", ext=ext)

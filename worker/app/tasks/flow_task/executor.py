@@ -46,7 +46,7 @@ if not os.environ.get("SNOWFLAKE_ADBC_DRIVER_PATH"):
 
 # ─── Extension management ──────────────────────────────────────────────────────
 
-_REQUIRED_EXTENSIONS = ["postgres", "httpfs"]
+_REQUIRED_EXTENSIONS = ["postgres", "httpfs", "spatial"]
 _COMMUNITY_EXTENSIONS = ["snowflake"]
 
 
