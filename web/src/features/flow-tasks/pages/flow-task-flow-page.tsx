@@ -268,10 +268,15 @@ function FlowCanvas({ flowTaskId }: { flowTaskId: number }) {
             // Invalidating the graph query would trigger a refetch that calls setNodes([]),
             // clearing the canvas with the freshly saved data.
             setTimeout(
-                () => queryClient.invalidateQueries({
-                    queryKey: ['flow-tasks', flowTaskId],
-                    exact: true,
-                }),
+                () => {
+                    queryClient.invalidateQueries({
+                        queryKey: ['flow-tasks', flowTaskId],
+                        exact: true,
+                    })
+                    queryClient.invalidateQueries({
+                        queryKey: ['flow-task-versions', flowTaskId],
+                    })
+                },
                 300
             )
         },

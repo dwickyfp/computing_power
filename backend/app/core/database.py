@@ -6,6 +6,7 @@ Implements robust connection pool with safeguards against pool exhaustion.
 
 from contextlib import contextmanager
 from typing import Generator
+import logging as stdlib_logging
 import threading
 
 from fastapi import HTTPException
@@ -80,6 +81,14 @@ class DatabaseManager:
                     db_url,
                     **settings.get_sqlalchemy_engine_config(),
                     poolclass=QueuePool,  # Use QueuePool for production
+                )
+
+                # Ensure pool logger stays at WARNING after engine creation.
+                # create_engine() with echo_pool=True would override our
+                # setup_logging() configuration, so we re-apply the level here
+                # as a safety net.
+                stdlib_logging.getLogger("sqlalchemy.pool").setLevel(
+                    stdlib_logging.WARNING
                 )
 
                 # Create session factory

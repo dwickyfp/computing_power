@@ -154,7 +154,7 @@ export interface FlowTaskGraphVersion {
     id: number
     flow_task_id: number
     version: number
-    summary: string | null
+    change_summary: string | null
     nodes_json: FlowNode[]
     edges_json: FlowEdge[]
     created_at: string
@@ -371,20 +371,20 @@ export const flowTasksRepo = {
 
     listVersions(id: number, page = 1, pageSize = 20) {
         return api.get<FlowTaskGraphVersionListResponse>(
-            `/flow-tasks/${id}/graph/versions`,
+            `/flow-tasks/${id}/versions`,
             { params: { page, page_size: pageSize } }
         )
     },
 
     getVersion(id: number, version: number) {
         return api.get<FlowTaskGraphVersion>(
-            `/flow-tasks/${id}/graph/versions/${version}`
+            `/flow-tasks/${id}/versions/${version}`
         )
     },
 
     rollbackToVersion(id: number, version: number) {
         return api.post<FlowTaskGraphResponse>(
-            `/flow-tasks/${id}/graph/rollback/${version}`
+            `/flow-tasks/${id}/rollback/${version}`
         )
     },
 

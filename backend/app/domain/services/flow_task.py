@@ -42,6 +42,92 @@ from app.domain.schemas.notification_log import NotificationLogCreate
 logger = get_logger(__name__)
 
 
+# ─── Graph diff utilities ─────────────────────────────────────────────────────
+
+
+def _strip_position(node: dict) -> dict:
+    """Return a copy of *node* without the ``position`` key."""
+    return {k: v for k, v in node.items() if k != "position"}
+
+
+def _compute_graph_diff(
+    old_nodes: list,
+    old_edges: list,
+    new_nodes: list,
+    new_edges: list,
+) -> Optional[str]:
+    """Compare two graph snapshots ignoring node positions.
+
+    Returns:
+        ``None``  – no meaningful change (position-only or identical).
+        A human-readable summary string when structural/data changes exist.
+    """
+    # Normalize nodes (strip positions) and sort by id for stable comparison
+    old_norm = sorted(
+        [_strip_position(n) for n in old_nodes], key=lambda n: n.get("id", "")
+    )
+    new_norm = sorted(
+        [_strip_position(n) for n in new_nodes], key=lambda n: n.get("id", "")
+    )
+
+    # Normalize edges and sort by id
+    old_edges_sorted = sorted(old_edges, key=lambda e: e.get("id", ""))
+    new_edges_sorted = sorted(new_edges, key=lambda e: e.get("id", ""))
+
+    if old_norm == new_norm and old_edges_sorted == new_edges_sorted:
+        return None  # identical (or position-only change)
+
+    # Build change summary ---------------------------------------------------
+    changes: list[str] = []
+
+    old_ids = {n["id"] for n in old_nodes}
+    new_ids = {n["id"] for n in new_nodes}
+
+    # Added nodes
+    for nid in sorted(new_ids - old_ids):
+        node = next(n for n in new_nodes if n["id"] == nid)
+        label = node.get("data", {}).get("label") or node.get("label", nid)
+        changes.append(f"Added {node.get('type', 'node')} '{label}'")
+
+    # Removed nodes
+    for nid in sorted(old_ids - new_ids):
+        node = next(n for n in old_nodes if n["id"] == nid)
+        label = node.get("data", {}).get("label") or node.get("label", nid)
+        changes.append(f"Removed {node.get('type', 'node')} '{label}'")
+
+    # Modified nodes (data/type changed, not position)
+    old_map = {n["id"]: _strip_position(n) for n in old_nodes}
+    new_map = {n["id"]: _strip_position(n) for n in new_nodes}
+    for nid in sorted(old_ids & new_ids):
+        if old_map[nid] != new_map[nid]:
+            node = next(n for n in new_nodes if n["id"] == nid)
+            label = node.get("data", {}).get("label") or node.get("label", nid)
+            changes.append(f"Updated {node.get('type', 'node')} '{label}'")
+
+    # Edge changes
+    old_edge_ids = {e["id"] for e in old_edges}
+    new_edge_ids = {e["id"] for e in new_edges}
+    added_edges = len(new_edge_ids - old_edge_ids)
+    removed_edges = len(old_edge_ids - new_edge_ids)
+    if added_edges:
+        changes.append(f"Added {added_edges} connection(s)")
+    if removed_edges:
+        changes.append(f"Removed {removed_edges} connection(s)")
+
+    # Edge data modifications (same id but different content)
+    old_edge_map = {e["id"]: e for e in old_edges}
+    new_edge_map = {e["id"]: e for e in new_edges}
+    modified_edges = sum(
+        1
+        for eid in old_edge_ids & new_edge_ids
+        if old_edge_map[eid] != new_edge_map[eid]
+    )
+    if modified_edges:
+        changes.append(f"Modified {modified_edges} connection(s)")
+
+    return "; ".join(changes) if changes else "Graph updated"
+
+
 class FlowTaskService:
     """
     Business logic for Flow Task management.
@@ -216,19 +302,42 @@ class FlowTaskService:
             edges_json=edges_json,
         )
 
-        # D4: Auto-create version snapshot on save
+        # D4: Auto-create version snapshot only on meaningful changes
+        # Compare with the latest version; skip if only positions changed.
         change_summary = None
-        if hasattr(data, "change_summary"):
+        if hasattr(data, "change_summary") and data.change_summary:
             change_summary = data.change_summary
+
+        should_snapshot = True
         try:
-            self.version_repo.create_snapshot(
-                flow_task_id=flow_task_id,
-                nodes_json=nodes_json,
-                edges_json=edges_json,
-                change_summary=change_summary,
-            )
+            latest_ver = self.version_repo.get_latest_version_number(flow_task_id)
+            if latest_ver > 0 and change_summary is None:
+                prev = self.version_repo.get_by_version(flow_task_id, latest_ver)
+                if prev:
+                    diff_summary = _compute_graph_diff(
+                        prev.nodes_json or [],
+                        prev.edges_json or [],
+                        nodes_json,
+                        edges_json,
+                    )
+                    if diff_summary is None:
+                        # Position-only change — skip version snapshot
+                        should_snapshot = False
+                    else:
+                        change_summary = diff_summary
         except Exception as e:
-            logger.warning(f"Failed to create graph version snapshot: {e}")
+            logger.warning(f"Graph diff comparison failed, will snapshot anyway: {e}")
+
+        if should_snapshot:
+            try:
+                self.version_repo.create_snapshot(
+                    flow_task_id=flow_task_id,
+                    nodes_json=nodes_json,
+                    edges_json=edges_json,
+                    change_summary=change_summary,
+                )
+            except Exception as e:
+                logger.warning(f"Failed to create graph version snapshot: {e}")
 
         self.db.commit()
         self.db.refresh(graph)

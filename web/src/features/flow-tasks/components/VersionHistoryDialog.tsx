@@ -96,9 +96,9 @@ export function VersionHistoryDialog({
                           <Badge variant='secondary'>Latest</Badge>
                         )}
                       </div>
-                      {ver.summary && (
+                      {ver.change_summary && (
                         <p className='text-xs text-muted-foreground'>
-                          {ver.summary}
+                          {ver.change_summary}
                         </p>
                       )}
                       <p className='text-[10px] text-muted-foreground'>
