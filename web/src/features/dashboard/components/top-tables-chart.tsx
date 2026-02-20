@@ -19,7 +19,7 @@ export function TopTablesChart() {
       className="col-span-3 h-[400px]"
     >
       <div className="h-full w-full min-h-[300px]">
-        <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
+        <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}>
           <BarChart
             layout="vertical"
             data={topTables || []}

@@ -12,7 +12,7 @@ import {
     Clock,
     Activity
 } from 'lucide-react'
-import { Bar, BarChart, Cell, ResponsiveContainer, Tooltip } from 'recharts'
+import { Bar, BarChart, Cell, Tooltip } from 'recharts'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -170,39 +170,37 @@ export function ScheduleCard({ schedule }: Props) {
                     {/* Run History Sparkline */}
                     <div className='h-8 w-24 sm:w-32 hidden sm:block'>
                         {runs.length > 0 ? (
-                            <ResponsiveContainer width="100%" height="100%">
-                                <BarChart data={runs}>
-                                    <Tooltip
-                                        cursor={{ fill: 'transparent' }}
-                                        content={({ active, payload }) => {
-                                            if (active && payload && payload.length) {
-                                                const data = payload[0].payload;
-                                                return (
-                                                    <div className="rounded-md border bg-popover px-2 py-1 text-xs shadow-sm">
-                                                        <div className={cn(
-                                                            "font-bold",
-                                                            data.status === 'SUCCESS' ? 'text-emerald-500' :
-                                                                data.status === 'FAILED' ? 'text-red-500' : 'text-blue-500'
-                                                        )}>
-                                                            {data.status}
-                                                        </div>
-                                                        <div className="text-muted-foreground">
-                                                            {formatDistanceToNow(new Date(data.triggered_at), { addSuffix: true })}
-                                                        </div>
-                                                        <div>{data.duration_ms ? `${data.duration_ms}ms` : ''}</div>
+                            <BarChart data={runs} width={128} height={32}>
+                                <Tooltip
+                                    cursor={{ fill: 'transparent' }}
+                                    content={({ active, payload }) => {
+                                        if (active && payload && payload.length) {
+                                            const data = payload[0].payload;
+                                            return (
+                                                <div className="rounded-md border bg-popover px-2 py-1 text-xs shadow-sm">
+                                                    <div className={cn(
+                                                        "font-bold",
+                                                        data.status === 'SUCCESS' ? 'text-emerald-500' :
+                                                            data.status === 'FAILED' ? 'text-red-500' : 'text-blue-500'
+                                                    )}>
+                                                        {data.status}
                                                     </div>
-                                                );
-                                            }
-                                            return null;
-                                        }}
-                                    />
-                                    <Bar dataKey="duration_ms" radius={[1, 1, 0, 0]}>
-                                        {runs.map((entry, index) => (
-                                            <Cell key={`cell-${index}`} fill={getStatusColor(entry.status)} className="opacity-80 hover:opacity-100 transition-opacity" />
-                                        ))}
-                                    </Bar>
-                                </BarChart>
-                            </ResponsiveContainer>
+                                                    <div className="text-muted-foreground">
+                                                        {formatDistanceToNow(new Date(data.triggered_at), { addSuffix: true })}
+                                                    </div>
+                                                    <div>{data.duration_ms ? `${data.duration_ms}ms` : ''}</div>
+                                                </div>
+                                            );
+                                        }
+                                        return null;
+                                    }}
+                                />
+                                <Bar dataKey="duration_ms" radius={[1, 1, 0, 0]}>
+                                    {runs.map((entry, index) => (
+                                        <Cell key={`cell-${index}`} fill={getStatusColor(entry.status)} className="opacity-80 hover:opacity-100 transition-opacity" />
+                                    ))}
+                                </Bar>
+                            </BarChart>
                         ) : (
                             <div className='flex h-full items-center justify-center text-[10px] text-muted-foreground bg-muted/30 rounded-sm'>
                                 No runs
