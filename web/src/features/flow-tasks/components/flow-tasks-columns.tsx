@@ -3,7 +3,7 @@ import { DataTableColumnHeader } from '@/components/data-table'
 import { type FlowTask, type FlowTaskStatus, flowTasksRepo } from '@/repo/flow-tasks'
 import { FlowTasksRowActions } from './flow-tasks-row-actions'
 import { Link } from '@tanstack/react-router'
-import { GitBranch, Loader2, Play } from 'lucide-react'
+import { GitBranch, Loader2, Play, Square } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { formatDistanceToNow } from 'date-fns'
 import { Button } from '@/components/ui/button'
@@ -44,15 +44,43 @@ function RunButton({ flowTask }: { flowTask: FlowTask }) {
         },
     })
 
+    const cancelMutation = useMutation({
+        mutationFn: (id: number) => flowTasksRepo.cancelRun(id),
+        onSuccess: () => {
+            toast.info('Run cancelled')
+            setTimeout(() => queryClient.invalidateQueries({ queryKey: ['flow-tasks'] }), 300)
+        },
+        onError: () => toast.error('Failed to cancel run'),
+    })
+
+    const isRunning = flowTask.status === 'RUNNING' || running
+
+    if (isRunning) {
+        return (
+            <Button
+                size="sm"
+                variant="destructive"
+                className="h-7 px-2.5 gap-1.5 text-xs font-medium"
+                disabled={cancelMutation.isPending}
+                onClick={() => cancelMutation.mutate(flowTask.id)}
+            >
+                {cancelMutation.isPending
+                    ? <Loader2 className="h-3 w-3 animate-spin" />
+                    : <Square className="h-3 w-3" />}
+                Cancel
+            </Button>
+        )
+    }
+
     return (
         <Button
             size="sm"
             variant="outline"
             className="h-7 px-2.5 gap-1.5 text-xs font-medium"
-            disabled={flowTask.status === 'RUNNING' || running}
+            disabled={runMutation.isPending}
             onClick={() => runMutation.mutate(flowTask.id)}
         >
-            {(flowTask.status === 'RUNNING' || running)
+            {runMutation.isPending
                 ? <Loader2 className="h-3 w-3 animate-spin" />
                 : <Play className="h-3 w-3" />}
             Run

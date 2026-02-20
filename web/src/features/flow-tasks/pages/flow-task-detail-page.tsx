@@ -39,6 +39,7 @@ import {
 import {
     GitBranch,
     Play,
+    Square,
     Loader2,
     ChevronDown,
     ChevronRight,
@@ -315,6 +316,19 @@ export default function FlowTaskDetailPage() {
         onError: () => toast.error('Failed to trigger flow task'),
     })
 
+    const cancelMutation = useMutation({
+        mutationFn: () => flowTasksRepo.cancelRun(id),
+        onSuccess: () => {
+            setPollingTaskId(null)
+            toast.info('Run cancelled')
+            setTimeout(() => {
+                queryClient.invalidateQueries({ queryKey: ['flow-tasks', id] })
+                queryClient.invalidateQueries({ queryKey: ['flow-tasks', id, 'runs'] })
+            }, 300)
+        },
+        onError: () => toast.error('Failed to cancel run'),
+    })
+
     const ft = ftResp?.data
     const runs = runsResp?.data.items ?? []
 
@@ -390,21 +404,32 @@ export default function FlowTaskDetailPage() {
                                         Flow Editor
                                     </Link>
                                 </Button>
-                                <Button
-                                    onClick={() => runMutation.mutate()}
-                                    disabled={
-                                        runMutation.isPending ||
-                                        ft.status === 'RUNNING' ||
-                                        !!pollingTaskId
-                                    }
-                                >
-                                    {runMutation.isPending || !!pollingTaskId ? (
-                                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                                    ) : (
-                                        <Play className="h-4 w-4 mr-2" />
-                                    )}
-                                    Run Now
-                                </Button>
+                                {(ft.status === 'RUNNING' || !!pollingTaskId) ? (
+                                    <Button
+                                        variant="destructive"
+                                        onClick={() => cancelMutation.mutate()}
+                                        disabled={cancelMutation.isPending}
+                                    >
+                                        {cancelMutation.isPending ? (
+                                            <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                                        ) : (
+                                            <Square className="h-4 w-4 mr-2" />
+                                        )}
+                                        Cancel Run
+                                    </Button>
+                                ) : (
+                                    <Button
+                                        onClick={() => runMutation.mutate()}
+                                        disabled={runMutation.isPending}
+                                    >
+                                        {runMutation.isPending ? (
+                                            <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                                        ) : (
+                                            <Play className="h-4 w-4 mr-2" />
+                                        )}
+                                        Run Now
+                                    </Button>
+                                )}
                             </div>
                         </div>
                     </CardHeader>
