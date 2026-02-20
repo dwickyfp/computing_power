@@ -104,12 +104,16 @@ export function NodeEditorDrawer() {
     // Auto-trigger preview when tab is a preview tab and the node hasn't been previewed yet
     // (e.g. user selects a different node while already viewing Data Preview)
     useEffect(() => {
+        if (selectedNode?.type === 'note' && tab !== 'config') {
+            setTab('config')
+            return
+        }
         if (tab !== 'config' && selectedNode && requestPreview) {
             if (preview.nodeId !== selectedNode.id && !preview.isLoading) {
                 requestPreview(selectedNode.id, (selectedNode.data.label as string) || selectedNode.type)
             }
         }
-    }, [tab, selectedNode?.id, requestPreview, preview.nodeId, preview.isLoading])
+    }, [tab, selectedNode?.id, selectedNode?.type, requestPreview, preview.nodeId, preview.isLoading, setTab])
 
     const handleTabClick = (newTab: 'config' | 'table' | 'chart' | 'profiling') => {
         if (newTab !== 'config' && selectedNode && requestPreview) {
@@ -205,44 +209,48 @@ export function NodeEditorDrawer() {
                             <Settings2 className="h-3.5 w-3.5" />
                             Configuration
                         </button>
-                        <button
-                            className={cn(
-                                'flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium transition-all',
-                                tab === 'table'
-                                    ? 'bg-background text-foreground shadow-sm ring-1 ring-border/40'
-                                    : 'text-muted-foreground hover:text-foreground'
-                            )}
-                            onClick={() => handleTabClick('table')}
-                        >
-                            <Table2 className="h-3.5 w-3.5" />
-                            Data Preview
-                        </button>
-                        <button
-                            className={cn(
-                                'flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium transition-all',
-                                tab === 'chart'
-                                    ? 'bg-background text-foreground shadow-sm ring-1 ring-border/40'
-                                    : 'text-muted-foreground hover:text-foreground',
-                                !preview.result && tab !== 'config' && 'opacity-40 pointer-events-none'
-                            )}
-                            onClick={() => handleTabClick('chart')}
-                        >
-                            <BarChart2 className="h-3.5 w-3.5" />
-                            Chart
-                        </button>
-                        <button
-                            className={cn(
-                                'flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium transition-all',
-                                tab === 'profiling'
-                                    ? 'bg-background text-foreground shadow-sm ring-1 ring-border/40'
-                                    : 'text-muted-foreground hover:text-foreground',
-                                !(preview.result)?.profile && tab !== 'config' && 'opacity-40 pointer-events-none'
-                            )}
-                            onClick={() => handleTabClick('profiling')}
-                        >
-                            <Layers2 className="h-3.5 w-3.5" />
-                            Profiling
-                        </button>
+                        {nodeTypeToUse !== 'note' && (
+                            <>
+                                <button
+                                    className={cn(
+                                        'flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium transition-all',
+                                        tab === 'table'
+                                            ? 'bg-background text-foreground shadow-sm ring-1 ring-border/40'
+                                            : 'text-muted-foreground hover:text-foreground'
+                                    )}
+                                    onClick={() => handleTabClick('table')}
+                                >
+                                    <Table2 className="h-3.5 w-3.5" />
+                                    Data Preview
+                                </button>
+                                <button
+                                    className={cn(
+                                        'flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium transition-all',
+                                        tab === 'chart'
+                                            ? 'bg-background text-foreground shadow-sm ring-1 ring-border/40'
+                                            : 'text-muted-foreground hover:text-foreground',
+                                        !preview.result && tab !== 'config' && 'opacity-40 pointer-events-none'
+                                    )}
+                                    onClick={() => handleTabClick('chart')}
+                                >
+                                    <BarChart2 className="h-3.5 w-3.5" />
+                                    Chart
+                                </button>
+                                <button
+                                    className={cn(
+                                        'flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium transition-all',
+                                        tab === 'profiling'
+                                            ? 'bg-background text-foreground shadow-sm ring-1 ring-border/40'
+                                            : 'text-muted-foreground hover:text-foreground',
+                                        !(preview.result)?.profile && tab !== 'config' && 'opacity-40 pointer-events-none'
+                                    )}
+                                    onClick={() => handleTabClick('profiling')}
+                                >
+                                    <Layers2 className="h-3.5 w-3.5" />
+                                    Profiling
+                                </button>
+                            </>
+                        )}
                     </div>
 
                     {/* Meta info for preview */}
