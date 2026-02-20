@@ -32,7 +32,6 @@ import { Switch } from '@/components/ui/switch'
 import { alertRulesRepo } from '@/repo/alert-rules'
 import {
   alertRuleFormSchema,
-  alertRuleSeverityValues,
   type AlertRuleForm,
   type AlertRule,
 } from '../data/schema'
@@ -54,12 +53,12 @@ const METRIC_OPTIONS = [
 ]
 
 const OPERATOR_OPTIONS = [
-  { value: '>', label: '>' },
-  { value: '>=', label: '>=' },
-  { value: '<', label: '<' },
-  { value: '<=', label: '<=' },
-  { value: '==', label: '==' },
-  { value: '!=', label: '!=' },
+  { value: 'gt', label: '>' },
+  { value: 'gte', label: '>=' },
+  { value: 'lt', label: '<' },
+  { value: 'lte', label: '<=' },
+  { value: 'eq', label: '==' },
+  { value: 'neq', label: '!=' },
 ]
 
 export function AlertRuleMutateDrawer({
@@ -75,12 +74,11 @@ export function AlertRuleMutateDrawer({
     defaultValues: {
       name: '',
       description: '',
-      metric_key: '',
-      condition_operator: '>',
-      condition_value: 0,
-      severity: 'WARNING',
+      metric_type: '',
+      condition_operator: 'gt',
+      threshold_value: 0,
       cooldown_minutes: 15,
-      auto_resolve: true,
+      is_enabled: true,
     },
   })
 
@@ -89,23 +87,21 @@ export function AlertRuleMutateDrawer({
       form.reset({
         name: currentRow.name,
         description: currentRow.description ?? '',
-        metric_key: currentRow.metric_key,
+        metric_type: currentRow.metric_type,
         condition_operator: currentRow.condition_operator,
-        condition_value: currentRow.condition_value,
-        severity: currentRow.severity,
+        threshold_value: currentRow.threshold_value,
         cooldown_minutes: currentRow.cooldown_minutes,
-        auto_resolve: currentRow.auto_resolve,
+        is_enabled: currentRow.is_enabled,
       })
     } else {
       form.reset({
         name: '',
         description: '',
-        metric_key: '',
-        condition_operator: '>',
-        condition_value: 0,
-        severity: 'WARNING',
+        metric_type: '',
+        condition_operator: 'gt',
+        threshold_value: 0,
         cooldown_minutes: 15,
-        auto_resolve: true,
+        is_enabled: true,
       })
     }
   }, [currentRow, form])
@@ -115,12 +111,11 @@ export function AlertRuleMutateDrawer({
       alertRulesRepo.create({
         name: data.name,
         description: data.description,
-        metric_key: data.metric_key,
+        metric_type: data.metric_type,
         condition_operator: data.condition_operator,
-        condition_value: data.condition_value,
-        severity: data.severity,
+        threshold_value: data.threshold_value,
         cooldown_minutes: data.cooldown_minutes,
-        auto_resolve: data.auto_resolve,
+        is_enabled: data.is_enabled,
       }),
     onSuccess: async () => {
       toast.success('Alert rule created')
@@ -136,12 +131,11 @@ export function AlertRuleMutateDrawer({
       alertRulesRepo.update(currentRow!.id, {
         name: data.name,
         description: data.description,
-        metric_key: data.metric_key,
+        metric_type: data.metric_type,
         condition_operator: data.condition_operator,
-        condition_value: data.condition_value,
-        severity: data.severity,
+        threshold_value: data.threshold_value,
         cooldown_minutes: data.cooldown_minutes,
-        auto_resolve: data.auto_resolve,
+        is_enabled: data.is_enabled,
       }),
     onSuccess: async () => {
       toast.success('Alert rule updated')
@@ -214,7 +208,7 @@ export function AlertRuleMutateDrawer({
 
             <FormField
               control={form.control}
-              name='metric_key'
+              name='metric_type'
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Metric</FormLabel>
@@ -273,7 +267,7 @@ export function AlertRuleMutateDrawer({
 
               <FormField
                 control={form.control}
-                name='condition_value'
+                name='threshold_value'
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Threshold</FormLabel>
@@ -285,35 +279,6 @@ export function AlertRuleMutateDrawer({
                 )}
               />
             </div>
-
-            <FormField
-              control={form.control}
-              name='severity'
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Severity</FormLabel>
-                  <Select
-                    onValueChange={field.onChange}
-                    defaultValue={field.value}
-                    value={field.value}
-                  >
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      {alertRuleSeverityValues.map((sev) => (
-                        <SelectItem key={sev} value={sev}>
-                          {sev}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
 
             <FormField
               control={form.control}
@@ -331,13 +296,13 @@ export function AlertRuleMutateDrawer({
 
             <FormField
               control={form.control}
-              name='auto_resolve'
+              name='is_enabled'
               render={({ field }) => (
                 <FormItem className='flex items-center justify-between rounded-lg border p-3'>
                   <div className='space-y-0.5'>
-                    <FormLabel>Auto-resolve</FormLabel>
+                    <FormLabel>Enabled</FormLabel>
                     <p className='text-muted-foreground text-xs'>
-                      Automatically resolve when condition no longer met
+                      Enable this alert rule to start monitoring
                     </p>
                   </div>
                   <FormControl>

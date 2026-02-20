@@ -14,6 +14,7 @@ class AlertRuleCreate(BaseSchema):
     """Schema for creating an alert rule."""
 
     name: str = Field(..., min_length=1, max_length=255)
+    description: Optional[str] = None
     metric_type: str = Field(
         ...,
         description="Metric: replication_lag, wal_size, error_rate, row_throughput, "
@@ -57,6 +58,7 @@ class AlertRuleUpdate(BaseSchema):
     """Schema for updating an alert rule."""
 
     name: Optional[str] = Field(default=None, max_length=255)
+    description: Optional[str] = None
     metric_type: Optional[str] = None
     condition_operator: Optional[str] = None
     threshold_value: Optional[float] = None
@@ -75,6 +77,7 @@ class AlertRuleResponse(TimestampSchema):
 
     id: int
     name: str
+    description: Optional[str]
     metric_type: str
     condition_operator: str
     threshold_value: float
@@ -82,7 +85,7 @@ class AlertRuleResponse(TimestampSchema):
     source_id: Optional[int]
     destination_id: Optional[int]
     pipeline_id: Optional[int]
-    notification_channels: List[str]
+    notification_channels: Optional[List[str]] = Field(default_factory=list)
     cooldown_minutes: int
     is_enabled: bool
     last_triggered_at: Optional[datetime]

@@ -6,15 +6,12 @@ export interface DataDictionary {
   id: number
   catalog_id: number
   column_name: string
-  data_type: string
-  column_type?: string | null
+  data_type: string | null
   description: string | null
   is_nullable: boolean
-  is_primary_key: boolean
   is_pii: boolean
   sample_values: string | null
   business_rule: string | null
-  tags?: string | null
   created_at: string
   updated_at: string
 }
@@ -27,12 +24,10 @@ export interface DataCatalog {
   schema_name: string
   description: string | null
   owner: string | null
-  tags: string | null
+  tags: string[] | null
   classification: string | null
   sla_freshness_minutes: number | null
-  row_count: number | null
-  size_bytes: number | null
-  last_analyzed_at: string | null
+  custom_properties: Record<string, unknown>
   created_at: string
   updated_at: string
   columns: DataDictionary[]
@@ -45,10 +40,8 @@ export interface DataCatalogCreate {
   schema_name?: string
   description?: string
   owner?: string
-  tags?: string
+  tags?: string[]
   classification?: string
-  row_count?: number
-  size_bytes?: number
 }
 
 export interface DataCatalogUpdate {
@@ -56,12 +49,10 @@ export interface DataCatalogUpdate {
   table_name?: string
   description?: string
   owner?: string
-  tags?: string
+  tags?: string[]
   classification?: string
   source_id?: number | null
   destination_id?: number | null
-  row_count?: number
-  size_bytes?: number
 }
 
 export interface DataCatalogListResponse {
@@ -76,7 +67,6 @@ export interface DataDictionaryCreate {
   data_type?: string
   description?: string
   is_nullable?: boolean
-  is_primary_key?: boolean
   is_pii?: boolean
   sample_values?: string
   business_rule?: string
@@ -87,7 +77,6 @@ export interface DataDictionaryUpdate {
   data_type?: string
   description?: string
   is_nullable?: boolean
-  is_primary_key?: boolean
   is_pii?: boolean
   sample_values?: string
   business_rule?: string

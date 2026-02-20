@@ -33,6 +33,7 @@ class AlertRuleService:
         """Create a new alert rule."""
         rule = self.rule_repo.create(
             name=data.name,
+            description=data.description,
             metric_type=data.metric_type,
             condition_operator=data.condition_operator,
             threshold_value=data.threshold_value,

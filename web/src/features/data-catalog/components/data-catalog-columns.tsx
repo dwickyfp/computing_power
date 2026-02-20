@@ -72,18 +72,19 @@ export const dataCatalogColumns: ColumnDef<DataCatalog>[] = [
     },
   },
   {
-    accessorKey: 'row_count',
+    accessorKey: 'tags',
     header: ({ column }) => (
-      <DataTableColumnHeader column={column} title='Rows' />
+      <DataTableColumnHeader column={column} title='Tags' />
     ),
     cell: ({ row }) => {
-      const count = row.getValue('row_count') as number | null
-      return count != null ? (
-        <span className='tabular-nums'>
-          {count.toLocaleString()}
-        </span>
-      ) : (
-        <span className='text-muted-foreground'>—</span>
+      const tags = row.getValue('tags') as string[] | null
+      if (!tags || tags.length === 0) return <span className='text-muted-foreground'>—</span>
+      return (
+        <div className='flex flex-wrap gap-1'>
+          {tags.map((t) => (
+            <Badge key={t} variant='secondary' className='text-xs'>{t}</Badge>
+          ))}
+        </div>
       )
     },
   },

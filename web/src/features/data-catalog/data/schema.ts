@@ -6,12 +6,12 @@ export const dataDictionarySchema = z.object({
   id: z.number(),
   catalog_id: z.number(),
   column_name: z.string(),
-  column_type: z.string().nullable(),
+  data_type: z.string().nullable(),
   description: z.string().nullable(),
-  is_primary_key: z.boolean(),
+  is_pii: z.boolean(),
   is_nullable: z.boolean(),
   sample_values: z.string().nullable(),
-  tags: z.string().nullable(),
+  business_rule: z.string().nullable(),
   created_at: z.string(),
   updated_at: z.string(),
 })
@@ -20,12 +20,12 @@ export type DataDictionary = z.infer<typeof dataDictionarySchema>
 
 export const dataDictionaryFormSchema = z.object({
   column_name: z.string().min(1, 'Column name is required'),
-  column_type: z.string().optional(),
+  data_type: z.string().optional(),
   description: z.string().optional(),
-  is_primary_key: z.boolean().optional().default(false),
+  is_pii: z.boolean().optional().default(false),
   is_nullable: z.boolean().optional().default(true),
   sample_values: z.string().optional(),
-  tags: z.string().optional(),
+  business_rule: z.string().optional(),
 })
 
 export type DataDictionaryForm = z.infer<typeof dataDictionaryFormSchema>
@@ -40,11 +40,10 @@ export const dataCatalogSchema = z.object({
   table_name: z.string(),
   description: z.string().nullable(),
   owner: z.string().nullable(),
-  tags: z.string().nullable(),
+  tags: z.array(z.string()).nullable(),
   classification: z.string().nullable(),
-  row_count: z.number().nullable(),
-  size_bytes: z.number().nullable(),
-  last_analyzed_at: z.string().nullable(),
+  sla_freshness_minutes: z.number().nullable(),
+  custom_properties: z.record(z.string(), z.unknown()).nullable(),
   created_at: z.string(),
   updated_at: z.string(),
 })

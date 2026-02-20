@@ -2,7 +2,6 @@ import { type ColumnDef } from '@tanstack/react-table'
 import { DataTableColumnHeader } from '@/components/data-table'
 import { type AlertRule } from '../data/schema'
 import { AlertRulesRowActions } from './alert-rules-row-actions'
-import { Badge } from '@/components/ui/badge'
 import { Switch } from '@/components/ui/switch'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { alertRulesRepo } from '@/repo/alert-rules'
@@ -12,7 +11,7 @@ import { formatDistanceToNow } from 'date-fns'
 function EnabledToggle({ row }: { row: { original: AlertRule } }) {
   const queryClient = useQueryClient()
   const toggleMutation = useMutation({
-    mutationFn: () => alertRulesRepo.toggle(row.original.id),
+    mutationFn: () => alertRulesRepo.toggle(row.original.id, !row.original.is_enabled),
     onSuccess: async () => {
       await new Promise((r) => setTimeout(r, 300))
       queryClient.invalidateQueries({ queryKey: ['alert-rules'] })
@@ -22,18 +21,12 @@ function EnabledToggle({ row }: { row: { original: AlertRule } }) {
 
   return (
     <Switch
-      checked={row.original.enabled}
+      checked={row.original.is_enabled}
       onCheckedChange={() => toggleMutation.mutate()}
       disabled={toggleMutation.isPending}
     />
   )
 }
-
-const severityVariant = {
-  INFO: 'secondary',
-  WARNING: 'default',
-  CRITICAL: 'destructive',
-} as const
 
 export const alertRulesColumns: ColumnDef<AlertRule>[] = [
   {
@@ -46,13 +39,13 @@ export const alertRulesColumns: ColumnDef<AlertRule>[] = [
     ),
   },
   {
-    accessorKey: 'metric_key',
+    accessorKey: 'metric_type',
     header: ({ column }) => (
       <DataTableColumnHeader column={column} title='Metric' />
     ),
     cell: ({ row }) => (
       <code className='rounded bg-muted px-1.5 py-0.5 text-xs'>
-        {row.getValue('metric_key')}
+        {row.getValue('metric_type')}
       </code>
     ),
   },
@@ -61,22 +54,12 @@ export const alertRulesColumns: ColumnDef<AlertRule>[] = [
     header: 'Condition',
     cell: ({ row }) => (
       <span className='text-sm'>
-        {row.original.condition_operator} {row.original.condition_value}
+        {row.original.condition_operator} {row.original.threshold_value}
       </span>
     ),
   },
   {
-    accessorKey: 'severity',
-    header: ({ column }) => (
-      <DataTableColumnHeader column={column} title='Severity' />
-    ),
-    cell: ({ row }) => {
-      const sev = row.getValue('severity') as keyof typeof severityVariant
-      return <Badge variant={severityVariant[sev]}>{sev}</Badge>
-    },
-  },
-  {
-    accessorKey: 'enabled',
+    accessorKey: 'is_enabled',
     header: 'Enabled',
     cell: ({ row }) => <EnabledToggle row={row} />,
   },

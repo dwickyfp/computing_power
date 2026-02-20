@@ -57,12 +57,11 @@ export function DataCatalogDetailPage() {
   const [editingColumn, setEditingColumn] = useState<{
     id?: number
     column_name: string
-    column_type: string
+    data_type: string
     description: string
-    is_primary_key: boolean
+    is_pii: boolean
     is_nullable: boolean
     sample_values: string
-    tags: string
   } | null>(null)
 
   // ─── Queries ──────────────────────────────────────────────────────
@@ -88,9 +87,9 @@ export function DataCatalogDetailPage() {
     mutationFn: (data: typeof editingColumn) =>
       dataCatalogRepo.addColumn(catalogId, {
         column_name: data!.column_name,
-        data_type: data!.column_type || undefined,
+        data_type: data!.data_type || undefined,
         description: data!.description || undefined,
-        is_primary_key: data!.is_primary_key,
+        is_pii: data!.is_pii,
         is_nullable: data!.is_nullable,
         sample_values: data!.sample_values || undefined,
       }),
@@ -108,9 +107,9 @@ export function DataCatalogDetailPage() {
     mutationFn: (data: typeof editingColumn) =>
       dataCatalogRepo.updateColumn(data!.id!, {
         column_name: data!.column_name,
-        data_type: data!.column_type || undefined,
+        data_type: data!.data_type || undefined,
         description: data!.description || undefined,
-        is_primary_key: data!.is_primary_key,
+        is_pii: data!.is_pii,
         is_nullable: data!.is_nullable,
         sample_values: data!.sample_values || undefined,
       }),
@@ -140,12 +139,11 @@ export function DataCatalogDetailPage() {
   const openNewColumn = () => {
     setEditingColumn({
       column_name: '',
-      column_type: '',
+      data_type: '',
       description: '',
-      is_primary_key: false,
+      is_pii: false,
       is_nullable: true,
       sample_values: '',
-      tags: '',
     })
     setColumnDialogOpen(true)
   }
@@ -154,12 +152,11 @@ export function DataCatalogDetailPage() {
     setEditingColumn({
       id: col.id,
       column_name: col.column_name,
-      column_type: col.column_type ?? '',
+      data_type: col.data_type ?? '',
       description: col.description ?? '',
-      is_primary_key: col.is_primary_key,
+      is_pii: col.is_pii,
       is_nullable: col.is_nullable,
       sample_values: col.sample_values ?? '',
-      tags: col.tags ?? '',
     })
     setColumnDialogOpen(true)
   }
@@ -267,17 +264,17 @@ export function DataCatalogDetailPage() {
                 </p>
               </div>
               <div>
-                <p className='text-muted-foreground'>Row Count</p>
+                <p className='text-muted-foreground'>SLA Freshness</p>
                 <p className='font-medium tabular-nums'>
-                  {catalogEntry.row_count?.toLocaleString() ?? '—'}
+                  {catalogEntry.sla_freshness_minutes != null
+                    ? `${catalogEntry.sla_freshness_minutes} min`
+                    : '—'}
                 </p>
               </div>
               <div>
-                <p className='text-muted-foreground'>Size</p>
+                <p className='text-muted-foreground'>Classification</p>
                 <p className='font-medium'>
-                  {catalogEntry.size_bytes
-                    ? `${(catalogEntry.size_bytes / 1024 / 1024).toFixed(2)} MB`
-                    : '—'}
+                  {catalogEntry.classification || '—'}
                 </p>
               </div>
               <div>
@@ -294,13 +291,13 @@ export function DataCatalogDetailPage() {
                   <p className='font-medium'>{catalogEntry.description}</p>
                 </div>
               )}
-              {catalogEntry.tags && (
+              {catalogEntry.tags && catalogEntry.tags.length > 0 && (
                 <div className='col-span-full'>
                   <p className='text-muted-foreground mb-1'>Tags</p>
                   <div className='flex flex-wrap gap-1'>
-                    {catalogEntry.tags.split(',').map((tag) => (
-                      <Badge key={tag.trim()} variant='outline'>
-                        {tag.trim()}
+                    {(catalogEntry.tags ?? []).map((tag: string) => (
+                      <Badge key={tag} variant='outline'>
+                        {tag}
                       </Badge>
                     ))}
                   </div>
@@ -327,7 +324,7 @@ export function DataCatalogDetailPage() {
                     <TableHead>Column</TableHead>
                     <TableHead>Type</TableHead>
                     <TableHead>Description</TableHead>
-                    <TableHead className='w-20 text-center'>PK</TableHead>
+                    <TableHead className='w-20 text-center'>PII</TableHead>
                     <TableHead className='w-24 text-center'>Nullable</TableHead>
                     <TableHead>Sample Values</TableHead>
                     <TableHead className='w-24'>Actions</TableHead>
@@ -351,7 +348,7 @@ export function DataCatalogDetailPage() {
                         </TableCell>
                         <TableCell>
                           <Badge variant='outline'>
-                            {col.column_type ?? '—'}
+                            {col.data_type ?? '—'}
                           </Badge>
                         </TableCell>
                         <TableCell className='max-w-[200px] truncate text-sm'>
@@ -362,7 +359,7 @@ export function DataCatalogDetailPage() {
                           )}
                         </TableCell>
                         <TableCell className='text-center'>
-                          {col.is_primary_key && (
+                          {col.is_pii && (
                             <Key className='mx-auto h-4 w-4 text-amber-500' />
                           )}
                         </TableCell>
@@ -433,11 +430,11 @@ export function DataCatalogDetailPage() {
               <div>
                 <label className='text-sm font-medium'>Type</label>
                 <Input
-                  value={editingColumn.column_type}
+                  value={editingColumn.data_type}
                   onChange={(e) =>
                     setEditingColumn({
                       ...editingColumn,
-                      column_type: e.target.value,
+                      data_type: e.target.value,
                     })
                   }
                   placeholder='varchar, integer, timestamp...'
@@ -460,15 +457,15 @@ export function DataCatalogDetailPage() {
                 <label className='flex items-center gap-2 text-sm'>
                   <input
                     type='checkbox'
-                    checked={editingColumn.is_primary_key}
+                    checked={editingColumn.is_pii}
                     onChange={(e) =>
                       setEditingColumn({
                         ...editingColumn,
-                        is_primary_key: e.target.checked,
+                        is_pii: e.target.checked,
                       })
                     }
                   />
-                  Primary Key
+                  PII
                 </label>
                 <label className='flex items-center gap-2 text-sm'>
                   <input
@@ -495,19 +492,6 @@ export function DataCatalogDetailPage() {
                     })
                   }
                   placeholder='e.g. "active", "inactive"'
-                />
-              </div>
-              <div>
-                <label className='text-sm font-medium'>Tags</label>
-                <Input
-                  value={editingColumn.tags}
-                  onChange={(e) =>
-                    setEditingColumn({
-                      ...editingColumn,
-                      tags: e.target.value,
-                    })
-                  }
-                  placeholder='pii, indexed, ...'
                 />
               </div>
             </div>
