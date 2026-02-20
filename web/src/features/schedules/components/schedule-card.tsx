@@ -29,7 +29,7 @@ import {
 import { useSchedules } from './schedules-provider'
 import cronstrue from 'cronstrue'
 
-import parser from 'cron-parser'
+import CronExpressionParser from 'cron-parser'
 
 interface Props {
     schedule: ScheduleListItem
@@ -129,11 +129,7 @@ export function ScheduleCard({ schedule }: Props) {
                                     currentDate: new Date(),
                                     iterator: true
                                 }
-                                // Handle different module formats for cron-parser
-                                const cronParser = (parser as any).default || parser
-                                const interval = (cronParser as any).parseExpression ?
-                                    (cronParser as any).parseExpression(schedule.cron_expression, options) :
-                                    (cronParser as any)(schedule.cron_expression, options)
+                                const interval = CronExpressionParser.parse(schedule.cron_expression, options)
                                 nextRunDate = interval.next().toDate()
                             } catch (err) {
                                 console.error('Failed to parse cron:', err)
