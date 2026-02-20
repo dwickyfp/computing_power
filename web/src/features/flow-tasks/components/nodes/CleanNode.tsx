@@ -14,6 +14,10 @@ export const CleanNode = memo(function CleanNode({ id, selected, data }: NodePro
     const renameCols = data?.rename_columns as Record<string, string> | undefined
     const renameCount = renameCols ? Object.keys(renameCols).length : 0
     if (renameCount > 0) ops.push(`Rename ${renameCount} col${renameCount !== 1 ? 's' : ''}`)
+    const castCols = data?.cast_columns as Array<{ column: string; target_type: string }> | undefined
+    if (castCols?.length) ops.push(`Cast ${castCols.length} col${castCols.length !== 1 ? 's' : ''}`)
+    const expressions = data?.expressions as Array<{ expr: string; alias: string }> | undefined
+    if (expressions?.length) ops.push(`${expressions.length} expr${expressions.length !== 1 ? 's' : ''}`)
 
     return (
         <BaseNode

@@ -108,6 +108,8 @@ def _build_input_cte(node: dict, _pred_ctes: list) -> str:
       sample_limit: int (optional)
       watermark_column: str (optional; D8 incremental — column to filter on)
       watermark_value: str (optional; D8 incremental — last processed value)
+      filter_sql: str (optional — raw WHERE expression applied at source)
+      filter_rows: list[{col, op, val}] (optional — UI filter builder rows compiled to filter_sql)
     """
     data = node.get("data", {})
     alias = _safe_identifier(data.get("attach_alias", "src"))
@@ -117,6 +119,7 @@ def _build_input_cte(node: dict, _pred_ctes: list) -> str:
     sample = data.get("sample_limit")
     watermark_col = data.get("watermark_column")
     watermark_val = data.get("watermark_value")
+    filter_sql = (data.get("filter_sql") or "").strip()
 
     if not table:
         raise ValueError(f"Input node {node['id']} missing table_name")
@@ -125,8 +128,14 @@ def _build_input_cte(node: dict, _pred_ctes: list) -> str:
     fqt = f"{alias}.{schema}.{table}" if schema else f"{alias}.{table}"
     sql = f"SELECT {col_expr} FROM {fqt}"
 
-    # D8: Incremental execution — add WHERE clause for watermark
+    # Build WHERE clause from multiple sources
     where_parts: List[str] = []
+
+    # User-defined filter SQL (from filter builder or raw SQL)
+    if filter_sql:
+        where_parts.append(f"({filter_sql})")
+
+    # D8: Incremental execution — add WHERE clause for watermark
     if watermark_col and watermark_val is not None and watermark_val != "":
         # Escape single quotes in watermark value
         safe_val = str(watermark_val).replace("'", "''")
@@ -142,7 +151,7 @@ def _build_input_cte(node: dict, _pred_ctes: list) -> str:
 
 def _build_clean_cte(node: dict, pred_ctes: list) -> str:
     """
-    CLEAN node — filter, rename, calculate, deduplicate, select columns.
+    CLEAN node — filter, rename, calculate, cast, expressions, deduplicate, select columns.
 
     data keys:
       filter_expr: str             — compiled SQL WHERE expression (from UI filter builder)
@@ -151,6 +160,8 @@ def _build_clean_cte(node: dict, pred_ctes: list) -> str:
       drop_columns: list[str]      — legacy columns to drop via EXCLUDE
       renames: [{old, new}]        — column renames
       calculations: [{expr, alias}] — new calculated columns
+      cast_columns: [{column, target_type}] — column type casting
+      expressions: [{expr, alias}] — SQL function expressions (COALESCE, NULLIF, etc.)
       drop_nulls: bool             — wrap in SELECT * WHERE col IS NOT NULL (skipped; handled downstream)
       deduplicate: bool            — emit SELECT DISTINCT
     """
@@ -166,6 +177,8 @@ def _build_clean_cte(node: dict, pred_ctes: list) -> str:
     drop_cols: List[str] = data.get("drop_columns", [])
     renames: List[dict] = data.get("renames", [])
     calcs: List[dict] = data.get("calculations", [])
+    cast_columns: List[dict] = data.get("cast_columns", [])
+    expressions: List[dict] = data.get("expressions", [])
 
     if select_columns:
         # Explicit column list wins
@@ -182,6 +195,20 @@ def _build_clean_cte(node: dict, pred_ctes: list) -> str:
     # Calculated columns
     for c in calcs:
         col_parts.append(f"{c['expr']} AS {c['alias']}")
+
+    # Type casting — CAST(column AS target_type) AS column
+    for cc in cast_columns:
+        column = cc.get("column", "")
+        target_type = cc.get("target_type", "")
+        if column and target_type:
+            col_parts.append(f"CAST({column} AS {target_type}) AS {column}")
+
+    # SQL function expressions — COALESCE, NULLIF, TRIM, UPPER, LOWER, etc.
+    for expr_item in expressions:
+        expr = expr_item.get("expr", "")
+        alias = expr_item.get("alias", "")
+        if expr and alias:
+            col_parts.append(f"{expr} AS {alias}")
 
     distinct_kw = "DISTINCT " if data.get("deduplicate") else ""
     col_expr = ", ".join(col_parts)

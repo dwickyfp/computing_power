@@ -39,11 +39,14 @@ export interface FlowNodeData {
     table_name?: string
     alias?: string
     sample_limit?: number // for input node preview limit
+    filter_sql?: string // raw WHERE clause for input node filtering
+    filter_rows?: Array<{ col: string; op: string; val: string }> // UI filter builder rows (input node)
     // clean node
     drop_nulls?: boolean
     deduplicate?: boolean
     rename_columns?: Record<string, string>
-    cast_columns?: Record<string, string>
+    cast_columns?: Array<{ column: string; target_type: string }> // column type casting
+    expressions?: Array<{ expr: string; alias: string }> // SQL function expressions (COALESCE, etc.)
     filter_expr?: string
     select_columns?: string[]
     // aggregate node
