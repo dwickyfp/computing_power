@@ -5,6 +5,7 @@ Handles sending notifications to external webhooks based on configuration.
 """
 
 import httpx
+import html
 from datetime import datetime, timezone, timedelta
 from typing import List, Optional
 
@@ -180,9 +181,9 @@ class NotificationService:
             if enable_telegram and telegram_bot_token and telegram_chat_id:
                 # Format message for Telegram with HTML
                 telegram_message = (
-                    f"<b>{notification.title}</b>\n\n"
-                    f"{notification.message}\n\n"
-                    f"Type: {notification.type}\n"
+                    f"<b>{html.escape(notification.title)}</b>\n\n"
+                    f"{html.escape(notification.message)}\n\n"
+                    f"Type: {html.escape(notification.type)}\n"
                     f"Time: {notification.created_at.strftime('%Y-%m-%d %H:%M:%S') if notification.created_at else 'N/A'}"
                 )
                 

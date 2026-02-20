@@ -107,7 +107,10 @@ def _execute_schedule(schedule_id: int) -> None:
         )
 
     except Exception as exc:
-        logger.error(f"[DynamicScheduler] Schedule {schedule_id} run failed: {exc}")
+        if isinstance(exc, ValueError) and "already running" in str(exc):
+            logger.info(f"[DynamicScheduler] Schedule {schedule_id} run skipped: {exc}")
+        else:
+            logger.error(f"[DynamicScheduler] Schedule {schedule_id} run failed: {exc}")
         try:
             if run_id is not None:
                 from app.domain.models.schedule import ScheduleRunStatus
