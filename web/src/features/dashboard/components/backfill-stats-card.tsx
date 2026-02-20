@@ -1,6 +1,6 @@
 import { DashboardPanel } from './dashboard-panel'
 import { DatabaseBackup, CheckCircle2, XCircle, Clock, Loader2, AlertCircle } from 'lucide-react'
-import { DashboardSummary } from '@/repo/dashboard'
+import { type DashboardSummary } from '@/repo/dashboard'
 import { Progress } from '@/components/ui/progress'
 
 interface BackfillStatsCardProps {

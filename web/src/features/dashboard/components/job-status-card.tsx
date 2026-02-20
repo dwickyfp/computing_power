@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { DashboardPanel } from './dashboard-panel'
 // Badge import removed as it is not used in the updated code
-import { jobMetricsRepo, JobMetric } from '@/repo/job-metrics'
+import { jobMetricsRepo, type JobMetric } from '@/repo/job-metrics'
 import { formatDistanceToNow } from 'date-fns'
 import { Activity } from 'lucide-react'
 import { useRefreshInterval } from '../context/refresh-interval-context'

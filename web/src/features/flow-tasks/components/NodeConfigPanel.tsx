@@ -23,7 +23,20 @@ import {
 } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { Separator } from '@/components/ui/separator'
-import { X, Trash2, Eye, Loader2, Plus, GripVertical, AlertCircle } from 'lucide-react'
+import {
+    Command,
+    CommandEmpty,
+    CommandGroup,
+    CommandInput,
+    CommandItem,
+    CommandList,
+} from '@/components/ui/command'
+import {
+    Popover,
+    PopoverContent,
+    PopoverTrigger,
+} from '@/components/ui/popover'
+import { X, Trash2, Eye, Loader2, Plus, GripVertical, AlertCircle, Check, ChevronsUpDown } from 'lucide-react'
 import type { FlowNodeType, FlowNodeData, WriteMode } from '@/repo/flow-tasks'
 import type { ColumnInfo } from '@/repo/flow-tasks'
 import { sourcesRepo } from '@/repo/sources'
@@ -422,7 +435,8 @@ function InputConfig({ data, update, nodeId: _nodeId, flowTaskId: _flowTaskId }:
         queryKey: ['source-available-tables', sourceId],
         queryFn: () => sourcesRepo.getAvailableTables(sourceId!),
         enabled: sourceType === 'POSTGRES' && !!sourceId,
-        staleTime: 30_000,
+        staleTime: 0,
+        refetchOnMount: 'always',
     })
 
     // Fetch table list for postgres destination (when destination is selected in POSTGRES mode)
@@ -430,7 +444,8 @@ function InputConfig({ data, update, nodeId: _nodeId, flowTaskId: _flowTaskId }:
         queryKey: ['destination-tables', destinationId],
         queryFn: () => destinationsRepo.getTableList(destinationId!),
         enabled: pgUseDestTable,
-        staleTime: 30_000,
+        staleTime: 0,
+        refetchOnMount: 'always',
     })
 
     // Fetch table list for selected snowflake destination
@@ -438,7 +453,8 @@ function InputConfig({ data, update, nodeId: _nodeId, flowTaskId: _flowTaskId }:
         queryKey: ['destination-tables', destinationId],
         queryFn: () => destinationsRepo.getTableList(destinationId!),
         enabled: sourceType === 'SNOWFLAKE' && !!destinationId,
-        staleTime: 30_000,
+        staleTime: 0,
+        refetchOnMount: 'always',
     })
 
     const tables: string[] =
@@ -558,27 +574,53 @@ function InputConfig({ data, update, nodeId: _nodeId, flowTaskId: _flowTaskId }:
                             <Loader2 className="h-3 w-3 animate-spin" /> Loading tables…
                         </div>
                     ) : (
-                        <Select
-                            value={(data.table_name as string) || ''}
-                            onValueChange={(v) => update({ table_name: v })}
-                        >
-                            <SelectTrigger className="h-7 text-xs w-full">
-                                <SelectValue placeholder="Select table…" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                {tables.length === 0 ? (
-                                    <div className="px-2 py-1.5 text-xs text-muted-foreground">
-                                        No tables found
-                                    </div>
-                                ) : (
-                                    tables.map((t) => (
-                                        <SelectItem key={t} value={t}>
-                                            {t}
-                                        </SelectItem>
-                                    ))
-                                )}
-                            </SelectContent>
-                        </Select>
+                        <Popover>
+                            <PopoverTrigger asChild>
+                                <Button
+                                    variant="outline"
+                                    role="combobox"
+                                    className={cn(
+                                        "w-full justify-between h-7 text-xs font-normal",
+                                        !data.table_name && "text-muted-foreground"
+                                    )}
+                                >
+                                    {data.table_name
+                                        ? tables.find((t) => t === data.table_name)
+                                        : "Select table..."}
+                                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                </Button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-[300px] p-0">
+                                <Command>
+                                    <CommandInput placeholder="Search table..." className="h-9 text-xs" />
+                                    <CommandList>
+                                        <CommandEmpty>No table found.</CommandEmpty>
+                                        <CommandGroup>
+                                            {tables.map((t) => (
+                                                <CommandItem
+                                                    value={t}
+                                                    key={t}
+                                                    onSelect={(value) => {
+                                                        update({ table_name: value })
+                                                    }}
+                                                    className="text-xs"
+                                                >
+                                                    <Check
+                                                        className={cn(
+                                                            "mr-2 h-4 w-4",
+                                                            t === data.table_name
+                                                                ? "opacity-100"
+                                                                : "opacity-0"
+                                                        )}
+                                                    />
+                                                    {t}
+                                                </CommandItem>
+                                            ))}
+                                        </CommandGroup>
+                                    </CommandList>
+                                </Command>
+                            </PopoverContent>
+                        </Popover>
                     )}
                 </Field>
             )}
@@ -1308,6 +1350,17 @@ function OutputConfig({ data, update }: ConfigFormProps) {
         staleTime: 30_000,
     })
 
+    const destinationId = data.destination_id as number | undefined
+
+    const { data: tablesData, isLoading: tablesLoading } = useQuery({
+        queryKey: ['destination-tables', destinationId],
+        queryFn: () => destinationsRepo.getTableList(destinationId!),
+        enabled: !!destinationId,
+        staleTime: 30_000,
+    })
+
+    const tables: string[] = tablesData?.tables ?? []
+
     const upsertKeys: string[] = (data.upsert_keys as string[]) || []
     const upsertKeysText = upsertKeys.join(', ')
 
@@ -1321,7 +1374,7 @@ function OutputConfig({ data, update }: ConfigFormProps) {
                 ) : (
                     <Select
                         value={data.destination_id != null ? String(data.destination_id) : ''}
-                        onValueChange={(v) => update({ destination_id: parseInt(v) })}
+                        onValueChange={(v) => update({ destination_id: parseInt(v), table_name: undefined })}
                     >
                         <SelectTrigger className="h-7 text-xs w-full">
                             <SelectValue placeholder="Select destination…" />
@@ -1345,14 +1398,63 @@ function OutputConfig({ data, update }: ConfigFormProps) {
                 />
             </Field>
 
-            <Field label="Target Table">
-                <Input
-                    className="h-7 text-xs"
-                    value={(data.table_name as string) || ''}
-                    onChange={(e) => update({ table_name: e.target.value })}
-                    placeholder="output_table"
-                />
-            </Field>
+            {!!destinationId && (
+                <Field label="Target Table">
+                    {tablesLoading ? (
+                        <div className="flex items-center gap-1.5 h-7 text-xs text-muted-foreground">
+                            <Loader2 className="h-3 w-3 animate-spin" /> Loading tables…
+                        </div>
+                    ) : (
+                        <Popover>
+                            <PopoverTrigger asChild>
+                                <Button
+                                    variant="outline"
+                                    role="combobox"
+                                    className={cn(
+                                        "w-full justify-between h-7 text-xs font-normal",
+                                        !data.table_name && "text-muted-foreground"
+                                    )}
+                                >
+                                    {data.table_name
+                                        ? tables.find((t) => t === data.table_name) || data.table_name
+                                        : "Select table..."}
+                                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                </Button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-[300px] p-0">
+                                <Command>
+                                    <CommandInput placeholder="Search table..." className="h-9 text-xs" />
+                                    <CommandList>
+                                        <CommandEmpty>No table found.</CommandEmpty>
+                                        <CommandGroup>
+                                            {tables.map((t) => (
+                                                <CommandItem
+                                                    value={t}
+                                                    key={t}
+                                                    onSelect={(value) => {
+                                                        update({ table_name: value })
+                                                    }}
+                                                    className="text-xs"
+                                                >
+                                                    <Check
+                                                        className={cn(
+                                                            "mr-2 h-4 w-4",
+                                                            t === data.table_name
+                                                                ? "opacity-100"
+                                                                : "opacity-0"
+                                                        )}
+                                                    />
+                                                    {t}
+                                                </CommandItem>
+                                            ))}
+                                        </CommandGroup>
+                                    </CommandList>
+                                </Command>
+                            </PopoverContent>
+                        </Popover>
+                    )}
+                </Field>
+            )}
 
             <Field label="Write Mode">
                 <Select

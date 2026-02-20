@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import {
-  ColumnDef,
+  type ColumnDef,
   flexRender,
   getCoreRowModel,
   getFacetedRowModel,
@@ -9,9 +9,9 @@ import {
   getPaginationRowModel,
   getSortedRowModel,
   useReactTable,
-  SortingState,
-  VisibilityState,
-  ColumnFiltersState,
+  type SortingState,
+  type VisibilityState,
+  type ColumnFiltersState,
 } from '@tanstack/react-table'
 import {
   Table,

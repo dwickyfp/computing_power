@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { api } from '@/repo/client'
-import { TableWithSyncInfo, TableSyncConfig } from '@/repo/pipelines'
+import { type TableWithSyncInfo, type TableSyncConfig } from '@/repo/pipelines'
 import ace from 'ace-builds'
 import 'ace-builds/src-noconflict/ext-language_tools'
 import 'ace-builds/src-noconflict/mode-mysql'

@@ -2,7 +2,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { Play, Pause, AlertCircle } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { pipelinesRepo, Pipeline } from '@/repo/pipelines'
+import { pipelinesRepo, type Pipeline } from '@/repo/pipelines'
 import { useState } from 'react'
 import {
   Tooltip,

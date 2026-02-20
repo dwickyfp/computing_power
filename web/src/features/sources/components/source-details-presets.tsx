@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react'
 import { useParams } from '@tanstack/react-router'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { sourcesRepo, Preset } from '@/repo/sources'
+import { sourcesRepo, type Preset } from '@/repo/sources'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Loader2, Trash2, Eye, Play, Search, Grid3x3, List, Calendar, Table2, Clock } from 'lucide-react'

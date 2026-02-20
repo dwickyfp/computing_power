@@ -1,12 +1,12 @@
 import { Button } from '@/components/ui/button'
-import { Pipeline } from '@/repo/pipelines'
-import { ReactFlow, Background, Controls, Node, Edge, Position, ReactFlowProvider, useReactFlow } from '@xyflow/react'
+import { type Pipeline } from '@/repo/pipelines'
+import { ReactFlow, Background, Controls, type Node, type Edge, Position, ReactFlowProvider, useReactFlow } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import { Plus } from 'lucide-react'
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react'
 import { useTheme } from '@/context/theme-provider'
 import { AddDestinationModal } from './add-destination-modal'
-import { PipelineNode, PipelineNodeData } from './pipeline-node'
+import { PipelineNode, type PipelineNodeData } from './pipeline-node'
 import { SourceTableDrawer } from './source-table-drawer'
 
 interface PipelineFlowTabProps {

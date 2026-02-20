@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Loader2, Save, X, Database, Check, AlertCircle } from 'lucide-react'
-import { TableWithSyncInfo, TableValidationResponse } from '@/repo/pipelines'
+import { type TableWithSyncInfo, type TableValidationResponse } from '@/repo/pipelines'
 import { cn } from '@/lib/utils'
 
 interface TableTargetNameCardProps {

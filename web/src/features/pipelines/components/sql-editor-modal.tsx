@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { TableWithSyncInfo } from '@/repo/pipelines'
+import { type TableWithSyncInfo } from '@/repo/pipelines'
 import { Button } from '@/components/ui/button'
 import { X } from 'lucide-react'
 import AceEditor from 'react-ace'

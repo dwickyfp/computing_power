@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { TableWithSyncInfo, tableSyncRepo } from '@/repo/pipelines'
+import { type TableWithSyncInfo, tableSyncRepo } from '@/repo/pipelines'
 import { Switch } from '@/components/ui/switch'
 import { Button } from '@/components/ui/button'
 import { CheckCircle2, XCircle, Loader2, Play, AlertCircle } from 'lucide-react'

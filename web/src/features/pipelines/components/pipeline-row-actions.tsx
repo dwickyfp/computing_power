@@ -1,5 +1,5 @@
 import { MoreHorizontal, Lock } from 'lucide-react'
-import { Row } from '@tanstack/react-table'
+import { type Row } from '@tanstack/react-table'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -19,7 +19,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { Pipeline, pipelinesRepo } from '@/repo/pipelines'
+import { type Pipeline, pipelinesRepo } from '@/repo/pipelines'
 import { useQueryClient, useMutation } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { useState } from 'react'

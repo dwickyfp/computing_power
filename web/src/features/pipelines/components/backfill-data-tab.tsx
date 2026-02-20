@@ -1,8 +1,8 @@
 import { useState } from 'react'
 import { formatDistanceToNow, format } from 'date-fns'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { backfillApi, BackfillFilter } from '@/repo/backfill'
-import { Pipeline } from '@/repo/pipelines'
+import { backfillApi, type BackfillFilter } from '@/repo/backfill'
+import { type Pipeline } from '@/repo/pipelines'
 import { filterV2ToSql } from '@/features/pipelines/components/table-filter-card'
 import { sourcesRepo } from '@/repo/sources'
 import {
