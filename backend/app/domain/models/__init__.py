@@ -46,8 +46,6 @@ from app.domain.models.schedule import (
     ScheduleStatus,
     ScheduleRunStatus,
 )
-from app.domain.models.data_catalog import DataCatalog, DataDictionary
-from app.domain.models.alert_rule import AlertRule, AlertHistory
 from app.domain.models.flow_task_graph_version import FlowTaskGraphVersion
 from app.domain.models.flow_task_watermark import FlowTaskWatermark
 
@@ -83,10 +81,6 @@ __all__ = [
     "ScheduleTaskType",
     "ScheduleStatus",
     "ScheduleRunStatus",
-    "DataCatalog",
-    "DataDictionary",
-    "AlertRule",
-    "AlertHistory",
     "FlowTaskGraphVersion",
     "FlowTaskWatermark",
 ]

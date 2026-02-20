@@ -20,8 +20,6 @@ from app.api.v1.endpoints import (
     flow_tasks,
     linked_tasks,
     schedules,
-    data_catalog,
-    alert_rules,
     schema_validation,
 )
 
@@ -72,14 +70,6 @@ api_router.include_router(
 )
 
 api_router.include_router(schedules.router, prefix="/schedules", tags=["schedules"])
-
-api_router.include_router(
-    data_catalog.router, prefix="/data-catalog", tags=["data-catalog"]
-)
-
-api_router.include_router(
-    alert_rules.router, prefix="/alert-rules", tags=["alert-rules"]
-)
 
 api_router.include_router(
     schema_validation.router, prefix="/schema", tags=["schema-validation"]

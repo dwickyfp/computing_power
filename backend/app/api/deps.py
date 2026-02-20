@@ -157,15 +157,3 @@ def get_schedule_service(db: Session = Depends(get_db)) -> "ScheduleService":
     return ScheduleService(db)
 
 
-def get_data_catalog_service(db: Session = Depends(get_db)) -> "DataCatalogService":
-    """Get data catalog service dependency."""
-    from app.domain.services.data_catalog import DataCatalogService
-
-    return DataCatalogService(db)
-
-
-def get_alert_rule_service(db: Session = Depends(get_db)) -> "AlertRuleService":
-    """Get alert rule service dependency."""
-    from app.domain.services.alert_rule import AlertRuleService
-
-    return AlertRuleService(db)

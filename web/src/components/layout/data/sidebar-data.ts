@@ -12,8 +12,6 @@ import {
   GitBranch,
   Link2,
   Calendar,
-  BookOpen,
-  ShieldAlert,
 } from 'lucide-react'
 import { type SidebarData } from '../types'
 
@@ -83,21 +81,6 @@ export const sidebarData: SidebarData = {
           title: 'Schedule',
           icon: Calendar,
           url: '/schedules',
-        },
-      ],
-    },
-    {
-      title: 'Data Governance',
-      items: [
-        {
-          title: 'Data Catalog',
-          icon: BookOpen,
-          url: '/data-catalog',
-        },
-        {
-          title: 'Alert Rules',
-          icon: ShieldAlert,
-          url: '/alert-rules',
         },
       ],
     },
