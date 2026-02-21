@@ -9,7 +9,7 @@ from typing import List
 from fastapi import APIRouter, Depends, Query, status
 from pydantic import BaseModel
 
-from app.api.deps import get_source_service, get_preset_service
+from app.api.deps import get_source_service, get_source_service_readonly, get_preset_service
 from app.domain.schemas.source import (
     PublicationCreateRequest,
     SourceCreate,
@@ -60,7 +60,7 @@ def list_sources(
     limit: int = Query(
         100, ge=1, le=1000, description="Maximum number of items to return"
     ),
-    service: SourceService = Depends(get_source_service),
+    service: SourceService = Depends(get_source_service_readonly),
 ) -> List[SourceResponse]:
     """
     List all sources with pagination.
@@ -84,7 +84,7 @@ def list_sources(
     description="Get a specific source by ID",
 )
 def get_source(
-    source_id: int, service: SourceService = Depends(get_source_service)
+    source_id: int, service: SourceService = Depends(get_source_service_readonly)
 ) -> SourceResponse:
     """
     Get source by ID.

@@ -6,9 +6,10 @@ with PostgreSQL WAL monitoring capabilities.
 """
 
 import asyncio
+import json
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request, status
+from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -262,6 +263,157 @@ async def health_check():
             "compute": compute_healthy,
         },
     }
+
+
+# ─── D5: WebSocket Real-Time Pipeline Metrics Stream ──────────────────────────
+
+class MetricsConnectionManager:
+    """Manages WebSocket connections for real-time metrics streaming."""
+
+    def __init__(self):
+        self.active_connections: list[WebSocket] = []
+
+    async def connect(self, websocket: WebSocket):
+        await websocket.accept()
+        self.active_connections.append(websocket)
+        logger.info(
+            f"WebSocket client connected. Active: {len(self.active_connections)}"
+        )
+
+    def disconnect(self, websocket: WebSocket):
+        if websocket in self.active_connections:
+            self.active_connections.remove(websocket)
+        logger.info(
+            f"WebSocket client disconnected. Active: {len(self.active_connections)}"
+        )
+
+    async def broadcast(self, data: dict):
+        """Send data to all connected clients."""
+        disconnected = []
+        for connection in self.active_connections:
+            try:
+                await connection.send_json(data)
+            except Exception:
+                disconnected.append(connection)
+        for conn in disconnected:
+            self.disconnect(conn)
+
+
+metrics_manager = MetricsConnectionManager()
+
+
+def _collect_pipeline_metrics() -> dict:
+    """Collect current pipeline metrics from database (runs in thread)."""
+    from app.core.database import get_db
+    from sqlalchemy import text
+
+    try:
+        db = next(get_db())
+        try:
+            # Pipeline status counts
+            status_rows = db.execute(
+                text(
+                    "SELECT status, COUNT(*) as count FROM pipeline_metadata "
+                    "GROUP BY status"
+                )
+            ).fetchall()
+            status_counts = {row.status: row.count for row in status_rows}
+
+            # System metrics (latest)
+            sys_row = db.execute(
+                text(
+                    "SELECT cpu_percent, memory_percent, created_at "
+                    "FROM system_metrics ORDER BY created_at DESC LIMIT 1"
+                )
+            ).fetchone()
+
+            system_metrics = {}
+            if sys_row:
+                system_metrics = {
+                    "cpu_percent": sys_row.cpu_percent,
+                    "memory_percent": sys_row.memory_percent,
+                    "collected_at": sys_row.created_at.isoformat() if sys_row.created_at else None,
+                }
+
+            # WAL size
+            wal_row = db.execute(
+                text(
+                    "SELECT config_value FROM rosetta_setting_configuration "
+                    "WHERE config_key = 'CURRENT_WAL_SIZE'"
+                )
+            ).fetchone()
+            wal_size = wal_row.config_value if wal_row else None
+
+            # Error count (last hour)
+            error_row = db.execute(
+                text(
+                    "SELECT COUNT(*) as cnt FROM notification_log "
+                    "WHERE type = 'ERROR' AND created_at > NOW() - INTERVAL '1 hour'"
+                )
+            ).fetchone()
+            recent_errors = error_row.cnt if error_row else 0
+
+            return {
+                "type": "pipeline_metrics",
+                "timestamp": datetime.utcnow().isoformat(),
+                "pipeline_status": status_counts,
+                "system": system_metrics,
+                "wal_size_mb": wal_size,
+                "recent_errors": recent_errors,
+            }
+        finally:
+            db.close()
+    except Exception as e:
+        logger.warning(f"Failed to collect pipeline metrics: {e}")
+        return {
+            "type": "pipeline_metrics",
+            "timestamp": datetime.utcnow().isoformat(),
+            "error": str(e),
+        }
+
+
+@app.websocket("/ws/metrics")
+async def websocket_metrics(websocket: WebSocket):
+    """
+    WebSocket endpoint for real-time pipeline metrics (D5).
+
+    Streams pipeline status, system metrics, and alerts every 5 seconds.
+    Clients can send JSON messages to control the stream:
+      {"action": "set_interval", "interval": 10}  — change push interval (seconds)
+    """
+    await metrics_manager.connect(websocket)
+    push_interval = 5  # default 5 seconds
+
+    try:
+        while True:
+            # Collect and send metrics
+            metrics = await asyncio.to_thread(_collect_pipeline_metrics)
+            await websocket.send_json(metrics)
+
+            # Wait for interval, but also listen for client messages
+            try:
+                msg = await asyncio.wait_for(
+                    websocket.receive_text(), timeout=push_interval
+                )
+                try:
+                    parsed = json.loads(msg)
+                    if parsed.get("action") == "set_interval":
+                        new_interval = int(parsed.get("interval", 5))
+                        push_interval = max(1, min(60, new_interval))
+                        await websocket.send_json({
+                            "type": "config_ack",
+                            "interval": push_interval,
+                        })
+                except (json.JSONDecodeError, ValueError):
+                    pass
+            except asyncio.TimeoutError:
+                pass  # Just continue to next push cycle
+
+    except WebSocketDisconnect:
+        metrics_manager.disconnect(websocket)
+    except Exception as e:
+        logger.warning(f"WebSocket error: {e}")
+        metrics_manager.disconnect(websocket)
 
 
 if __name__ == "__main__":

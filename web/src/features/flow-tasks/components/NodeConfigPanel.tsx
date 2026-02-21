@@ -23,7 +23,20 @@ import {
 } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { Separator } from '@/components/ui/separator'
-import { X, Trash2, Eye, Loader2, Plus, GripVertical, AlertCircle } from 'lucide-react'
+import {
+    Command,
+    CommandEmpty,
+    CommandGroup,
+    CommandInput,
+    CommandItem,
+    CommandList,
+} from '@/components/ui/command'
+import {
+    Popover,
+    PopoverContent,
+    PopoverTrigger,
+} from '@/components/ui/popover'
+import { X, Trash2, Eye, Loader2, Plus, GripVertical, AlertCircle, Check, ChevronsUpDown } from 'lucide-react'
 import type { FlowNodeType, FlowNodeData, WriteMode } from '@/repo/flow-tasks'
 import type { ColumnInfo } from '@/repo/flow-tasks'
 import { sourcesRepo } from '@/repo/sources'
@@ -242,9 +255,10 @@ export function NodeConfigPanel() {
             {/* Header */}
             <div className="flex items-center justify-between px-3 py-2 border-b border-border/50">
                 <p className="text-sm font-semibold capitalize">
-                    {selectedNode.type} Config
+                    {selectedNode.type === 'note' ? 'Note' : `${selectedNode.type} Config`}
                 </p>
                 <div className="flex gap-1">
+                    {selectedNode.type !== 'note' && (
                     <Button
                         variant="ghost"
                         size="icon"
@@ -259,6 +273,7 @@ export function NodeConfigPanel() {
                     >
                         <Eye className="h-3.5 w-3.5" />
                     </Button>
+                    )}
                     <Button
                         variant="ghost"
                         size="icon"
@@ -280,6 +295,8 @@ export function NodeConfigPanel() {
             </div>
 
             {/* Common: Label */}
+            {/* Common: Label — hidden for note nodes (they use note_content) */}
+            {selectedNode.type !== 'note' && (
             <div className="px-3 py-3 space-y-3">
                 <Field label="Label">
                     <Input
@@ -290,8 +307,9 @@ export function NodeConfigPanel() {
                     />
                 </Field>
             </div>
+            )}
 
-            <Separator />
+            {selectedNode.type !== 'note' && <Separator />}
 
             {/* Type-specific config */}
             <div className="px-3 py-3 space-y-3">
@@ -347,6 +365,10 @@ function NodeTypeConfig({
             return <PivotConfig data={data} update={update} nodeId={nodeId} flowTaskId={flowTaskId} />
         case 'output':
             return <OutputConfig data={data} update={update} nodeId={nodeId} flowTaskId={flowTaskId} />
+        case 'sql':
+            return <SqlConfig data={data} update={update} nodeId={nodeId} flowTaskId={flowTaskId} />
+        case 'note':
+            return <NoteConfig data={data} update={update} nodeId={nodeId} flowTaskId={flowTaskId} />
         default:
             return (
                 <p className="text-xs text-muted-foreground">No config for this node type.</p>
@@ -356,10 +378,13 @@ function NodeTypeConfig({
 
 // ─── Input ─────────────────────────────────────────────────────────────────────
 
-function InputConfig({ data, update, nodeId: _nodeId, flowTaskId: _flowTaskId }: ConfigFormProps) {
+function InputConfig({ data, update, nodeId, flowTaskId }: ConfigFormProps) {
     const sourceType = (data.source_type as 'POSTGRES' | 'SNOWFLAKE') || 'POSTGRES'
     const sourceId = data.source_id as number | undefined
     const destinationId = data.destination_id as number | undefined
+
+    // Resolve input node schema for column-aware filter builder
+    const { columns: inputColumns, isLoading: schemaLoading } = useNodeSchema(flowTaskId, nodeId)
 
     // Fetch all postgres sources (always fetched when type is POSTGRES)
     const { data: sourcesData, isLoading: sourcesLoading } = useQuery({
@@ -413,7 +438,8 @@ function InputConfig({ data, update, nodeId: _nodeId, flowTaskId: _flowTaskId }:
         queryKey: ['source-available-tables', sourceId],
         queryFn: () => sourcesRepo.getAvailableTables(sourceId!),
         enabled: sourceType === 'POSTGRES' && !!sourceId,
-        staleTime: 30_000,
+        staleTime: 0,
+        refetchOnMount: 'always',
     })
 
     // Fetch table list for postgres destination (when destination is selected in POSTGRES mode)
@@ -421,7 +447,8 @@ function InputConfig({ data, update, nodeId: _nodeId, flowTaskId: _flowTaskId }:
         queryKey: ['destination-tables', destinationId],
         queryFn: () => destinationsRepo.getTableList(destinationId!),
         enabled: pgUseDestTable,
-        staleTime: 30_000,
+        staleTime: 0,
+        refetchOnMount: 'always',
     })
 
     // Fetch table list for selected snowflake destination
@@ -429,7 +456,8 @@ function InputConfig({ data, update, nodeId: _nodeId, flowTaskId: _flowTaskId }:
         queryKey: ['destination-tables', destinationId],
         queryFn: () => destinationsRepo.getTableList(destinationId!),
         enabled: sourceType === 'SNOWFLAKE' && !!destinationId,
-        staleTime: 30_000,
+        staleTime: 0,
+        refetchOnMount: 'always',
     })
 
     const tables: string[] =
@@ -549,27 +577,53 @@ function InputConfig({ data, update, nodeId: _nodeId, flowTaskId: _flowTaskId }:
                             <Loader2 className="h-3 w-3 animate-spin" /> Loading tables…
                         </div>
                     ) : (
-                        <Select
-                            value={(data.table_name as string) || ''}
-                            onValueChange={(v) => update({ table_name: v })}
-                        >
-                            <SelectTrigger className="h-7 text-xs w-full">
-                                <SelectValue placeholder="Select table…" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                {tables.length === 0 ? (
-                                    <div className="px-2 py-1.5 text-xs text-muted-foreground">
-                                        No tables found
-                                    </div>
-                                ) : (
-                                    tables.map((t) => (
-                                        <SelectItem key={t} value={t}>
-                                            {t}
-                                        </SelectItem>
-                                    ))
-                                )}
-                            </SelectContent>
-                        </Select>
+                        <Popover>
+                            <PopoverTrigger asChild>
+                                <Button
+                                    variant="outline"
+                                    role="combobox"
+                                    className={cn(
+                                        "w-full justify-between h-7 text-xs font-normal",
+                                        !data.table_name && "text-muted-foreground"
+                                    )}
+                                >
+                                    {data.table_name
+                                        ? tables.find((t) => t === data.table_name)
+                                        : "Select table..."}
+                                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                </Button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-[300px] p-0">
+                                <Command>
+                                    <CommandInput placeholder="Search table..." className="h-9 text-xs" />
+                                    <CommandList>
+                                        <CommandEmpty>No table found.</CommandEmpty>
+                                        <CommandGroup>
+                                            {tables.map((t) => (
+                                                <CommandItem
+                                                    value={t}
+                                                    key={t}
+                                                    onSelect={(value) => {
+                                                        update({ table_name: value })
+                                                    }}
+                                                    className="text-xs"
+                                                >
+                                                    <Check
+                                                        className={cn(
+                                                            "mr-2 h-4 w-4",
+                                                            t === data.table_name
+                                                                ? "opacity-100"
+                                                                : "opacity-0"
+                                                        )}
+                                                    />
+                                                    {t}
+                                                </CommandItem>
+                                            ))}
+                                        </CommandGroup>
+                                    </CommandList>
+                                </Command>
+                            </PopoverContent>
+                        </Popover>
                     )}
                 </Field>
             )}
@@ -613,7 +667,149 @@ function InputConfig({ data, update, nodeId: _nodeId, flowTaskId: _flowTaskId }:
                     </SelectContent>
                 </Select>
             </Field>
+
+            <Separator className="my-2" />
+
+            {/* Filter Data — WHERE clause applied at source level */}
+            <InputFilterSection
+                data={data}
+                update={update}
+                columns={inputColumns}
+                isLoading={schemaLoading}
+            />
         </>
+    )
+}
+
+// ─── Input Filter Section ──────────────────────────────────────────────────────
+
+const INPUT_FILTER_OPERATORS = [
+    '=', '!=', '>', '<', '>=', '<=',
+    'LIKE', 'NOT LIKE', 'IS NULL', 'IS NOT NULL',
+    'IN', 'NOT IN', 'BETWEEN',
+]
+
+interface InputFilterRow { col: string; op: string; val: string }
+
+function InputFilterSection({
+    data,
+    update,
+    columns,
+    isLoading,
+}: {
+    data: FlowNodeData
+    update: (patch: Partial<FlowNodeData>) => void
+    columns: ColumnInfo[]
+    isLoading: boolean
+}) {
+    const filterRows: InputFilterRow[] = (data.filter_rows as InputFilterRow[]) || []
+
+    const setFilterRows = (rows: InputFilterRow[]) => {
+        const expr = rows
+            .filter((r) => r.col && r.op)
+            .map((r) => {
+                if (r.op === 'IS NULL') return `${r.col} IS NULL`
+                if (r.op === 'IS NOT NULL') return `${r.col} IS NOT NULL`
+                if (r.op === 'IN' || r.op === 'NOT IN') return `${r.col} ${r.op} (${r.val})`
+                if (r.op === 'BETWEEN') {
+                    const parts = r.val.split(',').map((s) => s.trim())
+                    if (parts.length === 2) return `${r.col} BETWEEN '${parts[0]}' AND '${parts[1]}'`
+                    return `${r.col} BETWEEN ${r.val}`
+                }
+                return `${r.col} ${r.op} '${r.val}'`
+            })
+            .join(' AND ')
+        update({ filter_rows: rows, filter_sql: expr || undefined })
+    }
+
+    return (
+        <Field label="Filter Data (WHERE)">
+            <div className="space-y-1.5">
+                {filterRows.map((row, i) => (
+                    <div key={i} className="flex gap-1 items-center">
+                        <Select
+                            value={row.col}
+                            onValueChange={(v) => {
+                                const next = [...filterRows]
+                                next[i] = { ...next[i], col: v }
+                                setFilterRows(next)
+                            }}
+                        >
+                            <SelectTrigger className="!h-7 px-2 text-[11px] flex-1 min-w-0">
+                                <SelectValue placeholder="col" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {isLoading ? (
+                                    <div className="px-2 py-1 text-xs flex items-center gap-1">
+                                        <Loader2 className="h-3 w-3 animate-spin" /> Loading…
+                                    </div>
+                                ) : (
+                                    columns.map((c) => (
+                                        <SelectItem key={c.column_name} value={c.column_name}>
+                                            <span>{c.column_name}</span>
+                                            <span className="ml-1 text-[9px] text-muted-foreground">{c.data_type}</span>
+                                        </SelectItem>
+                                    ))
+                                )}
+                            </SelectContent>
+                        </Select>
+                        <Select
+                            value={row.op}
+                            onValueChange={(v) => {
+                                const next = [...filterRows]
+                                next[i] = { ...next[i], op: v }
+                                setFilterRows(next)
+                            }}
+                        >
+                            <SelectTrigger className="!h-7 px-2 text-[11px] w-24 shrink-0">
+                                <SelectValue placeholder="op" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {INPUT_FILTER_OPERATORS.map((op) => (
+                                    <SelectItem key={op} value={op}>{op}</SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                        {row.op !== 'IS NULL' && row.op !== 'IS NOT NULL' ? (
+                            <Input
+                                className="!h-7 !py-0 px-2 text-[11px] flex-1 min-w-0"
+                                value={row.val}
+                                onChange={(e) => {
+                                    const next = [...filterRows]
+                                    next[i] = { ...next[i], val: e.target.value }
+                                    setFilterRows(next)
+                                }}
+                                placeholder={row.op === 'BETWEEN' ? 'val1, val2' : row.op === 'IN' || row.op === 'NOT IN' ? "'a','b','c'" : 'value'}
+                            />
+                        ) : (
+                            <div className="flex-1" />
+                        )}
+                        <Button
+                            variant="ghost" size="icon"
+                            className="!h-7 !w-7 shrink-0 hover:text-destructive"
+                            onClick={() => setFilterRows(filterRows.filter((_, j) => j !== i))}
+                        >
+                            <X className="h-3 w-3" />
+                        </Button>
+                    </div>
+                ))}
+                <Button
+                    variant="outline" size="sm"
+                    className="h-6 text-[11px] w-full gap-1"
+                    onClick={() => setFilterRows([...filterRows, { col: '', op: '=', val: '' }])}
+                >
+                    <Plus className="h-3 w-3" /> Add filter
+                </Button>
+                {filterRows.length > 0 && (
+                    <div className="rounded-md bg-muted/50 p-2 mt-1">
+                        <p className="text-[9px] font-medium text-muted-foreground uppercase mb-0.5">Generated SQL</p>
+                        <p className="text-[10px] font-mono text-muted-foreground break-all">
+                            {(data.filter_sql as string) || '—'}
+                        </p>
+                    </div>
+                )}
+            </div>
+        </Field>
     )
 }
 
@@ -631,16 +827,19 @@ function CleanConfig({ data, update, nodeId, flowTaskId }: ConfigFormProps) {
     const filterRows: FilterRow[] = (data.filter_rows as FilterRow[]) || []
     const selectColumns: string[] = (data.select_columns as string[]) || []
 
-    // rename_columns is Record<string, string> (old → new)
-    const renameMap: Record<string, string> = (data.rename_columns as Record<string, string>) || {}
-    const renameRows = Object.entries(renameMap)
+    // Rename pairs stored as array for UI; compiled to Record for the compiler.
+    // _rename_pairs is the source of truth for the UI list.
+    const renamePairs: [string, string][] =
+        (data._rename_pairs as [string, string][] | undefined) ??
+        Object.entries((data.rename_columns as Record<string, string>) || {})
 
-    const setRenameRows = (pairs: [string, string][]) => {
+    const setRenamePairs = (pairs: [string, string][]) => {
+        // Build the clean record for the compiler (skip empty keys)
         const record: Record<string, string> = {}
         for (const [from, to] of pairs) {
             if (from) record[from] = to
         }
-        update({ rename_columns: record })
+        update({ rename_columns: record, _rename_pairs: pairs })
     }
 
     const setFilterRows = (rows: FilterRow[]) => {
@@ -764,15 +963,15 @@ function CleanConfig({ data, update, nodeId, flowTaskId }: ConfigFormProps) {
 
             <Field label="Rename columns">
                 <div className="space-y-1.5">
-                    {renameRows.map(([from, to], i) => (
+                    {renamePairs.map(([from, to], i) => (
                         <div key={i} className="flex gap-1 items-center">
                             <ColumnSelect
                                 columns={columns}
                                 value={from}
                                 onChange={(v) => {
-                                    const next = [...renameRows] as [string, string][]
+                                    const next = [...renamePairs] as [string, string][]
                                     next[i] = [v, to]
-                                    setRenameRows(next)
+                                    setRenamePairs(next)
                                 }}
                                 placeholder="Column"
                                 isLoading={isLoading}
@@ -782,16 +981,16 @@ function CleanConfig({ data, update, nodeId, flowTaskId }: ConfigFormProps) {
                                 className="!h-8 !py-0 px-2 text-[11px] flex-1 min-w-0"
                                 value={to}
                                 onChange={(e) => {
-                                    const next = [...renameRows] as [string, string][]
+                                    const next = [...renamePairs] as [string, string][]
                                     next[i] = [from, e.target.value]
-                                    setRenameRows(next)
+                                    setRenamePairs(next)
                                 }}
                                 placeholder="New name"
                             />
                             <Button
                                 variant="ghost" size="icon"
                                 className="!h-7 !w-7 shrink-0 hover:text-destructive"
-                                onClick={() => setRenameRows(renameRows.filter((_, j) => j !== i) as [string, string][])}
+                                onClick={() => setRenamePairs(renamePairs.filter((_, j) => j !== i) as [string, string][])}
                             >
                                 <X className="h-3 w-3" />
                             </Button>
@@ -800,13 +999,292 @@ function CleanConfig({ data, update, nodeId, flowTaskId }: ConfigFormProps) {
                     <Button
                         variant="outline" size="sm"
                         className="h-6 text-[11px] w-full gap-1"
-                        onClick={() => setRenameRows([...renameRows, ['', '']] as [string, string][])}
+                        onClick={() => setRenamePairs([...renamePairs, ['', '']] as [string, string][])}
                     >
                         <Plus className="h-3 w-3" /> Add rename
                     </Button>
                 </div>
             </Field>
+
+            <Separator className="my-2" />
+
+            {/* Cast columns — change column data types */}
+            <CastColumnsSection
+                data={data}
+                update={update}
+                columns={columns}
+                isLoading={isLoading}
+            />
+
+            <Separator className="my-2" />
+
+            {/* SQL Expressions — COALESCE, NULLIF, TRIM, etc. */}
+            <ExpressionsSection
+                data={data}
+                update={update}
+                columns={columns}
+                isLoading={isLoading}
+            />
         </>
+    )
+}
+
+// ─── Cast Columns Section ──────────────────────────────────────────────────────
+
+const DUCKDB_TYPES = [
+    'VARCHAR', 'TEXT', 'INTEGER', 'BIGINT', 'SMALLINT', 'TINYINT',
+    'FLOAT', 'DOUBLE', 'DECIMAL', 'NUMERIC',
+    'BOOLEAN', 'DATE', 'TIMESTAMP', 'TIMESTAMPTZ', 'TIME',
+    'BLOB', 'JSON', 'UUID', 'HUGEINT',
+]
+
+interface CastRow { column: string; target_type: string }
+
+function CastColumnsSection({
+    data,
+    update,
+    columns,
+    isLoading,
+}: {
+    data: FlowNodeData
+    update: (patch: Partial<FlowNodeData>) => void
+    columns: ColumnInfo[]
+    isLoading: boolean
+}) {
+    const castRows: CastRow[] = (data.cast_columns as CastRow[]) || []
+
+    const setCastRows = (rows: CastRow[]) => {
+        // Keep all rows (including incomplete) so newly added rows stay visible in the UI.
+        // The compiler ignores rows with empty column or target_type.
+        update({ cast_columns: rows })
+    }
+
+    return (
+        <Field label="Cast Columns (Type Conversion)">
+            <div className="space-y-1.5">
+                {/* Header */}
+                {castRows.length > 0 && (
+                    <div className="grid grid-cols-[1fr_100px_28px] gap-1 px-1 mb-0.5">
+                        <span className="text-[9px] text-muted-foreground uppercase tracking-wider font-semibold">Column</span>
+                        <span className="text-[9px] text-muted-foreground uppercase tracking-wider font-semibold">Target Type</span>
+                        <span />
+                    </div>
+                )}
+                {castRows.map((row, i) => (
+                    <div key={i} className="grid grid-cols-[1fr_100px_28px] gap-1 items-center group">
+                        <ColumnSelect
+                            columns={columns}
+                            value={row.column}
+                            onChange={(v) => {
+                                const next = [...castRows]
+                                next[i] = { ...next[i], column: v }
+                                setCastRows(next)
+                            }}
+                            placeholder="Column…"
+                            isLoading={isLoading}
+                            className="w-full"
+                        />
+                        <Select
+                            value={row.target_type}
+                            onValueChange={(v) => {
+                                const next = [...castRows]
+                                next[i] = { ...next[i], target_type: v }
+                                setCastRows(next)
+                            }}
+                        >
+                            <SelectTrigger className="h-7 text-[11px] w-full">
+                                <SelectValue placeholder="Type" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {DUCKDB_TYPES.map((t) => (
+                                    <SelectItem key={t} value={t}>{t}</SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                        <Button
+                            variant="ghost" size="icon"
+                            className="h-7 w-7 text-muted-foreground hover:text-destructive opacity-50 group-hover:opacity-100"
+                            onClick={() => setCastRows(castRows.filter((_, j) => j !== i))}
+                        >
+                            <X className="h-3 w-3" />
+                        </Button>
+                    </div>
+                ))}
+                <Button
+                    variant="outline" size="sm"
+                    className="h-6 text-[11px] w-full gap-1"
+                    onClick={() => setCastRows([...castRows, { column: '', target_type: 'VARCHAR' }])}
+                >
+                    <Plus className="h-3 w-3" /> Add cast
+                </Button>
+            </div>
+        </Field>
+    )
+}
+
+// ─── SQL Expressions Section ───────────────────────────────────────────────────
+
+const EXPRESSION_TEMPLATES = [
+    { label: 'COALESCE', template: "COALESCE({col}, '')" },
+    { label: 'NULLIF', template: "NULLIF({col}, '')" },
+    { label: 'UPPER', template: 'UPPER({col})' },
+    { label: 'LOWER', template: 'LOWER({col})' },
+    { label: 'TRIM', template: 'TRIM({col})' },
+    { label: 'LENGTH', template: 'LENGTH({col})' },
+    { label: 'REPLACE', template: "REPLACE({col}, 'old', 'new')" },
+    { label: 'SUBSTRING', template: 'SUBSTRING({col}, 1, 10)' },
+    { label: 'CONCAT', template: "CONCAT({col}, ' ', {col2})" },
+    { label: 'ROUND', template: 'ROUND({col}, 2)' },
+    { label: 'ABS', template: 'ABS({col})' },
+    { label: 'CEIL', template: 'CEIL({col})' },
+    { label: 'FLOOR', template: 'FLOOR({col})' },
+    { label: 'DATE_TRUNC', template: "DATE_TRUNC('day', {col})" },
+    { label: 'DATE_PART', template: "DATE_PART('year', {col})" },
+    { label: 'STRFTIME', template: "STRFTIME({col}, '%Y-%m-%d')" },
+    { label: 'CASE WHEN', template: "CASE WHEN {col} IS NULL THEN 'N/A' ELSE {col} END" },
+    { label: 'CAST', template: 'CAST({col} AS VARCHAR)' },
+    { label: 'TRY_CAST', template: 'TRY_CAST({col} AS INTEGER)' },
+    { label: 'REGEXP_REPLACE', template: "REGEXP_REPLACE({col}, '[^0-9]', '')" },
+    { label: 'IFNULL', template: "IFNULL({col}, 0)" },
+    { label: 'LIST_VALUE', template: "LIST_VALUE({col})" },
+    { label: 'STRING_SPLIT', template: "STRING_SPLIT({col}, ',')" },
+]
+
+interface ExpressionRow { expr: string; alias: string }
+
+function ExpressionsSection({
+    data,
+    update,
+    columns: _columns,
+    isLoading: _isLoading,
+}: {
+    data: FlowNodeData
+    update: (patch: Partial<FlowNodeData>) => void
+    columns: ColumnInfo[]
+    isLoading: boolean
+}) {
+    const exprRows: ExpressionRow[] = (data.expressions as ExpressionRow[]) || []
+
+    const setExprRows = (rows: ExpressionRow[]) => {
+        update({ expressions: rows })
+    }
+
+    const insertTemplate = (index: number, template: string) => {
+        const next = [...exprRows]
+        next[index] = { ...next[index], expr: template }
+        // Auto-generate alias from template function name
+        const funcMatch = template.match(/^(\w+)\(/)
+        if (funcMatch && !next[index].alias) {
+            const rand = Math.floor(Math.random() * 1000)
+            next[index].alias = `${funcMatch[1].toLowerCase()}_${rand}`
+        }
+        setExprRows(next)
+    }
+
+    return (
+        <Field label="SQL Expressions">
+            <div className="space-y-2">
+                {exprRows.map((row, i) => (
+                    <div
+                        key={i}
+                        className="space-y-1.5 p-2 rounded-md border border-border/60 bg-muted/20 animate-in fade-in slide-in-from-top-1 duration-200"
+                    >
+                        {/* Alias + delete */}
+                        <div className="flex items-center gap-1.5">
+                            <Input
+                                className="h-7 text-xs flex-1 font-mono"
+                                placeholder="alias_name"
+                                value={row.alias}
+                                onChange={(e) => {
+                                    const next = [...exprRows]
+                                    next[i] = { ...next[i], alias: e.target.value }
+                                    setExprRows(next)
+                                }}
+                            />
+                            <Button
+                                variant="ghost" size="icon"
+                                className="h-6 w-6 text-muted-foreground hover:text-destructive shrink-0"
+                                onClick={() => setExprRows(exprRows.filter((_, j) => j !== i))}
+                            >
+                                <X className="h-3 w-3" />
+                            </Button>
+                        </div>
+
+                        {/* SQL expression input */}
+                        <textarea
+                            className="w-full min-h-[48px] resize-y rounded-md border border-input bg-background px-2 py-1 text-xs font-mono placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                            placeholder="COALESCE(column_name, 'default')"
+                            value={row.expr}
+                            onChange={(e) => {
+                                const next = [...exprRows]
+                                next[i] = { ...next[i], expr: e.target.value }
+                                setExprRows(next)
+                            }}
+                        />
+
+                        {/* Quick-insert template buttons */}
+                        <div className="flex flex-wrap gap-0.5">
+                            {EXPRESSION_TEMPLATES.slice(0, 8).map((tmpl) => (
+                                <button
+                                    key={tmpl.label}
+                                    type="button"
+                                    className="rounded px-1.5 py-0.5 text-[9px] border border-border text-muted-foreground hover:border-sky-400 hover:text-sky-600 transition-colors"
+                                    onClick={() => insertTemplate(i, tmpl.template)}
+                                    title={tmpl.template}
+                                >
+                                    {tmpl.label}
+                                </button>
+                            ))}
+                        </div>
+                        <Popover>
+                            <PopoverTrigger asChild>
+                                <button
+                                    type="button"
+                                    className="text-[9px] text-sky-500 hover:text-sky-600 underline"
+                                >
+                                    More functions…
+                                </button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-[260px] p-2">
+                                <p className="text-[10px] font-semibold text-muted-foreground mb-1.5">All DuckDB Functions</p>
+                                <div className="flex flex-wrap gap-1">
+                                    {EXPRESSION_TEMPLATES.map((tmpl) => (
+                                        <button
+                                            key={tmpl.label}
+                                            type="button"
+                                            className="rounded px-1.5 py-0.5 text-[10px] border border-border text-muted-foreground hover:border-sky-400 hover:text-sky-600 transition-colors"
+                                            onClick={() => insertTemplate(i, tmpl.template)}
+                                            title={tmpl.template}
+                                        >
+                                            {tmpl.label}
+                                        </button>
+                                    ))}
+                                </div>
+                            </PopoverContent>
+                        </Popover>
+                    </div>
+                ))}
+                <Button
+                    variant="outline" size="sm"
+                    className="h-6 text-[11px] w-full gap-1"
+                    onClick={() => setExprRows([...exprRows, { expr: '', alias: '' }])}
+                >
+                    <Plus className="h-3 w-3" /> Add expression
+                </Button>
+
+                {exprRows.length === 0 && (
+                    <div className="rounded-md bg-muted/50 p-2">
+                        <p className="text-[10px] text-muted-foreground">
+                            Add SQL expressions like <code className="text-[9px] bg-muted px-1 rounded">COALESCE(col, 0)</code>,{' '}
+                            <code className="text-[9px] bg-muted px-1 rounded">UPPER(name)</code>,{' '}
+                            <code className="text-[9px] bg-muted px-1 rounded">CASE WHEN … END</code>{' '}
+                            to transform your data. Use <code className="text-[9px] bg-muted px-1 rounded">{'{col}'}</code> in templates
+                            — replace with actual column names.
+                        </p>
+                    </div>
+                )}
+            </div>
+        </Field>
     )
 }
 
@@ -1299,6 +1777,17 @@ function OutputConfig({ data, update }: ConfigFormProps) {
         staleTime: 30_000,
     })
 
+    const destinationId = data.destination_id as number | undefined
+
+    const { data: tablesData, isLoading: tablesLoading } = useQuery({
+        queryKey: ['destination-tables', destinationId],
+        queryFn: () => destinationsRepo.getTableList(destinationId!),
+        enabled: !!destinationId,
+        staleTime: 30_000,
+    })
+
+    const tables: string[] = tablesData?.tables ?? []
+
     const upsertKeys: string[] = (data.upsert_keys as string[]) || []
     const upsertKeysText = upsertKeys.join(', ')
 
@@ -1312,7 +1801,7 @@ function OutputConfig({ data, update }: ConfigFormProps) {
                 ) : (
                     <Select
                         value={data.destination_id != null ? String(data.destination_id) : ''}
-                        onValueChange={(v) => update({ destination_id: parseInt(v) })}
+                        onValueChange={(v) => update({ destination_id: parseInt(v), table_name: undefined })}
                     >
                         <SelectTrigger className="h-7 text-xs w-full">
                             <SelectValue placeholder="Select destination…" />
@@ -1336,14 +1825,63 @@ function OutputConfig({ data, update }: ConfigFormProps) {
                 />
             </Field>
 
-            <Field label="Target Table">
-                <Input
-                    className="h-7 text-xs"
-                    value={(data.table_name as string) || ''}
-                    onChange={(e) => update({ table_name: e.target.value })}
-                    placeholder="output_table"
-                />
-            </Field>
+            {!!destinationId && (
+                <Field label="Target Table">
+                    {tablesLoading ? (
+                        <div className="flex items-center gap-1.5 h-7 text-xs text-muted-foreground">
+                            <Loader2 className="h-3 w-3 animate-spin" /> Loading tables…
+                        </div>
+                    ) : (
+                        <Popover>
+                            <PopoverTrigger asChild>
+                                <Button
+                                    variant="outline"
+                                    role="combobox"
+                                    className={cn(
+                                        "w-full justify-between h-7 text-xs font-normal",
+                                        !data.table_name && "text-muted-foreground"
+                                    )}
+                                >
+                                    {data.table_name
+                                        ? tables.find((t) => t === data.table_name) || data.table_name
+                                        : "Select table..."}
+                                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                </Button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-[300px] p-0">
+                                <Command>
+                                    <CommandInput placeholder="Search table..." className="h-9 text-xs" />
+                                    <CommandList>
+                                        <CommandEmpty>No table found.</CommandEmpty>
+                                        <CommandGroup>
+                                            {tables.map((t) => (
+                                                <CommandItem
+                                                    value={t}
+                                                    key={t}
+                                                    onSelect={(value) => {
+                                                        update({ table_name: value })
+                                                    }}
+                                                    className="text-xs"
+                                                >
+                                                    <Check
+                                                        className={cn(
+                                                            "mr-2 h-4 w-4",
+                                                            t === data.table_name
+                                                                ? "opacity-100"
+                                                                : "opacity-0"
+                                                        )}
+                                                    />
+                                                    {t}
+                                                </CommandItem>
+                                            ))}
+                                        </CommandGroup>
+                                    </CommandList>
+                                </Command>
+                            </PopoverContent>
+                        </Popover>
+                    )}
+                </Field>
+            )}
 
             <Field label="Write Mode">
                 <Select
@@ -1379,6 +1917,56 @@ function OutputConfig({ data, update }: ConfigFormProps) {
                 </p>
             </Field>
         </>
+    )
+}
+
+// ─── Note ──────────────────────────────────────────────────────────────────────
+
+// ─── SQL ───────────────────────────────────────────────────────────────────────
+
+function SqlConfig({ data, update }: ConfigFormProps) {
+    const expr = (data.sql_expression as string) ?? ''
+    return (
+        <>
+            <Field label="SQL Expression">
+                <textarea
+                    className="w-full min-h-[160px] resize-y rounded-md border border-input bg-background px-3 py-2 font-mono text-xs text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                    value={expr}
+                    onChange={(e) => update({ sql_expression: e.target.value })}
+                    placeholder={`SELECT *\nFROM {{input}}\nWHERE status = 'active'`}
+                    spellCheck={false}
+                />
+            </Field>
+            <div className="rounded-md bg-muted/50 p-2 space-y-1">
+                <p className="text-[10px] font-medium text-muted-foreground">Template variables</p>
+                <p className="text-[10px] text-muted-foreground">
+                    <code className="rounded bg-muted px-1">{'{{input}}'}</code> — first upstream CTE
+                </p>
+                <p className="text-[10px] text-muted-foreground">
+                    <code className="rounded bg-muted px-1">{'{{input_N}}'}</code> — Nth upstream CTE (0-based)
+                </p>
+                <p className="text-[10px] text-muted-foreground">
+                    <code className="rounded bg-muted px-1">{'{{upstream}}'}</code> — alias for first upstream
+                </p>
+            </div>
+        </>
+    )
+}
+
+function NoteConfig({ data, update }: ConfigFormProps) {
+    const content = (data.note_content as string) ?? ''
+    return (
+        <Field label="Note content">
+            <textarea
+                className="w-full min-h-[120px] resize-y rounded-md border border-input bg-background px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                value={content}
+                onChange={(e) => update({ note_content: e.target.value })}
+                placeholder="Type your note here…"
+            />
+            <p className="text-[10px] text-muted-foreground">
+                This text is also editable directly on the canvas.
+            </p>
+        </Field>
     )
 }
 

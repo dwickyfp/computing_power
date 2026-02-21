@@ -51,6 +51,8 @@ export function DestinationTableListModal({
                 setTimeout(async () => {
                     await queryClient.invalidateQueries({ queryKey })
                     await queryClient.invalidateQueries({ queryKey: ['destinations'] })
+                    // Also invalidate destination-tables so Flow Task input nodes pick up fresh data
+                    queryClient.invalidateQueries({ queryKey: ['destination-tables'] })
                 }, 5000)
             } else {
                 toast.info(res.message)

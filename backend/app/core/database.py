@@ -6,6 +6,7 @@ Implements robust connection pool with safeguards against pool exhaustion.
 
 from contextlib import contextmanager
 from typing import Generator
+import logging as stdlib_logging
 import threading
 
 from fastapi import HTTPException
@@ -80,6 +81,14 @@ class DatabaseManager:
                     db_url,
                     **settings.get_sqlalchemy_engine_config(),
                     poolclass=QueuePool,  # Use QueuePool for production
+                )
+
+                # Ensure pool logger stays at WARNING after engine creation.
+                # create_engine() with echo_pool=True would override our
+                # setup_logging() configuration, so we re-apply the level here
+                # as a safety net.
+                stdlib_logging.getLogger("sqlalchemy.pool").setLevel(
+                    stdlib_logging.WARNING
                 )
 
                 # Create session factory
@@ -211,6 +220,43 @@ def get_db_session() -> Generator[Session, None, None]:
         session.rollback()
         logger.error(
             "Unexpected error during database session", extra={"error": str(e)}
+        )
+        raise
+    finally:
+        session.close()
+
+
+def get_db_session_readonly() -> Generator[Session, None, None]:
+    """
+    Dependency for getting a read-only database session.
+
+    Unlike get_db_session(), this does NOT call session.commit() on success.
+    Use for GET endpoints that only read data — avoids an unnecessary
+    COMMIT round-trip to PostgreSQL (~0.1-0.5ms per request).
+
+    Usage:
+        @app.get("/example")
+        def example(db: Session = Depends(get_db_session_readonly)):
+            return db.query(Model).all()
+    """
+    session = db_manager.session_factory()
+    try:
+        yield session
+    except HTTPException:
+        session.rollback()
+        raise
+    except RosettaException:
+        session.rollback()
+        raise
+    except SQLAlchemyError as e:
+        session.rollback()
+        logger.error("Database error during read-only session", extra={"error": str(e)})
+        raise DatabaseError(f"Database operation failed: {str(e)}") from e
+    except Exception as e:
+        session.rollback()
+        logger.error(
+            "Unexpected error during read-only database session",
+            extra={"error": str(e)},
         )
         raise
     finally:

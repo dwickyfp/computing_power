@@ -20,6 +20,13 @@ async def health_check():
     return {"status": "healthy"}
 
 
+@app.get("/health/pool")
+async def pool_health():
+    """Connection pool health endpoint (C3)."""
+    from core.database import get_pool_health
+    return get_pool_health()
+
+
 def run_server(host: str, port: int) -> None:
     """
     Run FastAPI server using Uvicorn.

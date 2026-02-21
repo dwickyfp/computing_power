@@ -1,106 +1,165 @@
-import { format } from 'date-fns'
+import { formatDistanceToNow, format } from 'date-fns'
 import { type ColumnDef } from '@tanstack/react-table'
 import {
   type ScheduleRunHistory,
-  type ScheduleRunStatus,
 } from '@/repo/schedules'
-import { Loader2 } from 'lucide-react'
-import { DataTableColumnHeader } from '@/components/data-table'
+import { AlertTriangle } from 'lucide-react'
+import { cn } from '@/lib/utils'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import { Badge } from '@/components/ui/badge'
 
 // ─── Helper ────────────────────────────────────────────────────────────────
 
-function RunStatusBadge({ status }: { status: ScheduleRunStatus }) {
-  const map: Record<ScheduleRunStatus, string> = {
-    RUNNING:
-      'bg-blue-100 text-blue-800 border-blue-200 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-800',
-    SUCCESS:
-      'bg-emerald-100 text-emerald-800 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-300 dark:border-emerald-800',
-    FAILED:
-      'bg-rose-100 text-rose-800 border-rose-200 dark:bg-rose-900/30 dark:text-rose-300 dark:border-rose-800',
+// Minimalist status indicator
+function StatusCell({ status }: { status: string }) {
+  if (status === 'RUNNING') {
+    return (
+      <div className="flex items-center gap-2">
+        <span className="relative flex h-2 w-2">
+          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+          <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500"></span>
+        </span>
+        <span className="text-xs font-medium text-blue-600 dark:text-blue-400">Running</span>
+      </div>
+    )
   }
-  return (
-    <span
-      className={`inline-flex items-center gap-1.5 rounded border px-2 py-0.5 text-xs font-semibold ${map[status]}`}
-    >
-      {status === 'RUNNING' && <Loader2 className='h-3 w-3 animate-spin' />}
-      {status}
-    </span>
-  )
+  if (status === 'SUCCESS') {
+    return (
+      <div className="flex items-center gap-2">
+        <div className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+        <span className="text-xs font-medium text-muted-foreground">Success</span>
+      </div>
+    )
+  }
+  if (status === 'FAILED') {
+    return (
+      <Badge variant="destructive" className="h-5 px-1.5 gap-1 text-[10px] font-semibold uppercase tracking-wider">
+        Failed
+      </Badge>
+    )
+  }
+  return <span className="text-muted-foreground">—</span>
 }
 
-function formatDuration(ms: number | null): string {
-  if (ms === null) return '—'
-  if (ms < 1000) return `${ms}ms`
-  if (ms < 60_000) return `${(ms / 1000).toFixed(1)}s`
-  return `${Math.floor(ms / 60_000)}m ${Math.floor((ms % 60_000) / 1000)}s`
+function DurationCell({ ms }: { ms: number | null }) {
+  if (ms === null) return <span className="text-muted-foreground/30 text-[10px]">—</span>
+
+  let formatted = ''
+  let unit = ''
+
+  if (ms < 1000) {
+    formatted = `${ms}`
+    unit = 'ms'
+  } else if (ms < 60_000) {
+    formatted = `${(ms / 1000).toFixed(1)}`
+    unit = 's'
+  } else {
+    const m = Math.floor(ms / 60_000)
+    const s = Math.floor((ms % 60_000) / 1000)
+    formatted = `${m}m ${s}s`
+    unit = ''
+  }
+
+  return (
+    <div className='flex items-baseline justify-end gap-0.5 font-mono text-xs'>
+      <span className={cn("font-medium", ms > 60000 ? "text-amber-600 dark:text-amber-500" : "text-foreground")}>
+        {formatted}
+      </span>
+      {unit && <span className="text-[10px] text-muted-foreground">{unit}</span>}
+    </div>
+  )
 }
 
 // ─── Columns ─────────────────────────────────────────────────────────────────
 
 export const historyColumns: ColumnDef<ScheduleRunHistory>[] = [
   {
-    accessorKey: 'triggered_at',
-    header: ({ column }) => (
-      <DataTableColumnHeader column={column} title='Triggered At' />
-    ),
-    cell: ({ row }) => (
-      <span className='text-xs tabular-nums'>
-        {format(new Date(row.original.triggered_at), 'yyyy-MM-dd HH:mm:ss')}
-      </span>
-    ),
-    meta: { className: 'w-[175px]' },
-  },
-  {
     accessorKey: 'status',
-    header: ({ column }) => (
-      <DataTableColumnHeader column={column} title='Status' />
+    header: () => (
+      <div className="ml-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground/70">Status</div>
     ),
-    cell: ({ row }) => <RunStatusBadge status={row.original.status} />,
-    meta: { className: 'w-[100px]' },
+    cell: ({ row }) => <StatusCell status={row.original.status} />,
+    meta: { className: 'w-[120px]' },
   },
   {
-    accessorKey: 'duration_ms',
-    header: ({ column }) => (
-      <DataTableColumnHeader column={column} title='Duration' />
-    ),
-    cell: ({ row }) => (
-      <span className='text-xs text-muted-foreground tabular-nums'>
-        {formatDuration(row.original.duration_ms)}
-      </span>
-    ),
-    meta: { className: 'w-[90px]' },
-  },
-  {
-    accessorKey: 'completed_at',
-    header: ({ column }) => (
-      <DataTableColumnHeader column={column} title='Completed At' />
+    accessorKey: 'triggered_at',
+    header: () => (
+      <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/70">Triggered</div>
     ),
     cell: ({ row }) => {
-      const v = row.original.completed_at
-      if (!v) return <span className='text-xs text-muted-foreground'>—</span>
+      const date = new Date(row.original.triggered_at)
       return (
-        <span className='text-xs tabular-nums'>
-          {format(new Date(v), 'yyyy-MM-dd HH:mm:ss')}
+        <TooltipProvider>
+          <Tooltip delayDuration={300}>
+            <TooltipTrigger asChild>
+              <div className="flex flex-col cursor-default">
+                <span className='text-xs font-medium text-foreground'>
+                  {formatDistanceToNow(date, { addSuffix: true })}
+                </span>
+              </div>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" className="text-xs font-mono">
+              {date.toLocaleString()}
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      )
+    },
+    meta: { className: 'w-[140px]' },
+  },
+  {
+    accessorKey: 'running_at', // Virtual accessor, we'll use triggered_at in cell
+    header: () => (
+      <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/70">Running</div>
+    ),
+    cell: ({ row }) => {
+      const date = new Date(row.original.triggered_at)
+      return (
+        <span className='text-xs font-medium text-foreground font-mono'>
+          {format(date, 'dd-MM-yyyy HH:mm:ss')}
         </span>
       )
     },
-    meta: { className: 'w-[175px]' },
+    meta: { className: 'w-[160px]' },
+  },
+  {
+    accessorKey: 'duration_ms',
+    header: () => (
+      <div className="w-full text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground/70">Duration</div>
+    ),
+    cell: ({ row }) => <DurationCell ms={row.original.duration_ms} />,
+    meta: { className: 'w-[100px]' },
   },
   {
     accessorKey: 'message',
-    header: ({ column }) => (
-      <DataTableColumnHeader column={column} title='Message' />
+    header: () => (
+      <div className="ml-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground/70">Message</div>
     ),
     cell: ({ row }) => {
       const msg = row.original.message
-      if (!msg) return <span className='text-xs text-muted-foreground'>—</span>
+      if (!msg) return <span className='text-xs text-muted-foreground/30 pl-4'>—</span>
+
       return (
-        <span
-          className='block max-w-[300px] truncate text-xs text-muted-foreground'
-          title={msg}
-        >
-          {msg}
-        </span>
+        <TooltipProvider>
+          <Tooltip delayDuration={0}>
+            <TooltipTrigger asChild>
+              <div className='flex items-center gap-2 max-w-[350px] cursor-default pl-4 group'>
+                {row.original.status === 'FAILED' && (
+                  <AlertTriangle className="h-3.5 w-3.5 text-destructive shrink-0" />
+                )}
+                <span className={cn(
+                  'truncate text-xs transition-colors',
+                  row.original.status === 'FAILED' ? 'text-destructive font-medium' : 'text-muted-foreground group-hover:text-foreground'
+                )}>
+                  {msg}
+                </span>
+              </div>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" align="start" className="max-w-[400px] break-words text-xs bg-foreground text-background">
+              {msg}
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
       )
     },
   },

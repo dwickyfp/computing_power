@@ -8,7 +8,7 @@ from typing import List
 
 from fastapi import APIRouter, Depends, Query, status
 
-from app.api.deps import get_destination_service
+from app.api.deps import get_destination_service, get_destination_service_readonly
 from app.domain.schemas.destination import (
     DestinationCreate,
     DestinationResponse,
@@ -55,7 +55,7 @@ def list_destinations(
     limit: int = Query(
         100, ge=1, le=1000, description="Maximum number of items to return"
     ),
-    service: DestinationService = Depends(get_destination_service),
+    service: DestinationService = Depends(get_destination_service_readonly),
 ) -> List[DestinationResponse]:
     """
     List all destinations with pagination.
@@ -79,7 +79,7 @@ def list_destinations(
     description="Get a specific destination by ID",
 )
 def get_destination(
-    destination_id: int, service: DestinationService = Depends(get_destination_service)
+    destination_id: int, service: DestinationService = Depends(get_destination_service_readonly)
 ) -> DestinationResponse:
     """
     Get destination by ID.

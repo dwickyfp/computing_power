@@ -27,15 +27,105 @@ from app.domain.repositories.flow_task import (
     FlowTaskRepository,
     FlowTaskRunHistoryRepository,
     FlowTaskRunNodeLogRepository,
+    FlowTaskGraphVersionRepository,
+    FlowTaskWatermarkRepository,
 )
+from app.domain.repositories.notification_log_repo import NotificationLogRepository
 from app.domain.schemas.flow_task import (
     FlowTaskCreate,
     FlowTaskGraphSave,
     FlowTaskUpdate,
     NodePreviewRequest,
 )
+from app.domain.schemas.notification_log import NotificationLogCreate
 
 logger = get_logger(__name__)
+
+
+# ─── Graph diff utilities ─────────────────────────────────────────────────────
+
+
+def _strip_position(node: dict) -> dict:
+    """Return a copy of *node* without the ``position`` key."""
+    return {k: v for k, v in node.items() if k != "position"}
+
+
+def _compute_graph_diff(
+    old_nodes: list,
+    old_edges: list,
+    new_nodes: list,
+    new_edges: list,
+) -> Optional[str]:
+    """Compare two graph snapshots ignoring node positions.
+
+    Returns:
+        ``None``  – no meaningful change (position-only or identical).
+        A human-readable summary string when structural/data changes exist.
+    """
+    # Normalize nodes (strip positions) and sort by id for stable comparison
+    old_norm = sorted(
+        [_strip_position(n) for n in old_nodes], key=lambda n: n.get("id", "")
+    )
+    new_norm = sorted(
+        [_strip_position(n) for n in new_nodes], key=lambda n: n.get("id", "")
+    )
+
+    # Normalize edges and sort by id
+    old_edges_sorted = sorted(old_edges, key=lambda e: e.get("id", ""))
+    new_edges_sorted = sorted(new_edges, key=lambda e: e.get("id", ""))
+
+    if old_norm == new_norm and old_edges_sorted == new_edges_sorted:
+        return None  # identical (or position-only change)
+
+    # Build change summary ---------------------------------------------------
+    changes: list[str] = []
+
+    old_ids = {n["id"] for n in old_nodes}
+    new_ids = {n["id"] for n in new_nodes}
+
+    # Added nodes
+    for nid in sorted(new_ids - old_ids):
+        node = next(n for n in new_nodes if n["id"] == nid)
+        label = node.get("data", {}).get("label") or node.get("label", nid)
+        changes.append(f"Added {node.get('type', 'node')} '{label}'")
+
+    # Removed nodes
+    for nid in sorted(old_ids - new_ids):
+        node = next(n for n in old_nodes if n["id"] == nid)
+        label = node.get("data", {}).get("label") or node.get("label", nid)
+        changes.append(f"Removed {node.get('type', 'node')} '{label}'")
+
+    # Modified nodes (data/type changed, not position)
+    old_map = {n["id"]: _strip_position(n) for n in old_nodes}
+    new_map = {n["id"]: _strip_position(n) for n in new_nodes}
+    for nid in sorted(old_ids & new_ids):
+        if old_map[nid] != new_map[nid]:
+            node = next(n for n in new_nodes if n["id"] == nid)
+            label = node.get("data", {}).get("label") or node.get("label", nid)
+            changes.append(f"Updated {node.get('type', 'node')} '{label}'")
+
+    # Edge changes
+    old_edge_ids = {e["id"] for e in old_edges}
+    new_edge_ids = {e["id"] for e in new_edges}
+    added_edges = len(new_edge_ids - old_edge_ids)
+    removed_edges = len(old_edge_ids - new_edge_ids)
+    if added_edges:
+        changes.append(f"Added {added_edges} connection(s)")
+    if removed_edges:
+        changes.append(f"Removed {removed_edges} connection(s)")
+
+    # Edge data modifications (same id but different content)
+    old_edge_map = {e["id"]: e for e in old_edges}
+    new_edge_map = {e["id"]: e for e in new_edges}
+    modified_edges = sum(
+        1
+        for eid in old_edge_ids & new_edge_ids
+        if old_edge_map[eid] != new_edge_map[eid]
+    )
+    if modified_edges:
+        changes.append(f"Modified {modified_edges} connection(s)")
+
+    return "; ".join(changes) if changes else "Graph updated"
 
 
 class FlowTaskService:
@@ -52,6 +142,43 @@ class FlowTaskService:
         self.graph_repo = FlowTaskGraphRepository(db)
         self.run_history_repo = FlowTaskRunHistoryRepository(db)
         self.node_log_repo = FlowTaskRunNodeLogRepository(db)
+        self.notification_repo = NotificationLogRepository(db)
+        self.version_repo = FlowTaskGraphVersionRepository(db)
+        self.watermark_repo = FlowTaskWatermarkRepository(db)
+
+    # ─── Notification helper ───────────────────────────────────────────────
+
+    def _push_notification(
+        self,
+        key: str,
+        title: str,
+        message: str,
+        notif_type: str = "ERROR",
+    ) -> None:
+        """Upsert a notification into notification_log.
+
+        Uses upsert_notification_by_key which increments iteration_check
+        on repeated same-key entries, triggering dispatch once it reaches
+        NOTIFICATION_ITERATION_DEFAULT (default 3).
+        Swallows exceptions so notification failures never break the caller.
+        """
+        try:
+            self.notification_repo.upsert_notification_by_key(
+                NotificationLogCreate(
+                    key_notification=key,
+                    title=title,
+                    message=message[:2000],
+                    type=notif_type,
+                    is_read=False,
+                    is_deleted=False,
+                    iteration_check=1,
+                    is_sent=False,
+                )
+            )
+        except Exception as exc:
+            logger.warning(
+                f"Failed to push notification key={key}: {exc}"
+            )
 
     # ─── CRUD ─────────────────────────────────────────────────────────────────
 
@@ -174,6 +301,44 @@ class FlowTaskService:
             nodes_json=nodes_json,
             edges_json=edges_json,
         )
+
+        # D4: Auto-create version snapshot only on meaningful changes
+        # Compare with the latest version; skip if only positions changed.
+        change_summary = None
+        if hasattr(data, "change_summary") and data.change_summary:
+            change_summary = data.change_summary
+
+        should_snapshot = True
+        try:
+            latest_ver = self.version_repo.get_latest_version_number(flow_task_id)
+            if latest_ver > 0 and change_summary is None:
+                prev = self.version_repo.get_by_version(flow_task_id, latest_ver)
+                if prev:
+                    diff_summary = _compute_graph_diff(
+                        prev.nodes_json or [],
+                        prev.edges_json or [],
+                        nodes_json,
+                        edges_json,
+                    )
+                    if diff_summary is None:
+                        # Position-only change — skip version snapshot
+                        should_snapshot = False
+                    else:
+                        change_summary = diff_summary
+        except Exception as e:
+            logger.warning(f"Graph diff comparison failed, will snapshot anyway: {e}")
+
+        if should_snapshot:
+            try:
+                self.version_repo.create_snapshot(
+                    flow_task_id=flow_task_id,
+                    nodes_json=nodes_json,
+                    edges_json=edges_json,
+                    change_summary=change_summary,
+                )
+            except Exception as e:
+                logger.warning(f"Failed to create graph version snapshot: {e}")
+
         self.db.commit()
         self.db.refresh(graph)
         logger.info(
@@ -267,6 +432,12 @@ class FlowTaskService:
                 last_run_status=FlowTaskRunStatus.FAILED,
             )
             self.db.commit()
+            # Notify on dispatch failure
+            self._push_notification(
+                key=f"flow_task_dispatch_error_{flow_task_id}",
+                title=f"Flow Task {flow_task_id} Failed to Start",
+                message=f"Flow Task ‘{task.name}’ (ID: {flow_task_id}) could not be dispatched to the worker. Error: {e}",
+            )
             raise ConnectionError(f"Worker task dispatch failed: {e}") from e
 
         logger.info(
@@ -449,5 +620,105 @@ class FlowTaskService:
                     last_run_record_count=result_data.get("total_output_records"),
                 )
                 self.db.commit()
+                # Notify on run failure
+                if not is_success:
+                    task = self.flow_task_repo.get_by_id(run.flow_task_id)
+                    task_name = task.name if task else str(run.flow_task_id)
+                    error_msg = status.get("error") or "Unknown error"
+                    self._push_notification(
+                        key=f"flow_task_run_failed_{run.flow_task_id}",
+                        title=f"Flow Task ‘{task_name}’ Run Failed",
+                        message=(
+                            f"Flow Task ‘{task_name}’ (ID: {run.flow_task_id}) finished with status FAILED. "
+                            f"Run ID: {run.id}. Error: {error_msg}"
+                        ),
+                    )
 
         return status
+
+    # ─── D4: Graph Versioning ─────────────────────────────────────────────
+
+    def list_graph_versions(
+        self, flow_task_id: int, skip: int = 0, limit: int = 20
+    ) -> Tuple[list, int]:
+        """List version history for a flow task graph."""
+        self.get_flow_task(flow_task_id)
+        return self.version_repo.get_versions_by_flow_task(
+            flow_task_id=flow_task_id, skip=skip, limit=limit
+        )
+
+    def get_graph_version(self, flow_task_id: int, version: int):
+        """Get a specific graph version snapshot."""
+        self.get_flow_task(flow_task_id)
+        v = self.version_repo.get_by_version(flow_task_id, version)
+        if not v:
+            raise EntityNotFoundError(
+                f"Version {version} not found for flow task {flow_task_id}"
+            )
+        return v
+
+    def rollback_graph(self, flow_task_id: int, version: int) -> FlowTaskGraph:
+        """
+        Rollback graph to a previous version.
+
+        Restores the nodes/edges from the snapshot and creates a new version
+        entry recording the rollback.
+        """
+        snapshot = self.get_graph_version(flow_task_id, version)
+
+        # Upsert graph with the old snapshot data
+        graph = self.graph_repo.upsert_graph(
+            flow_task_id=flow_task_id,
+            nodes_json=snapshot.nodes_json,
+            edges_json=snapshot.edges_json,
+        )
+
+        # Create a new version entry for the rollback
+        self.version_repo.create_snapshot(
+            flow_task_id=flow_task_id,
+            nodes_json=snapshot.nodes_json,
+            edges_json=snapshot.edges_json,
+            change_summary=f"Rollback to version {version}",
+        )
+
+        self.db.commit()
+        self.db.refresh(graph)
+        logger.info(
+            f"Graph rolled back: flow_task_id={flow_task_id} "
+            f"to_version={version} new_version={graph.version}"
+        )
+        return graph
+
+    # ─── D8: Watermark Management ─────────────────────────────────────────
+
+    def get_watermarks(self, flow_task_id: int) -> list:
+        """Get all watermarks for a flow task."""
+        self.get_flow_task(flow_task_id)
+        return self.watermark_repo.get_by_flow_task(flow_task_id)
+
+    def set_watermark(
+        self,
+        flow_task_id: int,
+        node_id: str,
+        watermark_column: str,
+        watermark_type: str = "TIMESTAMP",
+    ):
+        """Configure a watermark for an input node."""
+        self.get_flow_task(flow_task_id)
+        wm = self.watermark_repo.upsert_watermark(
+            flow_task_id=flow_task_id,
+            node_id=node_id,
+            watermark_column=watermark_column,
+            last_watermark_value="",
+            watermark_type=watermark_type,
+        )
+        self.db.commit()
+        self.db.refresh(wm)
+        return wm
+
+    def reset_watermark(self, flow_task_id: int, node_id: str) -> None:
+        """Reset watermark for an input node."""
+        wm = self.watermark_repo.get_by_flow_task_and_node(flow_task_id, node_id)
+        if wm:
+            self.watermark_repo.delete(wm.id)
+            self.db.commit()

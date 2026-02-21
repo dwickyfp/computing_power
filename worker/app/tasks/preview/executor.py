@@ -9,13 +9,15 @@ DuckDB's Postgres extension.
 import hashlib
 import json
 import re
+import threading
+import time as _time_mod
 from typing import Any
 
 import duckdb
 
 from app.config.settings import get_settings
 from app.core.database import get_db_session
-from app.core.exceptions import ConnectionError, PreviewExecutionError, ValidationError
+from app.core.exceptions import WorkerConnectionError, PreviewExecutionError, ValidationError
 from app.core.redis_client import get_redis
 from app.core.security import decrypt_value
 from app.tasks.preview.serializer import (
@@ -29,6 +31,26 @@ import structlog
 
 logger = structlog.get_logger(__name__)
 
+# ─── orjson for fast JSON serialization ────────────────────────────────────────
+try:
+    import orjson
+
+    def _json_dumps(obj: Any) -> str:
+        return orjson.dumps(obj).decode("utf-8")
+
+    def _json_loads(s: str | bytes) -> Any:
+        return orjson.loads(s)
+except ImportError:
+    _json_dumps = json.dumps  # type: ignore[assignment]
+    _json_loads = json.loads  # type: ignore[assignment]
+
+
+# ─── Connection config TTL cache ──────────────────────────────────────────────
+_conn_cache: dict[tuple[int, int], tuple[float, tuple[dict, dict]]] = {}
+_conn_cache_lock = threading.Lock()
+_CONN_CACHE_TTL = 60.0  # seconds
+_CONN_CACHE_MAX_SIZE = 64  # prevent unbounded growth
+
 
 def execute_preview(
     sql: str | None,
@@ -36,6 +58,7 @@ def execute_preview(
     destination_id: int,
     table_name: str,
     filter_sql: str | None = None,
+    include_profiling: bool = False,
 ) -> dict[str, Any]:
     """
     Execute a preview query using DuckDB with attached Postgres databases.
@@ -46,6 +69,7 @@ def execute_preview(
     3. Build query (with optional filter + custom SQL via CTE)
     4. Execute in DuckDB with Postgres extension
     5. Serialize and cache results (5 min TTL)
+    6. Optionally compute data profiling stats (D7)
 
     Cache Invalidation:
     - Cache key includes: custom SQL, filter SQL, source_id, dest_id, table_name
@@ -58,9 +82,10 @@ def execute_preview(
         destination_id: Destination database ID
         table_name: Table name to preview
         filter_sql: Optional filter SQL (v2 JSON or legacy format)
+        include_profiling: If True, compute and return column profiling stats (D7)
 
     Returns:
-        Dict with columns, column_types, data, error keys
+        Dict with columns, column_types, data, error keys (+ profile if requested)
     """
     settings = get_settings()
 
@@ -103,7 +128,7 @@ def execute_preview(
                         "Preview cache hit - returning cached result",
                         cache_key=cache_key[:16] + "...",
                     )
-                    return json.loads(cached)
+                    return _json_loads(cached)
                 else:
                     logger.info(
                         "Preview cache miss - will regenerate data",
@@ -157,13 +182,16 @@ def execute_preview(
 
         logger.info("Executing preview query", query=final_query)
 
-        # 5. Execute in DuckDB
-        con = duckdb.connect(":memory:")
+        # 5. Execute in DuckDB (acquire concurrency slot)
+        from app.core.concurrency import acquire_duckdb_slot, release_duckdb_slot
+        acquire_duckdb_slot()
+        con = None
         try:
+            con = duckdb.connect(":memory:")
             # Configure DuckDB for performance
             con.execute(f"SET memory_limit='{settings.duckdb_memory_limit}'")
             con.execute(f"SET threads={getattr(settings, 'duckdb_threads', 4)}")
-            con.execute("INSTALL postgres;")
+            # Extensions are pre-installed at worker startup — only LOAD here
             con.execute("LOAD postgres;")
 
             # Attach source
@@ -172,7 +200,7 @@ def execute_preview(
                     f"ATTACH '{source_config['conn_str']}' AS {source_prefix} (TYPE postgres, READ_ONLY);"
                 )
             except Exception as e:
-                raise ConnectionError(f"Could not connect to source database: {e}")
+                raise WorkerConnectionError(f"Could not connect to source database: {e}")
 
             # Attach destination (non-critical)
             try:
@@ -185,7 +213,9 @@ def execute_preview(
             # Execute query
             result = con.execute(final_query).fetch_arrow_table()
         finally:
-            con.close()
+            if con:
+                con.close()
+            release_duckdb_slot()
 
         # 6. Process results
         columns = result.column_names
@@ -194,10 +224,19 @@ def execute_preview(
 
         response = serialize_preview_result(columns, column_types, data)
 
+        # 6b. Data profiling (D7) — compute column statistics if requested
+        if include_profiling:
+            try:
+                from app.tasks.preview.profiler import profile_arrow_table
+                response["profile"] = profile_arrow_table(result)
+            except Exception as e:
+                logger.warning("Data profiling failed", error=str(e))
+                response["profile"] = []
+
         # 7. Cache result (5 minute TTL)
         try:
             if redis_client:
-                redis_client.setex(cache_key, 300, json.dumps(response))
+                redis_client.setex(cache_key, 300, _json_dumps(response))
                 logger.info(
                     "Preview result cached successfully",
                     cache_key=cache_key[:16] + "...",
@@ -209,7 +248,7 @@ def execute_preview(
 
         return response
 
-    except (ValidationError, ConnectionError) as e:
+    except (ValidationError, WorkerConnectionError) as e:
         logger.warning("Preview validation/connection error", error=str(e))
         return serialize_error(str(e))
     except Exception as e:
@@ -222,11 +261,38 @@ def _fetch_connection_configs(
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     """
     Fetch source and destination connection details from config DB.
+    Results are cached for 60s to avoid repeated DB queries within the same
+    worker process (connection details rarely change mid-run).
 
     Returns:
         Tuple of (source_config, dest_config) dicts with keys:
         name, conn_str
     """
+    cache_key = (source_id, destination_id)
+    now = _time_mod.monotonic()
+
+    with _conn_cache_lock:
+        entry = _conn_cache.get(cache_key)
+        if entry and (now - entry[0]) < _CONN_CACHE_TTL:
+            return entry[1]
+
+    # Cache miss — fetch from DB
+    result = _fetch_connection_configs_from_db(source_id, destination_id)
+
+    with _conn_cache_lock:
+        # Evict oldest entries if cache is full
+        if len(_conn_cache) >= _CONN_CACHE_MAX_SIZE:
+            sorted_keys = sorted(_conn_cache, key=lambda k: _conn_cache[k][0])
+            for k in sorted_keys[: len(sorted_keys) // 2]:
+                del _conn_cache[k]
+        _conn_cache[cache_key] = (now, result)
+    return result
+
+
+def _fetch_connection_configs_from_db(
+    source_id: int, destination_id: int
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Raw DB fetch for connection configs."""
     from sqlalchemy import text
 
     with get_db_session() as session:
@@ -240,7 +306,7 @@ def _fetch_connection_configs(
         ).fetchone()
 
         if not row:
-            raise ConnectionError(f"Source {source_id} not found")
+            raise WorkerConnectionError(f"Source {source_id} not found")
 
         src_pass = decrypt_value(row.pg_password) if row.pg_password else ""
         source_config = {
@@ -258,7 +324,7 @@ def _fetch_connection_configs(
         ).fetchone()
 
         if not dest_row:
-            raise ConnectionError(f"Destination {destination_id} not found")
+            raise WorkerConnectionError(f"Destination {destination_id} not found")
 
         dest_cfg = dest_row.config
         if isinstance(dest_cfg, str):
@@ -296,9 +362,13 @@ def _filter_sql_to_where_clause(filter_sql: str) -> str:
         column = c.get("column", "")
         if not column:
             return ""
+        # Sanitize column name to prevent injection
+        if not re.match(r'^[a-zA-Z_][a-zA-Z0-9_."]*$', column):
+            return ""
         op = c.get("operator", "").upper()
-        value = c.get("value", "")
-        value2 = c.get("value2", "")
+        # Escape single quotes in values to prevent SQL injection
+        value = c.get("value", "").replace("'", "''")
+        value2 = c.get("value2", "").replace("'", "''")
 
         if op in ("IS NULL", "IS NOT NULL"):
             return f"{column} {op}"

@@ -46,6 +46,8 @@ from app.domain.models.schedule import (
     ScheduleStatus,
     ScheduleRunStatus,
 )
+from app.domain.models.flow_task_graph_version import FlowTaskGraphVersion
+from app.domain.models.flow_task_watermark import FlowTaskWatermark
 
 
 __all__ = [
@@ -79,4 +81,6 @@ __all__ = [
     "ScheduleTaskType",
     "ScheduleStatus",
     "ScheduleRunStatus",
+    "FlowTaskGraphVersion",
+    "FlowTaskWatermark",
 ]

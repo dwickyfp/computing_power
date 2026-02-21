@@ -4,7 +4,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Loader2, Plus, Save, X, Calendar as CalendarIcon, Trash2, CornerDownRight, Check, ChevronsUpDown } from 'lucide-react'
-import { TableWithSyncInfo } from '@/repo/pipelines'
+import { type TableWithSyncInfo } from '@/repo/pipelines'
 import { cn } from '@/lib/utils'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command'

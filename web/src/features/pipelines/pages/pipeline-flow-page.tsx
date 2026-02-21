@@ -2,7 +2,7 @@ import { Button } from '@/components/ui/button'
 
 import { pipelinesRepo } from '@/repo/pipelines'
 import { useQuery } from '@tanstack/react-query'
-import { ReactFlow, Background, Controls, Node, Edge, Position } from '@xyflow/react'
+import { ReactFlow, Background, Controls, type Node, type Edge, Position } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import { Loader2, Plus, Snowflake } from 'lucide-react'
 import { useState, useMemo } from 'react'

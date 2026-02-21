@@ -273,3 +273,63 @@ class NodeColumnsResponse(BaseSchema):
     """Schema response from POST /{flow_task_id}/node-schema."""
 
     columns: List[ColumnInfo]
+
+
+# ─── D4: Graph version schemas ────────────────────────────────────────────────
+
+class FlowTaskGraphVersionResponse(BaseSchema):
+    """Response for a single graph version snapshot."""
+
+    id: int
+    flow_task_id: int
+    version: int
+    nodes_json: List[Dict[str, Any]]
+    edges_json: List[Dict[str, Any]]
+    change_summary: Optional[str]
+    created_at: datetime
+
+    class Config:
+        orm_mode = True
+
+
+class FlowTaskGraphVersionListResponse(BaseSchema):
+    """Paginated version list."""
+
+    items: List[FlowTaskGraphVersionResponse]
+    total: int
+    page: int
+    page_size: int
+
+
+class FlowTaskGraphSaveWithSummary(FlowTaskGraphSave):
+    """Graph save that also creates a version snapshot."""
+
+    change_summary: Optional[str] = Field(
+        default=None, description="Optional summary of what changed"
+    )
+
+
+# ─── D8: Watermark schemas ────────────────────────────────────────────────────
+
+class FlowTaskWatermarkResponse(BaseSchema):
+    """Flow task watermark entry."""
+
+    id: int
+    flow_task_id: int
+    node_id: str
+    watermark_column: str
+    last_watermark_value: Optional[str]
+    watermark_type: str
+    last_run_at: Optional[datetime]
+    record_count: int
+
+    class Config:
+        orm_mode = True
+
+
+class FlowTaskWatermarkConfig(BaseSchema):
+    """Config for setting a watermark on an input node."""
+
+    node_id: str = Field(..., description="Input node ID")
+    watermark_column: str = Field(..., description="Column to track")
+    watermark_type: str = Field(default="TIMESTAMP", description="TIMESTAMP or INTEGER")

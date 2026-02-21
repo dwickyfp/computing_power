@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { TableWithSyncInfo, tableSyncRepo, TableSyncConfig } from '@/repo/pipelines'
+import { type TableWithSyncInfo, tableSyncRepo, type TableSyncConfig } from '@/repo/pipelines'
 import { Switch } from '@/components/ui/switch'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'

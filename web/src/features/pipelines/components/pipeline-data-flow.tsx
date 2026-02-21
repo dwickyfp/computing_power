@@ -1,12 +1,12 @@
 import { useMemo, useEffect, useRef } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Pipeline, pipelinesRepo } from '@/repo/pipelines'
+import { type Pipeline, pipelinesRepo } from '@/repo/pipelines'
 import {
   ReactFlow,
   Background,
   Controls,
-  Node,
-  Edge,
+  type Node,
+  type Edge,
   Position,
   MarkerType,
   Handle,

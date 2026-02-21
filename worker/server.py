@@ -4,6 +4,7 @@ FastAPI Server for Rosetta Worker Health API.
 Provides health check endpoint for monitoring.
 """
 
+import asyncio
 import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
@@ -12,9 +13,10 @@ import time
 import uvicorn
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-from celery import Celery
 
+from app.celery_app import celery_app as _worker_celery_app
 from app.config.settings import settings
+from app.core.redis_client import get_redis
 
 logger = logging.getLogger(__name__)
 
@@ -24,21 +26,6 @@ app = FastAPI(title="Rosetta Worker Health API")
 _health_cache: Optional[dict] = None
 _health_cache_time: float = 0
 _cache_ttl: float = 3.0
-
-# Reuse Celery app instance instead of creating new one each time
-_celery_app: Optional[Celery] = None
-
-
-def get_celery_app() -> Celery:
-    """Get or create reusable Celery app instance for health checks."""
-    global _celery_app
-    if _celery_app is None:
-        _celery_app = Celery(
-            "health_checker",
-            broker=settings.celery_broker_url,
-            backend=settings.celery_result_backend,
-        )
-    return _celery_app
 
 
 @app.get("/health")
@@ -57,8 +44,8 @@ async def health_check():
         return _health_cache
 
     try:
-        # Use reusable Celery app connection
-        celery_app = get_celery_app()
+        # Use shared Celery app from worker
+        celery_app = _worker_celery_app
 
         # Try inspector with reduced timeout to avoid blocking health API
         # Note: inspector.ping() can be unreliable even when workers are functioning
@@ -89,13 +76,11 @@ async def health_check():
             logger.debug(f"Inspector ping failed (might be busy): {ping_error}")
 
             # Test Redis broker connectivity as fallback
+            # Use existing connection pool to avoid leaking connections
             try:
-                from redis import Redis
-
-                redis_client = Redis.from_url(
-                    settings.celery_broker_url, socket_timeout=1.0
-                )
-                redis_client.ping()
+                redis_client = get_redis()
+                if redis_client:
+                    redis_client.ping()
                 # Redis is accessible, assume worker is healthy
                 # (If preview tasks work, worker is functional even if ping fails)
                 result = {
@@ -195,20 +180,22 @@ class NodeSchemaResponse(BaseModel):
 
 
 @app.post("/schema", response_model=NodeSchemaResponse)
-def get_node_schema(request: NodeSchemaRequest):
+async def get_node_schema(request: NodeSchemaRequest):
     """
-    Synchronously execute the DuckDB CTE chain up to the target node with
-    LIMIT 0 and return the output column names + types.
+    Execute the DuckDB CTE chain up to the target node with LIMIT 0 and
+    return the output column names + types.
 
-    No rows are fetched — only Arrow schema metadata is read, so this is
-    fast regardless of upstream table size or transformation complexity.
+    Runs in a thread pool so the event loop stays responsive for /health.
     """
     try:
         from app.tasks.flow_task.preview_executor import execute_node_schema
 
-        result = execute_node_schema(
-            node_id=request.node_id,
-            graph_snapshot={"nodes": request.nodes, "edges": request.edges},
+        loop = asyncio.get_event_loop()
+        result = await loop.run_in_executor(
+            None,
+            execute_node_schema,
+            request.node_id,
+            {"nodes": request.nodes, "edges": request.edges},
         )
         return NodeSchemaResponse(columns=result["columns"])
     except Exception as e:

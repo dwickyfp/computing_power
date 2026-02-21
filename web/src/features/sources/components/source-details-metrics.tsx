@@ -1,5 +1,5 @@
 import { Card } from '@/components/ui/card'
-import { WALMonitorResponse, Source } from '@/repo/sources'
+import { type WALMonitorResponse, type Source } from '@/repo/sources'
 import {
     Activity,
     Database,

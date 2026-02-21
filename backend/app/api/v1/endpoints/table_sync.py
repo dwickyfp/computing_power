@@ -8,7 +8,7 @@ from typing import List
 
 from fastapi import APIRouter, Depends, Path, status, BackgroundTasks, HTTPException
 
-from app.api.deps import get_pipeline_service
+from app.api.deps import get_pipeline_service, get_pipeline_service_readonly
 from app.domain.schemas.pipeline import (
     TableSyncCreateRequest,
     TableSyncBulkRequest,
@@ -32,7 +32,7 @@ router = APIRouter()
 def get_destination_tables(
     pipeline_id: int = Path(..., description="Pipeline ID"),
     pipeline_destination_id: int = Path(..., description="Pipeline Destination ID"),
-    service: PipelineService = Depends(get_pipeline_service),
+    service: PipelineService = Depends(get_pipeline_service_readonly),
 ) -> List[TableWithSyncInfoResponse]:
     """
     Get tables available for sync with current configuration.

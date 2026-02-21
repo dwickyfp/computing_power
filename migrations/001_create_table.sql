@@ -748,3 +748,161 @@ CREATE INDEX IF NOT EXISTS idx_schedule_run_history_schedule_triggered ON schedu
 COMMENT ON TABLE schedule_run_history IS 'Execution history for scheduled jobs — one row per cron-triggered run, cascade-deleted with parent schedule';
 
 
+-- ============================================================
+-- Migration 009: New Features Bundle
+-- B2: Schema Compatibility Validation
+-- C2: Batched DLQ Recovery (no schema changes needed)
+-- C3: Connection Pool Optimization (no schema changes needed)
+-- D2: Data Catalog & Data Dictionary
+-- D3: Alerting Rules Engine
+-- D4: Flow Task Versioning & Rollback
+-- D5: Real-Time Pipeline Metrics Stream (no schema changes needed)
+-- D6: SQL Transform Node (no schema changes needed - uses existing node types)
+-- D7: Data Profiling on Preview (no schema changes needed)
+-- D8: Incremental Flow Task Execution
+-- E2: Integration Test Suite (no schema changes needed)
+-- ============================================================
+
+
+-- ============================================================
+-- D4: Flow Task Versioning & Rollback
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS flow_task_graph_version (
+    id SERIAL PRIMARY KEY,
+    flow_task_id INTEGER NOT NULL REFERENCES flow_tasks(id) ON DELETE CASCADE,
+    version INTEGER NOT NULL,
+    nodes_json JSONB NOT NULL DEFAULT '[]',
+    edges_json JSONB NOT NULL DEFAULT '[]',
+    change_summary TEXT NULL,           -- auto-generated or user-provided description
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_flow_task_graph_version_flow_task_id ON flow_task_graph_version(flow_task_id);
+CREATE INDEX IF NOT EXISTS idx_flow_task_graph_version_version ON flow_task_graph_version(flow_task_id, version DESC);
+ALTER TABLE flow_task_graph_version DROP CONSTRAINT IF EXISTS uq_flow_task_graph_version;
+ALTER TABLE flow_task_graph_version ADD CONSTRAINT uq_flow_task_graph_version
+    UNIQUE (flow_task_id, version);
+
+COMMENT ON TABLE flow_task_graph_version IS 'Versioned snapshots of flow task graphs for rollback support';
+
+
+-- ============================================================
+-- D8: Incremental Flow Task Execution
+-- ============================================================
+
+-- Track watermark state per input node per flow task
+CREATE TABLE IF NOT EXISTS flow_task_watermarks (
+    id SERIAL PRIMARY KEY,
+    flow_task_id INTEGER NOT NULL REFERENCES flow_tasks(id) ON DELETE CASCADE,
+    node_id VARCHAR(255) NOT NULL,
+    watermark_column VARCHAR(255) NOT NULL,
+    last_watermark_value TEXT NULL,       -- serialized as string for any type
+    watermark_type VARCHAR(50) DEFAULT 'TIMESTAMP', -- TIMESTAMP, INTEGER, UUID
+    last_run_at TIMESTAMPTZ NULL,
+    record_count BIGINT DEFAULT 0,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE flow_task_watermarks DROP CONSTRAINT IF EXISTS uq_flow_task_watermark;
+ALTER TABLE flow_task_watermarks ADD CONSTRAINT uq_flow_task_watermark
+    UNIQUE (flow_task_id, node_id);
+
+CREATE INDEX IF NOT EXISTS idx_flow_task_watermarks_flow_task_id ON flow_task_watermarks(flow_task_id);
+
+COMMENT ON TABLE flow_task_watermarks IS 'Watermark tracking for incremental flow task execution';
+
+
+-- ============================================================
+-- B2: Schema Compatibility Validation — setting for auto-check
+-- ============================================================
+
+INSERT INTO rosetta_setting_configuration(config_key, config_value)
+VALUES('SCHEMA_COMPATIBILITY_CHECK_ENABLED', 'TRUE')
+ON CONFLICT(config_key) DO NOTHING;
+
+
+-- ============================================================
+-- Performance Optimization: Missing Index Audit
+-- Indexes derived from actual ORM/SQL query patterns across
+-- backend repositories, compute engine, and background jobs.
+-- ============================================================
+
+-- ── High Priority: Background jobs polling every 5-60 seconds ──
+
+-- pipelines.ready_refresh — polled every 10s by pipeline_refresh_check scheduler
+CREATE INDEX IF NOT EXISTS idx_pipelines_ready_refresh
+    ON pipelines(ready_refresh) WHERE ready_refresh = TRUE;
+
+-- queue_backfill_data(status, created_at) — polled every 5s by compute BackfillManager
+-- Covers: WHERE status = 'PENDING' ORDER BY created_at ASC
+-- Covers: WHERE status = 'EXECUTING' ORDER BY created_at ASC
+CREATE INDEX IF NOT EXISTS idx_queue_backfill_data_status_created
+    ON queue_backfill_data(status, created_at ASC);
+
+-- notification_log: composite partial for pending notification sender (runs every 30s)
+-- Covers: WHERE iteration_check >= N AND is_sent = FALSE AND is_deleted = FALSE AND is_read = FALSE
+CREATE INDEX IF NOT EXISTS idx_notification_log_pending_send
+    ON notification_log(iteration_check)
+    WHERE is_sent = FALSE AND is_deleted = FALSE AND is_read = FALSE;
+
+-- notification_log.key_notification — used by upsert_notification_by_key (runs every 30s)
+CREATE INDEX IF NOT EXISTS idx_notification_log_key_notification
+    ON notification_log(key_notification);
+
+-- notification_log.is_force_sent — used by forced notification delivery queries
+CREATE INDEX IF NOT EXISTS idx_notification_log_is_force_sent
+    ON notification_log(is_force_sent) WHERE is_force_sent = TRUE;
+
+-- wal_metrics(source_id, recorded_at) — polled every 60s for "latest WAL by source"
+-- Replaces two individual indexes with one compound covering index
+CREATE INDEX IF NOT EXISTS idx_wal_metrics_source_recorded
+    ON wal_metrics(source_id, recorded_at DESC);
+
+-- ── Medium Priority: User-facing paginated listings ──
+
+-- flow_tasks.updated_at — paginated list sorted by updated_at DESC
+CREATE INDEX IF NOT EXISTS idx_flow_tasks_updated_at
+    ON flow_tasks(updated_at DESC);
+
+-- schedules.created_at — paginated schedule listing
+CREATE INDEX IF NOT EXISTS idx_schedules_created_at
+    ON schedules(created_at DESC);
+
+-- linked_tasks.created_at — paginated linked task listing
+CREATE INDEX IF NOT EXISTS idx_linked_tasks_created_at
+    ON linked_tasks(created_at DESC);
+
+-- flow_task_run_history(flow_task_id, status) — "get latest RUNNING" query
+-- Avoids scanning all rows for a flow_task_id when filtering by status
+CREATE INDEX IF NOT EXISTS idx_flow_task_run_history_task_status
+    ON flow_task_run_history(flow_task_id, status);
+
+-- pipelines_destination_table_sync(pipeline_destination_id, table_name) — compute per-event lookup
+-- Covers: WHERE pipeline_destination_id = ? AND table_name = ?
+CREATE INDEX IF NOT EXISTS idx_pipelines_dest_table_sync_pd_table
+    ON pipelines_destination_table_sync(pipeline_destination_id, table_name);
+
+-- ── Lower Priority: Occasional lookups ──
+
+-- linked_task_run_step_log.linked_task_id — historical lookup by linked task
+CREATE INDEX IF NOT EXISTS idx_linked_task_run_step_log_linked_task_id
+    ON linked_task_run_step_log(linked_task_id);
+
+-- data_flow_record_monitoring: compound for per-destination-table time-series queries
+CREATE INDEX IF NOT EXISTS idx_data_flow_record_monitoring_pd_table
+    ON data_flow_record_monitoring(pipeline_destination_id, table_name, created_at);
+
+-- data_flow_record_monitoring: FK lookup for pipeline_destination_table_sync_id
+CREATE INDEX IF NOT EXISTS idx_data_flow_record_monitoring_sync_id
+    ON data_flow_record_monitoring(pipeline_destination_table_sync_id);
+
+-- credit_snowflake_monitoring: compound for destination + date range queries
+CREATE INDEX IF NOT EXISTS idx_credit_snowflake_dest_date
+    ON credit_snowflake_monitoring(destination_id, usage_date);
+
+-- queue_backfill_data: partial index for stale EXECUTING rows (compute health check)
+CREATE INDEX IF NOT EXISTS idx_queue_backfill_data_executing
+    ON queue_backfill_data(updated_at) WHERE status = 'EXECUTING';
+

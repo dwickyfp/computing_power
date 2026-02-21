@@ -13,7 +13,7 @@ class PreviewExecutionError(WorkerError):
     pass
 
 
-class ConnectionError(WorkerError):
+class WorkerConnectionError(WorkerError):
     """Database connection error."""
     pass
 
@@ -25,4 +25,9 @@ class ValidationError(WorkerError):
 
 class TaskTimeoutError(WorkerError):
     """Task exceeded time limit."""
+    pass
+
+
+class MemoryPressureError(WorkerError):
+    """Worker memory usage exceeded safe threshold."""
     pass

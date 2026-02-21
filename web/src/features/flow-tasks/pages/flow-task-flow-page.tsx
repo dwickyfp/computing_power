@@ -48,6 +48,7 @@ import {
     ChevronLeft,
     AlertCircle,
     Square,
+    History,
 } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -57,10 +58,10 @@ import { useTheme } from '@/context/theme-provider'
 import { Search } from '@/components/search'
 import { ThemeSwitch } from '@/components/theme-switch'
 import { NodePalette } from '../components/NodePalette'
-import { NodeConfigPanel } from '../components/NodeConfigPanel'
-import { PreviewDrawer } from '../components/PreviewDrawer'
+import { NodeEditorDrawer } from '../components/NodeEditorDrawer'
 import { NodeContextMenu } from '../components/NodeContextMenu'
 import { DeletableEdge } from '../components/edges/DeletableEdge'
+import { VersionHistoryDialog } from '../components/VersionHistoryDialog'
 
 // Node type registry — maps node type strings to components
 import { InputNode } from '../components/nodes/InputNode'
@@ -71,6 +72,8 @@ import { UnionNode } from '../components/nodes/UnionNode'
 import { PivotNode } from '../components/nodes/PivotNode'
 import { NewRowsNode } from '../components/nodes/NewRowsNode'
 import { OutputNode } from '../components/nodes/OutputNode'
+import { NoteNode } from '../components/nodes/NoteNode'
+import { SqlNode } from '../components/nodes/SqlNode'
 
 const nodeTypes = {
     input: InputNode,
@@ -80,7 +83,9 @@ const nodeTypes = {
     union: UnionNode,
     pivot: PivotNode,
     new_rows: NewRowsNode,
+    sql: SqlNode,
     output: OutputNode,
+    note: NoteNode,
 }
 
 const edgeTypes = {
@@ -101,6 +106,7 @@ function FlowCanvas({ flowTaskId }: { flowTaskId: number }) {
     const rfInstance = useRef<any>(null)
     const [pollingTaskId, setPollingTaskId] = useState<string | null>(null)
     const [autoSave, setAutoSave] = useState(false)
+    const [versionHistoryOpen, setVersionHistoryOpen] = useState(false)
     const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
     const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null)
     const [lastSavedLabel, setLastSavedLabel] = useState('')
@@ -137,7 +143,6 @@ function FlowCanvas({ flowTaskId }: { flowTaskId: number }) {
     const {
         nodes,
         edges,
-        selectedNodeId,
         isDirty,
         setNodes,
         setEdges,
@@ -263,10 +268,15 @@ function FlowCanvas({ flowTaskId }: { flowTaskId: number }) {
             // Invalidating the graph query would trigger a refetch that calls setNodes([]),
             // clearing the canvas with the freshly saved data.
             setTimeout(
-                () => queryClient.invalidateQueries({
-                    queryKey: ['flow-tasks', flowTaskId],
-                    exact: true,
-                }),
+                () => {
+                    queryClient.invalidateQueries({
+                        queryKey: ['flow-tasks', flowTaskId],
+                        exact: true,
+                    })
+                    queryClient.invalidateQueries({
+                        queryKey: ['flow-task-versions', flowTaskId],
+                    })
+                },
                 300
             )
         },
@@ -284,8 +294,8 @@ function FlowCanvas({ flowTaskId }: { flowTaskId: number }) {
         return () => {
             if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current)
         }
-    // saveMutation is stable (useMutation), safe to omit from deps
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+        // saveMutation is stable (useMutation), safe to omit from deps
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [autoSave, isDirty, nodes, edges])
 
     // ─── Run ───────────────────────────────────────────────────────────────────
@@ -330,11 +340,13 @@ function FlowCanvas({ flowTaskId }: { flowTaskId: number }) {
                 y: event.clientY,
             })
 
+            const isNote = nodeType === 'note'
             const newNode: FlowNode = {
                 id: generateNodeId(nodeType),
                 type: nodeType,
                 position,
                 data: { label: nodeLabel },
+                ...(isNote ? { width: 220, height: 130 } : {}),
             }
             addNode(newNode)
         },
@@ -522,6 +534,14 @@ function FlowCanvas({ flowTaskId }: { flowTaskId: number }) {
                             Cancel
                         </Button>
                     )}
+                    <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setVersionHistoryOpen(true)}
+                    >
+                        <History className="h-3.5 w-3.5 mr-1.5" />
+                        History
+                    </Button>
                     <div className="w-px h-5 bg-border" />
                     <Search />
                     <ThemeSwitch />
@@ -589,8 +609,8 @@ function FlowCanvas({ flowTaskId }: { flowTaskId: number }) {
                         </ReactFlow>
                     )}
 
-                    {/* Preview Drawer (absolute bottom) */}
-                    <PreviewDrawer />
+                    {/* Bottom Drawer for config and preview */}
+                    <NodeEditorDrawer />
 
                     {/* Node right-click context menu */}
                     {ctxMenu && (
@@ -609,12 +629,15 @@ function FlowCanvas({ flowTaskId }: { flowTaskId: number }) {
                             onClose={() => setCtxMenu(null)}
                         />
                     )}
-
-                    {/* Right Config Panel — absolutely positioned so it overlays the canvas
-                        without affecting the canvas flex width (no layout reflow on resize) */}
-                    {selectedNodeId && <NodeConfigPanel />}
                 </div>
             </div>
+
+            {/* Version History Dialog */}
+            <VersionHistoryDialog
+                open={versionHistoryOpen}
+                onOpenChange={setVersionHistoryOpen}
+                flowTaskId={flowTaskId}
+            />
         </div>
     )
 }

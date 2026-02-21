@@ -20,6 +20,7 @@ from app.api.v1.endpoints import (
     flow_tasks,
     linked_tasks,
     schedules,
+    schema_validation,
 )
 
 # Create v1 router
@@ -69,3 +70,7 @@ api_router.include_router(
 )
 
 api_router.include_router(schedules.router, prefix="/schedules", tags=["schedules"])
+
+api_router.include_router(
+    schema_validation.router, prefix="/schema", tags=["schema-validation"]
+)

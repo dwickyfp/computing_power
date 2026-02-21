@@ -14,7 +14,6 @@ can be imported cleanly by the Celery worker without a backend/domain package.
 from __future__ import annotations
 
 import concurrent.futures
-import time
 from datetime import datetime
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -23,12 +22,24 @@ import structlog
 from sqlalchemy import text
 
 from app.core.database import get_db_session
+from app.config.settings import get_settings
 
 logger = structlog.get_logger(__name__)
 
 TZ = ZoneInfo("Asia/Jakarta")
-POLL_INTERVAL = 3          # seconds between status polls
-MAX_POLL_TIMEOUT = 3600    # 1 hour max per step
+MAX_POLL_TIMEOUT = 3600    # 1 hour max wait per step
+
+# ─── Deadlock prevention ──────────────────────────────────────────────────────
+# Linked task orchestration threads call celery_result.get() which blocks the
+# Celery thread slot while waiting for child flow tasks.  If all thread slots
+# are consumed by waiting parents, child tasks can never start → deadlock.
+#
+# Mitigation applied:
+# 1. Linked tasks are routed to the 'orchestration' queue.
+# 2. start.sh passes '-Q preview,default,orchestration' so children on
+#    'default' always have capacity.
+# 3. worker_concurrency must be >= duckdb_max_concurrent +
+#    linked_task_max_parallel_steps + headroom (see config/settings.py).
 
 # Edge condition constants (mirrors LinkedTaskEdgeCondition enum)
 CONDITION_ON_SUCCESS = "ON_SUCCESS"
@@ -156,21 +167,6 @@ def _get_flow_task_graph(db, flow_task_id: int) -> dict:
     return {"nodes": [], "edges": []}
 
 
-def _poll_flow_task_run(sub_run_id: int) -> str:
-    """Poll flow_task_run_history until terminal state. Returns status string."""
-    deadline = time.monotonic() + MAX_POLL_TIMEOUT
-    while time.monotonic() < deadline:
-        time.sleep(POLL_INTERVAL)
-        with get_db_session() as db:
-            row = db.execute(
-                text("SELECT status FROM flow_task_run_history WHERE id = :id"),
-                {"id": sub_run_id},
-            ).fetchone()
-            if row and row.status in (STATUS_SUCCESS, STATUS_FAILED, "CANCELLED"):
-                return row.status
-    return STATUS_FAILED  # timeout
-
-
 # ─── Single step execution ─────────────────────────────────────────────────────
 
 def _execute_single_step(run_history_id: int, step_log_id: int, flow_task_id: int) -> str:
@@ -206,7 +202,30 @@ def _execute_single_step(run_history_id: int, step_log_id: int, flow_task_id: in
     with get_db_session() as db:
         _update_step_log(db, step_log_id, status=STATUS_RUNNING, celery_task_id=celery_result.id)
 
-    return _poll_flow_task_run(sub_run_id)
+    # Wait for the Celery task result (polls Redis backend internally,
+    # much more efficient than polling PostgreSQL)
+    try:
+        result = celery_result.get(
+            timeout=MAX_POLL_TIMEOUT,
+            propagate=False,
+        )
+        if isinstance(result, Exception):
+            logger.error(
+                "Flow task raised exception",
+                step_log_id=step_log_id,
+                error=str(result),
+            )
+            return STATUS_FAILED
+        if isinstance(result, dict):
+            return result.get("status", STATUS_FAILED)
+        return STATUS_FAILED
+    except Exception as e:
+        logger.error(
+            "Waiting for flow task result failed",
+            step_log_id=step_log_id,
+            error=str(e),
+        )
+        return STATUS_FAILED
 
 
 # ─── Main DAG executor ─────────────────────────────────────────────────────────
@@ -253,8 +272,9 @@ def execute_linked_task(linked_task_id: int, run_history_id: int) -> dict:
     overall_status = STATUS_SUCCESS
 
     while queue:
-        log.info("executing layer", step_ids=queue)
-        with concurrent.futures.ThreadPoolExecutor(max_workers=min(len(queue), 8)) as pool:
+        max_parallel = get_settings().linked_task_max_parallel_steps
+        log.info("executing layer", step_ids=queue, max_parallel=max_parallel)
+        with concurrent.futures.ThreadPoolExecutor(max_workers=min(len(queue), max_parallel)) as pool:
             future_to_step = {
                 pool.submit(
                     _execute_single_step,

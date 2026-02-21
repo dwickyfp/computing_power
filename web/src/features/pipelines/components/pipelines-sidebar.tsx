@@ -1,8 +1,8 @@
 import { useState, useMemo, useEffect } from 'react'
 import { useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useParams, useNavigate } from '@tanstack/react-router'
-import { pipelinesRepo, Pipeline } from '@/repo/pipelines'
-import { sourcesRepo, SourceDetailResponse } from '@/repo/sources'
+import { pipelinesRepo, type Pipeline } from '@/repo/pipelines'
+import { sourcesRepo, type SourceDetailResponse } from '@/repo/sources'
 import {
   Database,
   Table,

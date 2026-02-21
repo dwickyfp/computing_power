@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Pipeline, TableWithSyncInfo, tableSyncRepo } from '@/repo/pipelines'
+import { type Pipeline, type TableWithSyncInfo, tableSyncRepo } from '@/repo/pipelines'
 import { Loader2, Search } from 'lucide-react'
 import { toast } from 'sonner'
 import { Input } from '@/components/ui/input'

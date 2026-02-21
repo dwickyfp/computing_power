@@ -10,10 +10,12 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Path, status
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_db, get_pipeline_service
+from app.api.deps import get_db, get_db_readonly, get_pipeline_service, get_pipeline_service_readonly
 from app.core.config import get_settings
 from app.core.logging import get_logger
 from app.domain.models.pipeline import PipelineDestinationTableSync
+from app.domain.repositories.notification_log_repo import NotificationLogRepository
+from app.domain.schemas.notification_log import NotificationLogCreate
 from app.domain.services.pipeline import PipelineService
 
 router = APIRouter()
@@ -31,8 +33,8 @@ def get_table_sync_details(
     pipeline_id: int = Path(..., description="Pipeline ID"),
     dest_id: int = Path(..., description="Pipeline Destination ID"),
     sync_id: int = Path(..., description="Table Sync Config ID"),
-    db: Session = Depends(get_db),
-    pipeline_service: PipelineService = Depends(get_pipeline_service),
+    db: Session = Depends(get_db_readonly),
+    pipeline_service: PipelineService = Depends(get_pipeline_service_readonly),
 ) -> dict[str, Any]:
     """Get complete details for a table sync config including lineage."""
     sync = (
@@ -117,7 +119,7 @@ def get_table_lineage(
     pipeline_id: int = Path(..., description="Pipeline ID"),
     dest_id: int = Path(..., description="Pipeline Destination ID"),
     sync_id: int = Path(..., description="Table Sync Config ID"),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db_readonly),
 ) -> dict[str, Any]:
     """Get lineage metadata for a specific table sync config."""
     sync = (
@@ -221,6 +223,25 @@ def generate_table_lineage(
             sync.lineage_status = "FAILED"
             sync.lineage_error = f"Worker error: {str(e)}"
             db.commit()
+            # Push notification for lineage dispatch failure
+            try:
+                NotificationLogRepository(db).upsert_notification_by_key(
+                    NotificationLogCreate(
+                        key_notification=f"lineage_error_sync_{sync_id}",
+                        title=f"Lineage Generation Failed — {sync.table_name}",
+                        message=(
+                            f"Table sync ID {sync_id} (table: {sync.table_name}) lineage could not be "
+                            f"dispatched to the worker. Error: {e}"
+                        ),
+                        type="ERROR",
+                        is_read=False,
+                        is_deleted=False,
+                        iteration_check=1,
+                        is_sent=False,
+                    )
+                )
+            except Exception:
+                pass
             raise HTTPException(status_code=500, detail=str(e))
     else:
         # Generate synchronously
@@ -245,6 +266,25 @@ def generate_table_lineage(
             sync.lineage_status = "FAILED"
             sync.lineage_error = str(e)
             db.commit()
+            # Push notification for sync lineage generation failure
+            try:
+                NotificationLogRepository(db).upsert_notification_by_key(
+                    NotificationLogCreate(
+                        key_notification=f"lineage_error_sync_{sync_id}",
+                        title=f"Lineage Generation Failed — {sync.table_name}",
+                        message=(
+                            f"Table sync ID {sync_id} (table: {sync.table_name}) lineage generation failed. "
+                            f"Error: {e}"
+                        ),
+                        type="ERROR",
+                        is_read=False,
+                        is_deleted=False,
+                        iteration_check=1,
+                        is_sent=False,
+                    )
+                )
+            except Exception:
+                pass
             raise HTTPException(status_code=500, detail=str(e))
 
 

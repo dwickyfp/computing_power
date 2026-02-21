@@ -144,7 +144,7 @@ export function PreviewDrawer() {
     const { preview, closePreview, configPanelWidth, selectedNodeId } = useFlowTaskStore()
     const [height, setHeight]   = useState(DEFAULT_HEIGHT)
     const [visible, setVisible] = useState(false)
-    const [tab, setTab]         = useState<'table' | 'chart'>('table')
+    const [tab, setTab]         = useState<'table' | 'chart' | 'profiling'>('table')
     
     // Lift state to persist across tab switches
     const [chartCfg, setChartCfg] = useState<ChartConfig>(() => defaultConfig([]))
@@ -255,6 +255,19 @@ export function PreviewDrawer() {
                             <BarChart2 className="h-3 w-3" />
                             Chart
                         </button>
+                        <button
+                            className={cn(
+                                'flex items-center gap-1.5 px-2.5 py-1 rounded text-[11px] font-medium transition-all',
+                                tab === 'profiling'
+                                    ? 'bg-background text-foreground shadow-sm ring-1 ring-border/40'
+                                    : 'text-muted-foreground hover:text-foreground',
+                                !(preview.result)?.profile && 'opacity-40 pointer-events-none'
+                            )}
+                            onClick={() => setTab('profiling')}
+                        >
+                            <Layers2 className="h-3 w-3" />
+                            Profiling
+                        </button>
                     </div>
 
                     {/* Meta info */}
@@ -309,6 +322,9 @@ export function PreviewDrawer() {
                                 cfg={chartCfg}
                                 onUpdate={setChartCfg}
                             />
+                        )}
+                        {tab === 'profiling' && preview.result?.profile && (
+                            <ProfilingResults profile={preview.result.profile as ColumnProfile[]} />
                         )}
                     </>
                 )}
@@ -880,4 +896,96 @@ function ChartRenderer({ cfg, data, height }: ChartRendererProps) {
     }
 
     return null
+}
+
+// ─── Profiling ─────────────────────────────────────────────────────────────────
+
+interface ColumnProfile {
+    column: string
+    type: string
+    total_count: number
+    null_count: number
+    null_percent: number
+    distinct_count: number
+    min?: unknown
+    max?: unknown
+    mean?: number
+    top_values?: Array<{ value: unknown; count: number; percent: number }>
+}
+
+function ProfilingResults({ profile }: { profile: ColumnProfile[] }) {
+    if (!profile || profile.length === 0) {
+        return (
+            <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
+                No profiling data available.
+            </div>
+        )
+    }
+
+    return (
+        <div className="overflow-auto h-full">
+            <table className="w-full text-xs border-collapse">
+                <thead className="sticky top-0 bg-background z-10">
+                    <tr className="text-left text-muted-foreground border-b">
+                        <th className="p-2 font-medium">Column</th>
+                        <th className="p-2 font-medium">Type</th>
+                        <th className="p-2 font-medium text-right">Total</th>
+                        <th className="p-2 font-medium text-right">Nulls</th>
+                        <th className="p-2 font-medium text-right">Null %</th>
+                        <th className="p-2 font-medium text-right">Distinct</th>
+                        <th className="p-2 font-medium text-right">Min</th>
+                        <th className="p-2 font-medium text-right">Max</th>
+                        <th className="p-2 font-medium text-right">Mean</th>
+                        <th className="p-2 font-medium">Top Values</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {profile.map((col) => (
+                        <tr key={col.column} className="border-b border-border/30 hover:bg-muted/30">
+                            <td className="p-2 font-mono font-medium">{col.column}</td>
+                            <td className="p-2">
+                                <span className="rounded bg-muted px-1.5 py-0.5 text-[10px]">
+                                    {col.type}
+                                </span>
+                            </td>
+                            <td className="p-2 text-right tabular-nums">{col.total_count.toLocaleString()}</td>
+                            <td className="p-2 text-right tabular-nums">{col.null_count.toLocaleString()}</td>
+                            <td className="p-2 text-right tabular-nums">
+                                <span className={cn(col.null_percent > 50 && 'text-destructive font-medium')}>
+                                    {col.null_percent.toFixed(1)}%
+                                </span>
+                            </td>
+                            <td className="p-2 text-right tabular-nums">{col.distinct_count.toLocaleString()}</td>
+                            <td className="p-2 text-right tabular-nums font-mono">
+                                {col.min != null ? String(col.min) : '—'}
+                            </td>
+                            <td className="p-2 text-right tabular-nums font-mono">
+                                {col.max != null ? String(col.max) : '—'}
+                            </td>
+                            <td className="p-2 text-right tabular-nums">
+                                {col.mean != null ? col.mean.toFixed(2) : '—'}
+                            </td>
+                            <td className="p-2">
+                                {col.top_values && col.top_values.length > 0 ? (
+                                    <div className="flex flex-wrap gap-1">
+                                        {col.top_values.slice(0, 3).map((tv, i) => (
+                                            <span
+                                                key={i}
+                                                className="inline-flex items-center gap-0.5 rounded bg-muted px-1 py-0.5 text-[10px]"
+                                            >
+                                                <span className="font-mono truncate max-w-[60px]">{String(tv.value)}</span>
+                                                <span className="text-muted-foreground">({tv.count})</span>
+                                            </span>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <span className="text-muted-foreground">—</span>
+                                )}
+                            </td>
+                        </tr>
+                    ))}
+                </tbody>
+            </table>
+        </div>
+    )
 }

@@ -5,6 +5,7 @@ Manages scheduling and execution of background tasks like WAL monitoring.
 """
 
 import asyncio
+import threading
 from typing import Optional
 
 from apscheduler.schedulers.background import (
@@ -39,38 +40,94 @@ class BackgroundScheduler:
         self.schema_monitor: Optional[SchemaMonitorService] = None
         self.credit_monitor: Optional[CreditMonitorService] = None
 
-    def _record_job_metric(self, key: str) -> None:
+        # Reusable event loop for async monitor tasks (avoids creating/destroying
+        # a new loop on every scheduler invocation via asyncio.run())
+        self._async_loop: Optional[asyncio.AbstractEventLoop] = None
+        self._async_thread: Optional[threading.Thread] = None
+
+        # Persistent httpx client for worker health checks (avoids TCP churn)
+        self._httpx_client = None
+
+    def _get_event_loop(self) -> asyncio.AbstractEventLoop:
+        """Get or create a persistent event loop running in a background thread."""
+        if self._async_loop is None or self._async_loop.is_closed():
+            self._async_loop = asyncio.new_event_loop()
+            self._async_thread = threading.Thread(
+                target=self._async_loop.run_forever,
+                daemon=True,
+                name="scheduler-async-loop",
+            )
+            self._async_thread.start()
+            logger.info("Scheduler async event loop started")
+        return self._async_loop
+
+    def _run_async(self, coro) -> None:
+        """Run an async coroutine on the shared event loop (non-blocking to caller)."""
+        loop = self._get_event_loop()
+        future = asyncio.run_coroutine_threadsafe(coro, loop)
+        # Wait for completion (blocks the APScheduler thread, which is expected)
+        future.result(timeout=120)
+
+    def _get_httpx_client(self):
+        """Get or create a persistent httpx client with connection keep-alive."""
+        if self._httpx_client is None:
+            import httpx
+            self._httpx_client = httpx.Client(
+                timeout=10.0,
+                limits=httpx.Limits(max_connections=5, max_keepalive_connections=2),
+            )
+        return self._httpx_client
+
+    def _record_job_metric(self, key: str, db=None) -> None:
         """
         Record job execution time.
+
+        Args:
+            key: Job identifier
+            db: Optional existing DB session to reuse (avoids opening a new one)
         """
         try:
-            from app.core.database import db_manager
             from app.domain.repositories.job_metric import JobMetricRepository
+            from datetime import datetime, timezone, timedelta
 
-            session_factory = db_manager.session_factory
-            db = session_factory()
-            try:
-                repo = JobMetricRepository(db)
-                from datetime import datetime, timezone, timedelta
+            # User requested Asia/Jakarta (UTC+7)
+            jakarta_tz = timezone(timedelta(hours=7))
 
-                # User requested Asia/Jakarta (UTC+7)
-                jakarta_tz = timezone(timedelta(hours=7))
-                repo.upsert_metric(key, datetime.now(jakarta_tz))
-                db.commit()
-            except Exception as e:
-                db.rollback()
-                logger.error(f"Failed to record job metric for {key}: {e}")
-            finally:
-                db.close()
+            if db is not None:
+                # Reuse existing session — caller manages commit/close
+                try:
+                    repo = JobMetricRepository(db)
+                    repo.upsert_metric(key, datetime.now(jakarta_tz))
+                    db.commit()
+                except Exception as e:
+                    try:
+                        db.rollback()
+                    except Exception:
+                        pass
+                    logger.error(f"Failed to record job metric for {key}: {e}")
+            else:
+                # Open a dedicated session (standalone invocation)
+                from app.core.database import db_manager
+                session = db_manager.session_factory()
+                try:
+                    repo = JobMetricRepository(session)
+                    repo.upsert_metric(key, datetime.now(jakarta_tz))
+                    session.commit()
+                except Exception as e:
+                    session.rollback()
+                    logger.error(f"Failed to record job metric for {key}: {e}")
+                finally:
+                    session.close()
         except Exception as e:
             logger.error(f"Error in metric recording wrapper for {key}: {e}")
 
     def _run_wal_monitor(self) -> None:
         """
         Synchronous wrapper for async WAL monitor task.
+        Uses shared event loop to avoid creating/destroying loops per invocation.
         """
         try:
-            asyncio.run(self.wal_monitor.monitor_all_sources())
+            self._run_async(self.wal_monitor.monitor_all_sources())
             self._record_job_metric("wal_monitor")
         except Exception as e:
             logger.error("Error running WAL monitor task", extra={"error": str(e)})
@@ -78,10 +135,11 @@ class BackgroundScheduler:
     def _run_replication_monitor(self) -> None:
         """
         Synchronous wrapper for replication monitor task.
+        Uses shared event loop.
         """
         try:
             if self.replication_monitor:
-                asyncio.run(self.replication_monitor.monitor_all_sources())
+                self._run_async(self.replication_monitor.monitor_all_sources())
                 self._record_job_metric("replication_monitor")
         except Exception as e:
             logger.error(
@@ -91,10 +149,11 @@ class BackgroundScheduler:
     def _run_schema_monitor(self) -> None:
         """
         Synchronous wrapper for schema monitor task.
+        Uses shared event loop.
         """
         try:
             if self.schema_monitor:
-                asyncio.run(self.schema_monitor.monitor_all_sources())
+                self._run_async(self.schema_monitor.monitor_all_sources())
                 self._record_job_metric("schema_monitor")
         except Exception as e:
             logger.error("Error running schema monitor task", extra={"error": str(e)})
@@ -113,6 +172,7 @@ class BackgroundScheduler:
     def _run_table_list_refresh(self) -> None:
         """
         Synchronous wrapper for table list refresh task.
+        Uses single DB session for both work and job metric recording.
         """
         try:
             from app.core.database import db_manager
@@ -130,7 +190,7 @@ class BackgroundScheduler:
                         logger.error(
                             f"Failed to auto-refresh tables for source {source.id}: {e}"
                         )
-                self._record_job_metric("table_list_refresh")
+                self._record_job_metric("table_list_refresh", db=db)
             finally:
                 db.close()
 
@@ -143,6 +203,7 @@ class BackgroundScheduler:
         """
         Synchronous wrapper for destination table list refresh task.
         Dispatches a Celery task per destination to the worker.
+        Uses single DB session for both work and job metric recording.
         """
         try:
             from app.core.database import db_manager
@@ -153,7 +214,7 @@ class BackgroundScheduler:
             try:
                 service = DestinationService(db)
                 service.refresh_table_list_all()
-                self._record_job_metric("destination_table_list_refresh")
+                self._record_job_metric("destination_table_list_refresh", db=db)
             finally:
                 db.close()
 
@@ -166,6 +227,7 @@ class BackgroundScheduler:
     def _run_system_metric_collection(self) -> None:
         """
         Synchronous wrapper for system metric collection task.
+        Uses single DB session for both metric collection and job metric recording.
         """
         try:
             from app.core.database import db_manager
@@ -176,7 +238,8 @@ class BackgroundScheduler:
             try:
                 service = SystemMetricService(db)
                 service.collect_and_save_metrics()
-                self._record_job_metric("system_metric_collection")
+                # Batch: record job metric in same session
+                self._record_job_metric("system_metric_collection", db=db)
             finally:
                 db.close()
         except Exception as e:
@@ -187,6 +250,7 @@ class BackgroundScheduler:
     def _run_notification_sender(self) -> None:
         """
         Synchronous wrapper for notification sender task.
+        Uses single DB session for both work and job metric recording.
         """
         try:
             from app.core.database import db_manager
@@ -197,7 +261,7 @@ class BackgroundScheduler:
             try:
                 service = NotificationService(db)
                 service.process_pending_notifications()
-                self._record_job_metric("notification_sender")
+                self._record_job_metric("notification_sender", db=db)
             finally:
                 db.close()
         except Exception as e:
@@ -209,10 +273,9 @@ class BackgroundScheduler:
         """
         Check Celery worker health via HTTP and save to database.
         Runs every 10 seconds to keep status fresh.
-        Uses the worker's own health API endpoint (like compute node).
+        Uses persistent httpx client to avoid TCP connection churn.
         """
         try:
-            import httpx
             from app.core.database import db_manager
             from app.domain.repositories.worker_health_repo import (
                 WorkerHealthRepository,
@@ -225,11 +288,10 @@ class BackgroundScheduler:
                 if not self.settings.worker_enabled:
                     return
 
-                # Check worker health via HTTP (worker's FastAPI health endpoint)
-                # Increased timeout to 10s to allow for Celery inspector operations
+                # Check worker health via persistent HTTP client
                 url = f"{self.settings.worker_health_url}/health"
-                with httpx.Client(timeout=10.0) as client:
-                    response = client.get(url)
+                client = self._get_httpx_client()
+                response = client.get(url)
 
                 repo = WorkerHealthRepository(db)
 
@@ -249,7 +311,8 @@ class BackgroundScheduler:
                         error_message=f"HTTP {response.status_code}",
                     )
 
-                self._record_job_metric("worker_health_check")
+                # Batch metric in same session
+                self._record_job_metric("worker_health_check", db=db)
             finally:
                 db.close()
         except Exception as e:
@@ -280,6 +343,7 @@ class BackgroundScheduler:
     def _run_pipeline_refresh_check(self) -> None:
         """
         Synchronous wrapper for pipeline refresh check task.
+        Uses single DB session for both work and job metric recording.
         """
         try:
             from app.core.database import db_manager
@@ -308,7 +372,7 @@ class BackgroundScheduler:
                 if pipelines:
                     db.commit()
 
-                self._record_job_metric("pipeline_refresh_check")
+                self._record_job_metric("pipeline_refresh_check", db=db)
             finally:
                 db.close()
         except Exception as e:
@@ -419,10 +483,11 @@ class BackgroundScheduler:
             coalesce=True,
         )
 
-        # Schedule System Metric Collection (every 5 seconds)
+        # Schedule System Metric Collection (every 15 seconds)
+        # 5s was too aggressive — produces ~17k rows/day with minimal value
         self.scheduler.add_job(
             self._run_system_metric_collection,
-            trigger=IntervalTrigger(seconds=5),
+            trigger=IntervalTrigger(seconds=15),
             id="system_metric_collection",
             name="System Metric Collection",
             replace_existing=True,

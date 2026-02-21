@@ -6,7 +6,7 @@ import {
     PopoverContent,
     PopoverTrigger,
 } from '@/components/ui/popover'
-import { TableSyncConfig } from '@/repo/pipelines'
+import { type TableSyncConfig } from '@/repo/pipelines'
 import { tagsRepo } from '@/repo/tags'
 import { useQuery } from '@tanstack/react-query'
 

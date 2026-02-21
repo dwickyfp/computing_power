@@ -23,11 +23,6 @@ import {
     TableRow,
 } from '@/components/ui/table'
 import {
-    Collapsible,
-    CollapsibleContent,
-    CollapsibleTrigger,
-} from '@/components/ui/collapsible'
-import {
     Breadcrumb,
     BreadcrumbItem,
     BreadcrumbLink,
@@ -44,6 +39,7 @@ import {
 import {
     GitBranch,
     Play,
+    Square,
     Loader2,
     ChevronDown,
     ChevronRight,
@@ -112,142 +108,148 @@ function RunRow({ run }: { run: FlowTaskRunHistory }) {
         : '—'
 
     return (
-        <Collapsible open={open} onOpenChange={setOpen} asChild>
-            <>
-                <TableRow className="group cursor-pointer hover:bg-muted/50 transition-colors">
-                    <TableCell className="w-[50px] font-mono text-xs text-muted-foreground">
-                        <div className="flex items-center gap-2">
-                            <CollapsibleTrigger asChild>
-                                <Button variant="ghost" size="icon" className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground">
-                                    {open ? (
-                                        <ChevronDown className="h-4 w-4" />
-                                    ) : (
-                                        <ChevronRight className="h-4 w-4" />
-                                    )}
-                                </Button>
-                            </CollapsibleTrigger>
-                            <span>#{run.id}</span>
+        <>
+            <TableRow
+                className="group cursor-pointer hover:bg-muted/50 transition-colors"
+                onClick={() => setOpen(!open)}
+            >
+                <TableCell className="w-[50px] font-mono text-xs text-muted-foreground">
+                    <div className="flex items-center gap-2">
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground"
+                            onClick={(e) => {
+                                e.stopPropagation()
+                                setOpen(!open)
+                            }}
+                        >
+                            {open ? (
+                                <ChevronDown className="h-4 w-4" />
+                            ) : (
+                                <ChevronRight className="h-4 w-4" />
+                            )}
+                        </Button>
+                        <span>#{run.id}</span>
+                    </div>
+                </TableCell>
+                <TableCell>
+                    <RunStatusBadge status={run.status} />
+                </TableCell>
+                <TableCell>
+                    <Badge variant="outline" className="text-[10px] font-mono capitalize">
+                        {run.trigger_type.toLowerCase()}
+                    </Badge>
+                </TableCell>
+                <TableCell className="text-sm">
+                    <div className="flex flex-col">
+                        <span className="font-medium">
+                            {formatDistanceToNow(new Date(run.started_at), { addSuffix: true })}
+                        </span>
+                        <span className="text-xs text-muted-foreground">
+                            {new Date(run.started_at).toLocaleString()}
+                        </span>
+                    </div>
+                </TableCell>
+                <TableCell>
+                    <div className="flex flex-col">
+                        <div className="flex items-center gap-2 text-sm">
+                            <span className="font-mono text-muted-foreground w-16 text-right">In:</span>
+                            <span className="font-medium">{run.total_input_records?.toLocaleString() ?? '—'}</span>
                         </div>
-                    </TableCell>
-                    <TableCell>
-                        <RunStatusBadge status={run.status} />
-                    </TableCell>
-                    <TableCell>
-                        <Badge variant="outline" className="text-[10px] font-mono capitalize">
-                            {run.trigger_type.toLowerCase()}
-                        </Badge>
-                    </TableCell>
-                    <TableCell className="text-sm">
-                         <div className="flex flex-col">
-                            <span className="font-medium">
-                                {formatDistanceToNow(new Date(run.started_at), { addSuffix: true })}
-                            </span>
-                            <span className="text-xs text-muted-foreground">
-                                {new Date(run.started_at).toLocaleString()}
-                            </span>
+                        <div className="flex items-center gap-2 text-sm mt-0.5">
+                            <span className="font-mono text-muted-foreground w-16 text-right">Out:</span>
+                            <span className="font-medium">{run.total_output_records?.toLocaleString() ?? '—'}</span>
                         </div>
-                    </TableCell>
-                    <TableCell>
-                        <div className="flex flex-col">
-                             <div className="flex items-center gap-2 text-sm">
-                                <span className="font-mono text-muted-foreground w-16 text-right">In:</span>
-                                <span className="font-medium">{run.total_input_records?.toLocaleString() ?? '—'}</span>
-                            </div>
-                            <div className="flex items-center gap-2 text-sm mt-0.5">
-                                <span className="font-mono text-muted-foreground w-16 text-right">Out:</span>
-                                <span className="font-medium">{run.total_output_records?.toLocaleString() ?? '—'}</span>
-                            </div>
-                        </div>
-                    </TableCell>
-                    <TableCell className="text-sm font-medium text-muted-foreground">
-                        {duration}
-                    </TableCell>
-                </TableRow>
-                <CollapsibleContent asChild>
-                    <TableRow className="hover:bg-transparent !border-0">
-                        <TableCell colSpan={6} className="p-0 border-0">
-                            <div className="bg-muted/30 border-b px-4 py-3 shadow-inner">
-                                <div className="rounded-md border bg-background overflow-hidden">
-                                     <Table>
-                                        <TableHeader className="bg-muted/50">
-                                            <TableRow className="hover:bg-transparent border-b">
-                                                <TableHead className="h-8 text-xs font-semibold">Node</TableHead>
-                                                <TableHead className="h-8 text-xs font-semibold">Type</TableHead>
-                                                <TableHead className="h-8 text-xs font-semibold text-right">In</TableHead>
-                                                <TableHead className="h-8 text-xs font-semibold text-right">Out</TableHead>
-                                                <TableHead className="h-8 text-xs font-semibold text-right">Duration</TableHead>
-                                                <TableHead className="h-8 text-xs font-semibold">Status</TableHead>
-                                            </TableRow>
-                                        </TableHeader>
-                                        <TableBody>
-                                            {run.node_logs?.map((log) => (
-                                                <TableRow key={log.id} className="hover:bg-muted/20 border-b last:border-0 border-border/50">
-                                                    <TableCell className="py-2 font-medium text-sm">
-                                                        <span className="flex items-center gap-2">
-                                                            <div className={`w-1.5 h-1.5 rounded-full ${
-                                                                log.status === 'SUCCESS' ? 'bg-emerald-500' :
-                                                                log.status === 'FAILED' ? 'bg-rose-500' :
+                    </div>
+                </TableCell>
+                <TableCell className="text-sm font-medium text-muted-foreground">
+                    {duration}
+                </TableCell>
+            </TableRow>
+            {open && (
+                <TableRow className="hover:bg-transparent !border-0">
+                    <TableCell colSpan={6} className="p-0 border-0">
+                        <div className="bg-muted/30 border-b px-4 py-3 shadow-inner animate-in fade-in slide-in-from-top-1 duration-200">
+                            <div className="rounded-md border bg-background overflow-hidden">
+                                <Table>
+                                    <TableHeader className="bg-muted/50">
+                                        <TableRow className="hover:bg-transparent border-b">
+                                            <TableHead className="h-8 text-xs font-semibold">Node</TableHead>
+                                            <TableHead className="h-8 text-xs font-semibold">Type</TableHead>
+                                            <TableHead className="h-8 text-xs font-semibold text-right">In</TableHead>
+                                            <TableHead className="h-8 text-xs font-semibold text-right">Out</TableHead>
+                                            <TableHead className="h-8 text-xs font-semibold text-right">Duration</TableHead>
+                                            <TableHead className="h-8 text-xs font-semibold">Status</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {run.node_logs?.map((log) => (
+                                            <TableRow key={log.id} className="hover:bg-muted/20 border-b last:border-0 border-border/50">
+                                                <TableCell className="py-2 font-medium text-sm">
+                                                    <span className="flex items-center gap-2">
+                                                        <div className={`w-1.5 h-1.5 rounded-full ${log.status === 'SUCCESS' ? 'bg-emerald-500' :
+                                                            log.status === 'FAILED' ? 'bg-rose-500' :
                                                                 log.status === 'RUNNING' ? 'bg-blue-500' : 'bg-gray-300'
                                                             }`} />
-                                                            {log.node_label || log.node_id}
-                                                        </span>
-                                                        {log.error_message && (
-                                                            <div className="mt-1">
-                                                                <TooltipProvider>
-                                                                    <Tooltip delayDuration={0}>
-                                                                        <TooltipTrigger asChild>
-                                                                            <div className="inline-block max-w-[400px] text-xs text-rose-600 bg-rose-50 dark:bg-rose-900/20 dark:text-rose-300 rounded px-2 py-1 border border-rose-100 dark:border-rose-900/30 truncate cursor-help hover:bg-rose-100 dark:hover:bg-rose-900/40 transition-colors">
-                                                                                {log.error_message}
-                                                                            </div>
-                                                                        </TooltipTrigger>
-                                                                        <TooltipContent side="top" align="start" className="max-w-[400px] break-words bg-popover text-popover-foreground border-border shadow-md">
-                                                                            <div className="text-xs font-mono p-1">
-                                                                                <span className="font-semibold text-rose-500 mb-1 block">Error Detail:</span>
-                                                                                {log.error_message}
-                                                                            </div>
-                                                                        </TooltipContent>
-                                                                    </Tooltip>
-                                                                </TooltipProvider>
-                                                            </div>
-                                                        )}
-                                                    </TableCell>
-                                                    <TableCell className="py-2">
-                                                        <Badge variant="secondary" className="text-[10px] uppercase tracking-wider font-semibold opacity-80 decoration-0">
-                                                            {log.node_type}
-                                                        </Badge>
-                                                    </TableCell>
-                                                    <TableCell className="py-2 text-right font-mono text-xs text-muted-foreground">
-                                                        {log.row_count_in?.toLocaleString() ?? '-'}
-                                                    </TableCell>
-                                                    <TableCell className="py-2 text-right font-mono text-xs text-muted-foreground">
-                                                        {log.row_count_out?.toLocaleString() ?? '-'}
-                                                    </TableCell>
-                                                    <TableCell className="py-2 text-right font-mono text-xs text-muted-foreground">
-                                                        {log.duration_ms != null ? `${log.duration_ms}ms` : '-'}
-                                                    </TableCell>
-                                                    <TableCell className="py-2">
-                                                        <div className="flex items-center gap-2">
-                                                            <NodeStatusIcon status={log.status} />
+                                                        {log.node_label || log.node_id}
+                                                    </span>
+                                                    {log.error_message && (
+                                                        <div className="mt-1">
+                                                            <TooltipProvider>
+                                                                <Tooltip delayDuration={0}>
+                                                                    <TooltipTrigger asChild>
+                                                                        <div className="inline-block max-w-[400px] text-xs text-rose-600 bg-rose-50 dark:bg-rose-900/20 dark:text-rose-300 rounded px-2 py-1 border border-rose-100 dark:border-rose-900/30 truncate cursor-help hover:bg-rose-100 dark:hover:bg-rose-900/40 transition-colors">
+                                                                            {log.error_message}
+                                                                        </div>
+                                                                    </TooltipTrigger>
+                                                                    <TooltipContent side="top" align="start" className="max-w-[400px] break-words bg-popover text-popover-foreground border-border shadow-md">
+                                                                        <div className="text-xs font-mono p-1">
+                                                                            <span className="font-semibold text-rose-500 mb-1 block">Error Detail:</span>
+                                                                            {log.error_message}
+                                                                        </div>
+                                                                    </TooltipContent>
+                                                                </Tooltip>
+                                                            </TooltipProvider>
                                                         </div>
-                                                    </TableCell>
-                                                </TableRow>
-                                            ))}
-                                            {(!run.node_logs || run.node_logs.length === 0) && (
-                                                <TableRow>
-                                                    <TableCell colSpan={6} className="text-center py-4 text-xs text-muted-foreground">
-                                                        No logs available
-                                                    </TableCell>
-                                                </TableRow>
-                                            )}
-                                        </TableBody>
-                                     </Table>
-                                </div>
+                                                    )}
+                                                </TableCell>
+                                                <TableCell className="py-2">
+                                                    <Badge variant="secondary" className="text-[10px] uppercase tracking-wider font-semibold opacity-80 decoration-0">
+                                                        {log.node_type}
+                                                    </Badge>
+                                                </TableCell>
+                                                <TableCell className="py-2 text-right font-mono text-xs text-muted-foreground">
+                                                    {log.row_count_in?.toLocaleString() ?? '-'}
+                                                </TableCell>
+                                                <TableCell className="py-2 text-right font-mono text-xs text-muted-foreground">
+                                                    {log.row_count_out?.toLocaleString() ?? '-'}
+                                                </TableCell>
+                                                <TableCell className="py-2 text-right font-mono text-xs text-muted-foreground">
+                                                    {log.duration_ms != null ? `${log.duration_ms}ms` : '-'}
+                                                </TableCell>
+                                                <TableCell className="py-2">
+                                                    <div className="flex items-center gap-2">
+                                                        <NodeStatusIcon status={log.status} />
+                                                    </div>
+                                                </TableCell>
+                                            </TableRow>
+                                        ))}
+                                        {(!run.node_logs || run.node_logs.length === 0) && (
+                                            <TableRow>
+                                                <TableCell colSpan={6} className="text-center py-4 text-xs text-muted-foreground">
+                                                    No logs available
+                                                </TableCell>
+                                            </TableRow>
+                                        )}
+                                    </TableBody>
+                                </Table>
                             </div>
-                        </TableCell>
-                    </TableRow>
-                </CollapsibleContent>
-            </>
-        </Collapsible>
+                        </div>
+                    </TableCell>
+                </TableRow>
+            )}
+        </>
     )
 }
 
@@ -314,6 +316,19 @@ export default function FlowTaskDetailPage() {
         onError: () => toast.error('Failed to trigger flow task'),
     })
 
+    const cancelMutation = useMutation({
+        mutationFn: () => flowTasksRepo.cancelRun(id),
+        onSuccess: () => {
+            setPollingTaskId(null)
+            toast.info('Run cancelled')
+            setTimeout(() => {
+                queryClient.invalidateQueries({ queryKey: ['flow-tasks', id] })
+                queryClient.invalidateQueries({ queryKey: ['flow-tasks', id, 'runs'] })
+            }, 300)
+        },
+        onError: () => toast.error('Failed to cancel run'),
+    })
+
     const ft = ftResp?.data
     const runs = runsResp?.data.items ?? []
 
@@ -365,7 +380,7 @@ export default function FlowTaskDetailPage() {
                 </div>
 
                 {/* Header card */}
-                <Card>
+                <Card className="bg-sidebar">
                     <CardHeader>
                         <div className="flex items-start justify-between gap-4">
                             <div>
@@ -389,40 +404,50 @@ export default function FlowTaskDetailPage() {
                                         Flow Editor
                                     </Link>
                                 </Button>
-                                <Button
-                                    onClick={() => runMutation.mutate()}
-                                    disabled={
-                                        runMutation.isPending ||
-                                        ft.status === 'RUNNING' ||
-                                        !!pollingTaskId
-                                    }
-                                >
-                                    {runMutation.isPending || !!pollingTaskId ? (
-                                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                                    ) : (
-                                        <Play className="h-4 w-4 mr-2" />
-                                    )}
-                                    Run Now
-                                </Button>
+                                {(ft.status === 'RUNNING' || !!pollingTaskId) ? (
+                                    <Button
+                                        variant="destructive"
+                                        onClick={() => cancelMutation.mutate()}
+                                        disabled={cancelMutation.isPending}
+                                    >
+                                        {cancelMutation.isPending ? (
+                                            <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                                        ) : (
+                                            <Square className="h-4 w-4 mr-2" />
+                                        )}
+                                        Cancel Run
+                                    </Button>
+                                ) : (
+                                    <Button
+                                        onClick={() => runMutation.mutate()}
+                                        disabled={runMutation.isPending}
+                                    >
+                                        {runMutation.isPending ? (
+                                            <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                                        ) : (
+                                            <Play className="h-4 w-4 mr-2" />
+                                        )}
+                                        Run Now
+                                    </Button>
+                                )}
                             </div>
                         </div>
                     </CardHeader>
                     <CardContent>
                         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm mt-2">
-                             <StatItem
+                            <StatItem
                                 label="Execution Status"
                                 icon={Activity}
                                 value={
                                     <span
-                                        className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-semibold ${
-                                            ft.status === 'SUCCESS'
-                                                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-900/30'
-                                                : ft.status === 'FAILED'
+                                        className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-semibold ${ft.status === 'SUCCESS'
+                                            ? 'bg-emerald-50 text-emerald-700 border dark:bg-emerald-900/30'
+                                            : ft.status === 'FAILED'
                                                 ? 'bg-rose-50 text-rose-700 border border-rose-200 dark:bg-rose-900/30'
                                                 : ft.status === 'RUNNING'
-                                                ? 'bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-900/30'
-                                                : 'bg-muted text-muted-foreground border border-border'
-                                        }`}
+                                                    ? 'bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-900/30'
+                                                    : 'bg-muted text-muted-foreground border border-border'
+                                            }`}
                                     >
                                         {ft.status === 'RUNNING' && <Loader2 className="h-3 w-3 animate-spin" />}
                                         {ft.status}
@@ -436,10 +461,10 @@ export default function FlowTaskDetailPage() {
                                     <div className="flex flex-col">
                                         <span>
                                             {ft.last_run_at
-                                            ? formatDistanceToNow(new Date(ft.last_run_at), {
-                                                  addSuffix: true,
-                                              })
-                                            : 'Never'}
+                                                ? formatDistanceToNow(new Date(ft.last_run_at), {
+                                                    addSuffix: true,
+                                                })
+                                                : 'Never'}
                                         </span>
                                         {ft.last_run_at && (
                                             <span className="text-[10px] text-muted-foreground font-normal">
@@ -468,7 +493,7 @@ export default function FlowTaskDetailPage() {
                 </Card>
 
                 {/* Run History */}
-                <Card className="flex flex-col">
+                <Card className="flex flex-col bg-sidebar">
                     <CardHeader className="pb-3 flex-shrink-0">
                         <div className="flex items-center justify-between">
                             <div>
@@ -477,7 +502,7 @@ export default function FlowTaskDetailPage() {
                                     Detailed logs of past executions. Click a row to inspect node performance.
                                 </CardDescription>
                             </div>
-                           {/* Add filter or refresh button here later if needed */}
+                            {/* Add filter or refresh button here later if needed */}
                         </div>
                     </CardHeader>
                     <CardContent className="p-0 border-t relative max-h-[600px] overflow-auto scrollbar-thin scrollbar-thumb-muted-foreground/20 scrollbar-track-transparent">

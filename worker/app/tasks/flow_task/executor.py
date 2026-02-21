@@ -46,32 +46,48 @@ if not os.environ.get("SNOWFLAKE_ADBC_DRIVER_PATH"):
 
 # ─── Extension management ──────────────────────────────────────────────────────
 
-_REQUIRED_EXTENSIONS = ["postgres", "httpfs"]
+_REQUIRED_EXTENSIONS = ["postgres", "httpfs", "spatial"]
 _COMMUNITY_EXTENSIONS = ["snowflake"]
 
 
 def _setup_duckdb_connection() -> duckdb.DuckDBPyConnection:
-    """Create and configure a DuckDB in-memory connection."""
+    """Create and configure a DuckDB in-memory connection.
+
+    Extensions are INSTALL-ed once at worker startup (see celery_app.py
+    worker_init signal). Here we only LOAD them, which is fast.
+
+    Memory and thread limits are applied to prevent OOM when multiple
+    DuckDB connections run concurrently (max_concurrent × memory_limit
+    must fit within available system RAM).
+    """
+    from app.config.settings import get_settings
+
+    settings = get_settings()
     conn = duckdb.connect(database=":memory:")
-    # Install and load required extensions (core)
+
+    # Apply resource limits — critical for concurrent execution safety
+    conn.execute(f"SET memory_limit='{settings.duckdb_memory_limit}';")
+    conn.execute(f"SET threads={settings.duckdb_threads};")
+
+    # Load required extensions (already installed at worker startup)
     for ext in _REQUIRED_EXTENSIONS:
         try:
-            conn.execute(f"INSTALL {ext}; LOAD {ext};")
+            conn.execute(f"LOAD {ext};")
         except Exception as e:
-            logger.warning(f"Extension {ext} setup warning: {e}")
-    # Install and load community extensions (e.g. snowflake)
+            logger.warning(f"Extension {ext} load warning: {e}")
+    # Load community extensions
     for ext in _COMMUNITY_EXTENSIONS:
         try:
-            conn.execute(f"INSTALL {ext} FROM community; LOAD {ext};")
+            conn.execute(f"LOAD {ext};")
             logger.info(f"Loaded community extension: {ext}")
         except Exception as e:
-            logger.warning(f"Community extension {ext} setup warning: {e}")
+            logger.warning(f"Community extension {ext} load warning: {e}")
     return conn
 
 
 def _load_optional_extension(conn: duckdb.DuckDBPyConnection, ext: str) -> None:
     try:
-        conn.execute(f"INSTALL {ext} FROM community; LOAD {ext};")
+        conn.execute(f"LOAD {ext};")
         logger.info(f"Loaded optional extension: {ext}")
     except Exception as e:
         logger.warning(f"Optional extension {ext} not available: {e}")
@@ -201,6 +217,11 @@ def execute_flow_task(
     Compiles graph → DuckDB SQL, attaches all sources/destinations,
     runs all node CTEs in order, writes outputs, and records metrics.
 
+    Supports incremental execution (D8) — if input nodes have watermark_column
+    configured, the executor loads the last watermark value from the DB and
+    injects it into the node data before compilation. After successful execution,
+    watermarks are updated with the max value seen.
+
     Returns a result dict with:
       status, total_input_records, total_output_records, node_logs
     """
@@ -211,6 +232,8 @@ def execute_flow_task(
 
     conn: Optional[duckdb.DuckDBPyConnection] = None
 
+    from app.core.concurrency import acquire_duckdb_slot, release_duckdb_slot
+    acquire_duckdb_slot()
     try:
         conn = _setup_duckdb_connection()
 
@@ -220,6 +243,9 @@ def execute_flow_task(
 
         # Step 2: Inject ATTACH configs into input nodes
         _inject_attach_configs(nodes, conn)
+
+        # Step 2b (D8): Inject watermark values for incremental execution
+        _inject_watermark_values(flow_task_id, nodes)
 
         # Recompile after injection (node data updated with attach_alias)
         compiler = GraphCompiler({"nodes": nodes, "edges": edges}).compile()
@@ -263,17 +289,20 @@ def execute_flow_task(
             }
 
             try:
-                # Attach destination if not already done
-                dest_alias = attached_output_aliases.get(destination_id, f"__out_{idx}")
-                if destination_id not in attached_output_aliases:
-                    dest_alias = _attach_output_destination(
-                        conn, destination_id, output_alias=dest_alias
-                    )
-                    attached_output_aliases[destination_id] = dest_alias
-
-                # Determine destination type
+                # Determine destination type first (needed for attach decision)
                 dest_type = _get_destination_type(destination_id)
                 writer = DestinationWriterRegistry.get_writer(dest_type)
+
+                # Attach destination if not already done
+                # Skip for non-DuckDB writers (e.g. Snowflake uses native connector)
+                dest_alias = f"__out_{idx}"
+                if dest_type not in ("SNOWFLAKE",):
+                    dest_alias = attached_output_aliases.get(destination_id, dest_alias)
+                    if destination_id not in attached_output_aliases:
+                        dest_alias = _attach_output_destination(
+                            conn, destination_id, output_alias=dest_alias
+                        )
+                        attached_output_aliases[destination_id] = dest_alias
 
                 # Get row count before writing
                 row_count_in = writer.get_row_count(
@@ -290,6 +319,7 @@ def execute_flow_task(
                     write_mode=write_mode,
                     upsert_keys=upsert_keys,
                     output_alias=dest_alias,
+                    destination_id=destination_id,
                 )
 
                 total_output_records += rows_written
@@ -327,6 +357,12 @@ def execute_flow_task(
             if failed_nodes
             else None
         )
+
+        # Step 5b (D8): Update watermarks after successful execution
+        if overall_status == "SUCCESS":
+            _update_watermarks_after_execution(
+                flow_task_id, nodes, conn, compiler
+            )
 
         _persist_run_results(
             run_history_id=run_history_id,
@@ -384,12 +420,36 @@ def execute_flow_task(
                 conn.close()
             except Exception:
                 pass
+        release_duckdb_slot()
+        from app.tasks.flow_task.connection_factory import cleanup_temp_files
+        cleanup_temp_files()
 
 
 def _get_destination_type(destination_id: Optional[int]) -> str:
-    """Look up the destination type from the config DB."""
+    """Look up the destination type from the config DB (cached 60s)."""
     if destination_id is None:
         return "POSTGRES"
+    return _get_destination_type_cached(destination_id)
+
+
+# ── simple TTL cache for destination type lookups ──
+import threading as _th
+_dest_type_cache: dict[int, tuple[float, str]] = {}
+_dest_type_lock = _th.Lock()
+_DEST_TYPE_TTL = 60.0  # seconds
+_DEST_TYPE_MAX_SIZE = 128  # prevent unbounded growth
+
+
+def _get_destination_type_cached(destination_id: int) -> str:
+    import time as _time
+    now = _time.monotonic()
+
+    with _dest_type_lock:
+        entry = _dest_type_cache.get(destination_id)
+        if entry and (now - entry[0]) < _DEST_TYPE_TTL:
+            return entry[1]
+
+    # Cache miss — query DB outside lock
     try:
         from app.core.database import get_db_session
         from sqlalchemy import text
@@ -399,9 +459,168 @@ def _get_destination_type(destination_id: Optional[int]) -> str:
                 text("SELECT type FROM destinations WHERE id = :id"),
                 {"id": destination_id},
             ).fetchone()
-        return row.type.upper() if row else "POSTGRES"
+        result = row.type.upper() if row else "POSTGRES"
     except Exception:
-        return "POSTGRES"
+        result = "POSTGRES"
+
+    with _dest_type_lock:
+        # Evict oldest entries if cache is full
+        if len(_dest_type_cache) >= _DEST_TYPE_MAX_SIZE:
+            sorted_keys = sorted(_dest_type_cache, key=lambda k: _dest_type_cache[k][0])
+            for k in sorted_keys[: len(sorted_keys) // 2]:
+                del _dest_type_cache[k]
+        _dest_type_cache[destination_id] = (now, result)
+    return result
+
+
+def _inject_watermark_values(
+    flow_task_id: int, nodes: List[dict]
+) -> None:
+    """
+    D8: Load watermark values from DB and inject into input node data.
+
+    For each input node with a `watermark_column` configured in its data,
+    loads the last stored watermark_value from flow_task_watermarks table
+    and injects it as `watermark_value` in the node data. The compiler
+    will then add a WHERE clause to filter only new records.
+    """
+    input_nodes_with_watermark = [
+        n for n in nodes
+        if n.get("type") == "input" and n.get("data", {}).get("watermark_column")
+    ]
+
+    if not input_nodes_with_watermark:
+        return
+
+    try:
+        from app.core.database import get_db_session
+        from sqlalchemy import text
+
+        with get_db_session() as db:
+            for node in input_nodes_with_watermark:
+                node_id = node["id"]
+                row = db.execute(
+                    text(
+                        "SELECT watermark_value FROM flow_task_watermarks "
+                        "WHERE flow_task_id = :ft_id AND node_id = :nid"
+                    ),
+                    {"ft_id": flow_task_id, "nid": node_id},
+                ).fetchone()
+
+                if row and row.watermark_value is not None:
+                    node["data"]["watermark_value"] = row.watermark_value
+                    logger.info(
+                        f"Injected watermark for node {node_id}: "
+                        f"column={node['data']['watermark_column']}, "
+                        f"value={row.watermark_value}"
+                    )
+                else:
+                    logger.debug(
+                        f"No watermark found for node {node_id} — "
+                        f"full scan will be performed"
+                    )
+    except Exception as e:
+        logger.warning(f"Failed to load watermarks: {e}. Full scan will be used.")
+
+
+def _update_watermarks_after_execution(
+    flow_task_id: int,
+    nodes: List[dict],
+    conn: Optional[Any],
+    compiler: Any,
+) -> None:
+    """
+    D8: Update watermarks after successful execution.
+
+    For each input node with a watermark_column, queries the CTE to find
+    the MAX value of the watermark column, then upserts it into
+    flow_task_watermarks.
+    """
+    input_nodes_with_watermark = [
+        n for n in nodes
+        if n.get("type") == "input" and n.get("data", {}).get("watermark_column")
+    ]
+
+    if not input_nodes_with_watermark or conn is None:
+        return
+
+    try:
+        from app.core.database import get_db_session
+        from sqlalchemy import text
+
+        now = datetime.now(ZoneInfo("Asia/Jakarta"))
+
+        for node in input_nodes_with_watermark:
+            node_id = node["id"]
+            watermark_col = node["data"]["watermark_column"]
+            cte_name = compiler.cte_map.get(node_id)
+
+            if not cte_name:
+                continue
+
+            try:
+                # Query the max watermark value from the CTE
+                max_sql = (
+                    f"{compiler.full_cte_prefix}\n"
+                    f"SELECT MAX({watermark_col})::VARCHAR AS max_val FROM {cte_name}"
+                )
+                result = conn.execute(max_sql).fetchone()
+                max_val = result[0] if result else None
+
+                if max_val is not None:
+                    # Upsert watermark to DB
+                    with get_db_session() as db:
+                        existing = db.execute(
+                            text(
+                                "SELECT id FROM flow_task_watermarks "
+                                "WHERE flow_task_id = :ft_id AND node_id = :nid"
+                            ),
+                            {"ft_id": flow_task_id, "nid": node_id},
+                        ).fetchone()
+
+                        if existing:
+                            db.execute(
+                                text(
+                                    "UPDATE flow_task_watermarks "
+                                    "SET watermark_value = :val, updated_at = :now "
+                                    "WHERE flow_task_id = :ft_id AND node_id = :nid"
+                                ),
+                                {
+                                    "val": str(max_val),
+                                    "now": now,
+                                    "ft_id": flow_task_id,
+                                    "nid": node_id,
+                                },
+                            )
+                        else:
+                            db.execute(
+                                text(
+                                    "INSERT INTO flow_task_watermarks "
+                                    "(flow_task_id, node_id, watermark_column, "
+                                    "watermark_value, created_at, updated_at) "
+                                    "VALUES (:ft_id, :nid, :col, :val, :now, :now)"
+                                ),
+                                {
+                                    "ft_id": flow_task_id,
+                                    "nid": node_id,
+                                    "col": watermark_col,
+                                    "val": str(max_val),
+                                    "now": now,
+                                },
+                            )
+
+                    logger.info(
+                        f"Updated watermark for node {node_id}: "
+                        f"{watermark_col}={max_val}"
+                    )
+
+            except Exception as e:
+                logger.warning(
+                    f"Failed to update watermark for node {node_id}: {e}"
+                )
+
+    except Exception as e:
+        logger.warning(f"Failed to update watermarks after execution: {e}")
 
 
 def _notify_flow_task_error(

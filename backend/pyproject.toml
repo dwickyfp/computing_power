@@ -42,5 +42,9 @@ dev = [
     "faker==22.0.0",
 ]
 
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+
 [tool.uv]
 native-tls = true

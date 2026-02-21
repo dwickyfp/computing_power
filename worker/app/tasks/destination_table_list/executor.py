@@ -175,6 +175,26 @@ def execute_destination_table_list(destination_id: int) -> dict[str, Any]:
             },
         )
 
+    # Cache in Redis so Flow Task input nodes see fresh data immediately
+    try:
+        from app.core.redis_client import RedisClient
+
+        redis_client = RedisClient.get_instance()
+        if redis_client:
+            cache_key = f"destination:{destination_id}:tables"
+            redis_client.setex(cache_key, 600, json.dumps(tables))  # 10 min TTL
+            logger.info(
+                "Destination table list cached in Redis",
+                destination_id=destination_id,
+                cache_key=cache_key,
+            )
+    except Exception as e:
+        logger.warning(
+            "Failed to cache destination tables in Redis",
+            destination_id=destination_id,
+            error=str(e),
+        )
+
     logger.info(
         "Destination table list updated",
         destination_id=destination_id,

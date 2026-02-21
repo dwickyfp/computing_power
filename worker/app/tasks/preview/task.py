@@ -31,6 +31,7 @@ def execute_preview_task(
     destination_id: int,
     table_name: str,
     filter_sql: str | None = None,
+    include_profiling: bool = False,
 ) -> dict[str, Any]:
     """
     Celery task to execute preview query.
@@ -39,6 +40,7 @@ def execute_preview_task(
     - DuckDB connection + Postgres extension
     - SQL validation and rewriting
     - Result serialization and caching
+    - Optional data profiling stats (D7)
 
     Args:
         sql: Optional custom SQL query
@@ -46,9 +48,10 @@ def execute_preview_task(
         destination_id: Destination database ID
         table_name: Table name to preview
         filter_sql: Optional filter SQL
+        include_profiling: If True, include column profiling statistics
 
     Returns:
-        Dict with columns, column_types, data, error keys
+        Dict with columns, column_types, data, error keys (+ profile if requested)
     """
     logger.info(
         "Preview task started",
@@ -58,6 +61,7 @@ def execute_preview_task(
         table_name=table_name,
         has_sql=bool(sql),
         has_filter=bool(filter_sql),
+        include_profiling=include_profiling,
     )
 
     # Update task state to PROGRESS
@@ -72,6 +76,7 @@ def execute_preview_task(
         destination_id=destination_id,
         table_name=table_name,
         filter_sql=filter_sql,
+        include_profiling=include_profiling,
     )
 
     return result

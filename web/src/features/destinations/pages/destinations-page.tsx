@@ -29,7 +29,11 @@ export function DestinationsPage() {
         },
         onSuccess: async () => {
             setLastRefreshedAt(new Date())
+            // Wait 300ms for DB commit then refresh queries
+            await new Promise((r) => setTimeout(r, 300))
             await queryClient.refetchQueries({ queryKey: ['destinations'] })
+            // Also invalidate destination-tables so Flow Task input nodes pick up fresh data
+            queryClient.invalidateQueries({ queryKey: ['destination-tables'] })
         },
     })
 

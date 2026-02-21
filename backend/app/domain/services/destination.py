@@ -686,7 +686,10 @@ class DestinationService:
 
     def get_table_list(self, destination_id: int) -> dict:
         """
-        Return the persisted table list for a destination.
+        Return the table list for a destination.
+
+        Checks Redis cache first (populated by worker after refresh),
+        falls back to persisted list_tables in config DB.
 
         Args:
             destination_id: Destination identifier.
@@ -694,6 +697,32 @@ class DestinationService:
         Returns:
             Dict with tables (list[str]), total_tables (int), last_table_check_at (str|None).
         """
+        # 1. Try Redis cache (set by worker after refresh)
+        cache_key = f"destination:{destination_id}:tables"
+        try:
+            from app.infrastructure.redis import RedisClient
+            import json as _json
+
+            redis_client = RedisClient.get_instance()
+            cached = redis_client.get(cache_key)
+            if cached:
+                tables = _json.loads(cached)
+                # Still need last_check from DB
+                destination = self.get_destination(destination_id)
+                last_check = (
+                    destination.last_table_check_at.isoformat()
+                    if destination.last_table_check_at
+                    else None
+                )
+                return {
+                    "tables": tables,
+                    "total_tables": len(tables),
+                    "last_table_check_at": last_check,
+                }
+        except Exception as e:
+            logger.warning(f"Redis cache miss for destination tables: {e}")
+
+        # 2. Fallback to DB
         destination = self.get_destination(destination_id)
         tables: list = destination.list_tables if destination.list_tables else []
         last_check = (

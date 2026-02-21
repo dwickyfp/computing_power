@@ -437,6 +437,7 @@ class DLQRecoveryWorker:
         """
         Attempt to replay DLQ messages to destination.
 
+        Groups messages by table and operation type for efficient batched writes.
         On success: ACK + DEL the messages (they're done).
         On failure: Update retry count. If max retries exceeded, discard.
 
@@ -460,9 +461,9 @@ class DLQRecoveryWorker:
                 messages_by_table[table_key] = []
             messages_by_table[table_key].append((msg_id, msg))
 
-        # Process each table's messages
+        # Process each table's messages in operation-type batches
         for tbl_name, table_messages in messages_by_table.items():
-            self._replay_table_messages(
+            self._replay_table_messages_batched(
                 table_messages, destination, source_id, tbl_name, destination_id
             )
 
@@ -475,7 +476,36 @@ class DLQRecoveryWorker:
         destination_id: int,
     ) -> None:
         """
-        Replay messages for a specific table.
+        Replay messages for a specific table (legacy single-batch method).
+
+        Args:
+            messages_with_ids: List of (message_id, DLQMessage) tuples
+            destination: Destination to write to
+            source_id: Source database ID
+            table_name: Table name
+            destination_id: Destination database ID
+        """
+        # Delegate to the batched implementation
+        self._replay_table_messages_batched(
+            messages_with_ids, destination, source_id, table_name, destination_id
+        )
+
+    def _replay_table_messages_batched(
+        self,
+        messages_with_ids: list[tuple[str, DLQMessage]],
+        destination: BaseDestination,
+        source_id: int,
+        table_name: str,
+        destination_id: int,
+    ) -> None:
+        """
+        Replay messages for a specific table with operation-type batching (C2).
+
+        Groups messages by CDC operation type (c/u/d/r) and submits each group
+        as a consolidated batch write. This reduces the number of write_batch()
+        calls and allows the destination to optimize bulk operations.
+
+        Order is preserved within each operation group.
 
         Args:
             messages_with_ids: List of (message_id, DLQMessage) tuples
@@ -527,9 +557,22 @@ class DLQRecoveryWorker:
                 first_msg.table_sync_config
             )
 
-        # Extract CDC records and message IDs
-        cdc_records = [msg.cdc_record for _, msg in messages_with_ids]
-        message_ids = [msg_id for msg_id, _ in messages_with_ids]
+        # --- C2: Group messages by operation type for batched writes ---
+        # Operations: c=create, u=update, d=delete, r=read/snapshot
+        # Process order: deletes first, then creates/reads, then updates
+        # This ordering minimizes conflicts during replay.
+        op_order = ["d", "r", "c", "u"]
+        messages_by_op: dict[str, list[tuple[str, DLQMessage]]] = {}
+        for msg_id, msg in messages_with_ids:
+            op = msg.cdc_record.operation if msg.cdc_record else "c"
+            if op not in messages_by_op:
+                messages_by_op[op] = []
+            messages_by_op[op].append((msg_id, msg))
+
+        # Track all successfully replayed message IDs across all batches
+        all_success_ids: list[str] = []
+        all_failed: list[tuple[str, DLQMessage]] = []
+        total_written = 0
 
         try:
             # Ensure destination is initialized before writing
@@ -544,46 +587,83 @@ class DLQRecoveryWorker:
                 )
                 destination.initialize(force_reconnect=False)
 
-            # Attempt to write batch
-            written = destination.write_batch(cdc_records, table_sync)
+            # Process each operation type batch
+            for op in op_order:
+                if op not in messages_by_op:
+                    continue
 
-            self._logger.info(
-                f"✓ Successfully replayed {written}/{len(cdc_records)} DLQ messages to "
-                f"{destination.name} for table {table_name}"
-            )
+                op_messages = messages_by_op[op]
+                cdc_records = [msg.cdc_record for _, msg in op_messages]
+                msg_ids = [msg_id for msg_id, _ in op_messages]
 
-            # Success! Clear error flags (same as CDC behavior)
-            # Get pipeline_destination_id and table_sync_id from table_sync_config
-            pipeline_destination_id = first_msg.table_sync_config.get(
-                "pipeline_destination_id"
-            )
-            table_sync_id = first_msg.table_sync_config.get("id")
+                try:
+                    written = destination.write_batch(cdc_records, table_sync)
+                    total_written += written
+                    all_success_ids.extend(msg_ids)
 
-            # Clear error flag on pipeline_destination
-            if pipeline_destination_id:
-                PipelineDestinationRepository.update_error(
-                    pipeline_destination_id, False
+                    self._logger.debug(
+                        f"Batched replay op={op}: {written}/{len(cdc_records)} records "
+                        f"to {destination.name} for table {table_name}"
+                    )
+                except Exception as batch_e:
+                    self._logger.warning(
+                        f"Batch replay failed for op={op} "
+                        f"({len(op_messages)} messages): {batch_e}"
+                    )
+                    all_failed.extend(op_messages)
+
+            # Also process any operation types not in op_order
+            for op, op_messages in messages_by_op.items():
+                if op in op_order:
+                    continue
+                cdc_records = [msg.cdc_record for _, msg in op_messages]
+                msg_ids = [msg_id for msg_id, _ in op_messages]
+
+                try:
+                    written = destination.write_batch(cdc_records, table_sync)
+                    total_written += written
+                    all_success_ids.extend(msg_ids)
+                except Exception as batch_e:
+                    self._logger.warning(
+                        f"Batch replay failed for op={op}: {batch_e}"
+                    )
+                    all_failed.extend(op_messages)
+
+            if all_success_ids:
+                self._logger.info(
+                    f"✓ Batched replay: {total_written} records replayed to "
+                    f"{destination.name} for table {table_name} "
+                    f"({len(all_success_ids)} messages ACKed, {len(all_failed)} failed)"
                 )
-                self._logger.debug(
-                    f"Cleared error flag for pipeline_destination {pipeline_destination_id}"
+
+                # Clear error flags
+                pipeline_destination_id = first_msg.table_sync_config.get(
+                    "pipeline_destination_id"
+                )
+                ts_id = first_msg.table_sync_config.get("id")
+
+                if pipeline_destination_id:
+                    PipelineDestinationRepository.update_error(
+                        pipeline_destination_id, False
+                    )
+                if ts_id:
+                    TableSyncRepository.update_error(ts_id, False)
+
+                # Acknowledge successful messages
+                self._dlq_manager.acknowledge(
+                    source_id, table_name, destination_id, all_success_ids
                 )
 
-            # Clear error flag on table_sync
-            if table_sync_id:
-                TableSyncRepository.update_error(table_sync_id, False)
-                self._logger.debug(f"Cleared error flag for table_sync {table_sync_id}")
-
-            # Acknowledge all messages (ACK + DEL)
-            self._dlq_manager.acknowledge(
-                source_id, table_name, destination_id, message_ids
-            )
+            # Handle retry for failed batches
+            if all_failed:
+                self._handle_retry(all_failed, source_id, table_name, destination_id)
 
             # Check if queue is now empty and clean up
-            if not self._dlq_manager.has_messages(
+            if all_success_ids and not self._dlq_manager.has_messages(
                 source_id, table_name, destination_id
             ):
                 self._logger.info(
-                    f"Queue empty after replay, cleaning up: "
+                    f"Queue empty after batched replay, cleaning up: "
                     f"s{source_id}:t{table_name}:d{destination_id}"
                 )
                 self._dlq_manager.delete_queue(source_id, table_name, destination_id)
@@ -597,7 +677,7 @@ class DLQRecoveryWorker:
                 exc_info=not is_dest_error,
             )
 
-            # Update retry count for each message
+            # Update retry count for ALL messages on total failure
             self._handle_retry(messages_with_ids, source_id, table_name, destination_id)
 
     def _handle_retry(

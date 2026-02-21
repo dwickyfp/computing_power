@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { notificationRepo, NotificationLog } from '../repo/notifications'
+import { notificationRepo, type NotificationLog } from '../repo/notifications'
 
 export function useNotifications() {
     const [notifications, setNotifications] = useState<NotificationLog[]>([])

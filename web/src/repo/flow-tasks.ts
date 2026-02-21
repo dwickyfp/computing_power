@@ -19,7 +19,9 @@ export type FlowNodeType =
     | 'union'
     | 'pivot'
     | 'new_rows'
+    | 'sql'
     | 'output'
+    | 'note'
 
 export interface NodePosition {
     x: number
@@ -37,11 +39,14 @@ export interface FlowNodeData {
     table_name?: string
     alias?: string
     sample_limit?: number // for input node preview limit
+    filter_sql?: string // raw WHERE clause for input node filtering
+    filter_rows?: Array<{ col: string; op: string; val: string }> // UI filter builder rows (input node)
     // clean node
     drop_nulls?: boolean
     deduplicate?: boolean
     rename_columns?: Record<string, string>
-    cast_columns?: Record<string, string>
+    cast_columns?: Array<{ column: string; target_type: string }> // column type casting
+    expressions?: Array<{ expr: string; alias: string }> // SQL function expressions (COALESCE, etc.)
     filter_expr?: string
     select_columns?: string[]
     // aggregate node
@@ -69,6 +74,13 @@ export interface FlowNodeData {
     // output node
     write_mode?: WriteMode
     upsert_keys?: string[]
+    // sql node
+    sql_expression?: string
+    // note node
+    note_content?: string
+    // watermark (incremental execution)
+    watermark_column?: string
+    watermark_value?: string
     // generic
     [key: string]: unknown
 }
@@ -78,6 +90,8 @@ export interface FlowNode {
     type: FlowNodeType
     position: NodePosition
     data: FlowNodeData
+    width?: number
+    height?: number
 }
 
 // FlowEdge is a ReactFlow Edge — gives us animated, style, markerEnd etc. for free
@@ -132,6 +146,41 @@ export interface FlowTaskGraphResponse {
     version: number
     created_at: string
     updated_at: string
+}
+
+// ─── Graph Versioning (D4) ───────────────────────────────────────────────────
+
+export interface FlowTaskGraphVersion {
+    id: number
+    flow_task_id: number
+    version: number
+    change_summary: string | null
+    nodes_json: FlowNode[]
+    edges_json: FlowEdge[]
+    created_at: string
+}
+
+export interface FlowTaskGraphVersionListResponse {
+    items: FlowTaskGraphVersion[]
+    total: number
+    page: number
+    page_size: number
+}
+
+// ─── Watermarks (D8) ────────────────────────────────────────────────────────
+
+export interface FlowTaskWatermark {
+    id: number
+    flow_task_id: number
+    node_id: string
+    watermark_column: string
+    watermark_value: string | null
+    updated_at: string
+}
+
+export interface FlowTaskWatermarkConfig {
+    node_id: string
+    watermark_column: string
 }
 
 // ─── Run History ─────────────────────────────────────────────────────────────
@@ -193,6 +242,20 @@ export interface NodePreviewResult {
     rows: unknown[][]
     row_count: number
     elapsed_ms: number
+    profile?: ColumnProfile[]
+}
+
+export interface ColumnProfile {
+    column: string
+    type: string
+    total_count: number
+    null_count: number
+    null_percent: number
+    distinct_count: number
+    min?: unknown
+    max?: unknown
+    mean?: number
+    top_values?: Array<{ value: unknown; count: number; percent: number }>
 }
 
 // ─── Task Status ─────────────────────────────────────────────────────────────
@@ -302,5 +365,45 @@ export const flowTasksRepo = {
     // that reflect the *actual* output of the node (including transforms, aggregates, etc.)
     getNodeSchema(flowTaskId: number, payload: NodePreviewRequest) {
         return api.post<NodeColumnsResponse>(`/flow-tasks/${flowTaskId}/node-schema`, payload)
+    },
+
+    // ─── Versioning (D4) ────────────────────────────────────────────────
+
+    listVersions(id: number, page = 1, pageSize = 20) {
+        return api.get<FlowTaskGraphVersionListResponse>(
+            `/flow-tasks/${id}/versions`,
+            { params: { page, page_size: pageSize } }
+        )
+    },
+
+    getVersion(id: number, version: number) {
+        return api.get<FlowTaskGraphVersion>(
+            `/flow-tasks/${id}/versions/${version}`
+        )
+    },
+
+    rollbackToVersion(id: number, version: number) {
+        return api.post<FlowTaskGraphResponse>(
+            `/flow-tasks/${id}/rollback/${version}`
+        )
+    },
+
+    // ─── Watermarks (D8) ────────────────────────────────────────────────
+
+    getWatermarks(id: number) {
+        return api.get<FlowTaskWatermark[]>(`/flow-tasks/${id}/watermarks`)
+    },
+
+    setWatermark(id: number, config: FlowTaskWatermarkConfig) {
+        return api.post<FlowTaskWatermark>(
+            `/flow-tasks/${id}/watermarks`,
+            config
+        )
+    },
+
+    resetWatermark(id: number, nodeId: string) {
+        return api.delete<{ message: string }>(
+            `/flow-tasks/${id}/watermarks/${nodeId}`
+        )
     },
 }

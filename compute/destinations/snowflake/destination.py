@@ -390,6 +390,33 @@ class SnowflakeDestination(BaseDestination):
                     return convert_iso_time_to_target_tz(value)
                 return value
 
+            # GEOMETRY Handling (io.debezium.data.geometry.Geometry)
+            # Debezium sends PostGIS geometry as {"wkb": "<base64_EWKB>", "srid": N}
+            # Snowflake TRY_TO_GEOMETRY accepts hex-encoded WKB/EWKB strings.
+            # The EWKB already includes the SRID so we just decode base64 → hex.
+            if type_name == "io.debezium.data.geometry.Geometry":
+                if isinstance(value, dict) and "wkb" in value:
+                    wkb_b64 = value.get("wkb")
+                    if wkb_b64:
+                        try:
+                            return base64.b64decode(wkb_b64).hex()
+                        except Exception:
+                            pass
+                return None
+
+            # GEOGRAPHY Handling (io.debezium.data.geometry.Geography)
+            # Same as GEOMETRY — Debezium sends {"wkb": "<base64_EWKB>", "srid": 4326}
+            # Snowflake TRY_TO_GEOGRAPHY accepts hex EWKB (SRID must be 4326).
+            if type_name == "io.debezium.data.geometry.Geography":
+                if isinstance(value, dict) and "wkb" in value:
+                    wkb_b64 = value.get("wkb")
+                    if wkb_b64:
+                        try:
+                            return base64.b64decode(wkb_b64).hex()
+                        except Exception:
+                            pass
+                return None
+
             # TIME Handling
             # MicroTime: int64 microseconds since midnight
             if type_name == "io.debezium.time.MicroTime":
@@ -416,6 +443,16 @@ class SnowflakeDestination(BaseDestination):
 
         # Handle dict (nested object, geospatial GeoJSON/WKT)
         if isinstance(value, dict):
+            # Debezium geometry/geography fallback (no schema metadata available):
+            # Detect {"wkb": "<base64_EWKB>", "srid": N} and convert to hex WKB
+            # so Snowflake TRY_TO_GEOMETRY / TRY_TO_GEOGRAPHY can parse it correctly.
+            if "wkb" in value:
+                wkb_b64 = value.get("wkb")
+                if wkb_b64:
+                    try:
+                        return base64.b64decode(wkb_b64).hex()
+                    except Exception:
+                        pass
             # Complex types for Snowflake VARIANT should be JSON strings
             return json.dumps(value)
 

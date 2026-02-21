@@ -1,197 +1,252 @@
-import { Link } from '@tanstack/react-router'
+import { Link, useNavigate } from '@tanstack/react-router'
 import {
-  type ScheduleListItem,
-  type ScheduleRunStatus,
+    type ScheduleListItem,
+    type ScheduleRunStatus,
 } from '@/repo/schedules'
-import { formatDistanceToNow } from 'date-fns'
+import { formatDistanceToNow, format } from 'date-fns'
 import {
-  CalendarClock,
-  Play,
-  Trash2,
-  Star
+    MoreVertical,
+    Play,
+    Trash2,
+    Settings,
+    Clock,
+    Activity
 } from 'lucide-react'
-import { Bar, BarChart, Cell, ResponsiveContainer, Tooltip } from 'recharts'
+import { Bar, BarChart, Cell, Tooltip } from 'recharts'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Switch } from '@/components/ui/switch'
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuLabel,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { useSchedules } from './schedules-provider'
 import cronstrue from 'cronstrue'
 
+import CronExpressionParser from 'cron-parser'
+
 interface Props {
-  schedule: ScheduleListItem
+    schedule: ScheduleListItem
 }
 
 export function ScheduleCard({ schedule }: Props) {
-  const { setOpen, setCurrentRow } = useSchedules()
+    const { setOpen, setCurrentRow } = useSchedules()
+    const navigate = useNavigate()
 
-  const runs = [...(schedule.run_history || [])].reverse()
-  // Pad with empty runs if less than 20 for consistent width? 
-  // Or just show what we have. 
-  // Design shows full width bars.
+    const runs = [...(schedule.run_history || [])].reverse().slice(0, 20) // Limit to last 20 for compact view
 
-  // Helper for status color
-  const getStatusColor = (status: ScheduleRunStatus) => {
-    switch (status) {
-      case 'SUCCESS':
-        return '#10b981' // emerald-500
-      case 'FAILED':
-        return '#ef4444' // red-500
-      case 'RUNNING':
-        return '#3b82f6' // blue-500
-      default:
-        return '#e5e7eb' // gray-200
+    const getStatusColor = (status: ScheduleRunStatus) => {
+        switch (status) {
+            case 'SUCCESS':
+                return '#10b981' // emerald-500
+            case 'FAILED':
+                return '#ef4444' // red-500
+            case 'RUNNING':
+                return '#3b82f6' // blue-500
+            default:
+                return '#e5e7eb' // gray-200
+        }
     }
-  }
 
-  const handleToggle = (checked: boolean) => {
-      setCurrentRow(schedule)
-      if (checked) {
-          setOpen('resume')
-      } else {
-          setOpen('pause')
-      }
-  }
+    const handleToggle = (checked: boolean) => {
+        setCurrentRow(schedule)
+        if (checked) {
+            setOpen('resume')
+        } else {
+            setOpen('pause')
+        }
+    }
 
-  const handleDelete = () => {
-    setCurrentRow(schedule)
-    setOpen('delete')
-  }
-  
-  // NOTE: "Trigger" is not yet implemented in backend for schedules, 
-  // so the Play button is visual only or could trigger the underlying task?
-  // For now I'll leave it as a placeholder or remove if confusing. 
-  // The image shows it, so I'll include it but maybe disabled or toast "Not implemented".
-  const handleRunNow = () => {
-      // TODO: Implement run now
-      console.log('Run now clicked')
-  }
+    const handleDelete = (e: React.MouseEvent) => {
+        e.stopPropagation()
+        setCurrentRow(schedule)
+        setOpen('delete')
+    }
 
-  const cronHuman = (() => {
-      try {
-          return cronstrue.toString(schedule.cron_expression, { verbose: false })
-      } catch {
-          return schedule.cron_expression
-      }
-  })()
+    const handleEdit = (e: React.MouseEvent) => {
+        e.stopPropagation()
+        navigate({
+            to: '/schedules/$scheduleId',
+            params: { scheduleId: String(schedule.id) },
+        })
+    }
 
-  return (
-    <Card className='overflow-hidden transition-all hover:shadow-md'>
-      <div className='flex flex-col gap-4 p-4 sm:flex-row sm:items-start sm:justify-between'>
-        
-        {/* Left: Info */}
-        <div className='flex-1 space-y-1.5'>
-            <div className='flex items-center gap-2'>
-                <Link
-                    to='/schedules/$scheduleId'
-                    params={{ scheduleId: String(schedule.id) }}
-                    className='font-semibold text-primary hover:underline text-lg'
-                >
-                    {schedule.name}
-                </Link>
-                <Badge variant='outline' className='font-mono text-[10px]'>
-                    {schedule.task_type === 'FLOW_TASK' ? 'flow' : 'linked'}
-                </Badge>
-                {/* Tag placeholder if needed */}
-            </div>
-            
-            <div className='text-sm text-muted-foreground'>
-               {schedule.description || 'No description'}
-            </div>
+    const cronHuman = (() => {
+        try {
+            return cronstrue.toString(schedule.cron_expression, { verbose: false })
+        } catch {
+            return schedule.cron_expression
+        }
+    })()
 
-            <div className='flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-muted-foreground pt-2'>
-                <div className='flex items-center gap-1.5'>
-                    <span className='font-medium text-foreground'>Schedule</span>
-                    <span className='flex items-center gap-1' title={schedule.cron_expression}>
-                         <CalendarClock className='h-3.5 w-3.5' />
-                         {cronHuman}
-                    </span>
-                </div>
-                
-                <div className='flex items-center gap-1.5'>
-                     <span className='font-medium text-foreground'>Latest Run</span>
-                     <span>
-                         {schedule.last_run_at 
-                            ? formatDistanceToNow(new Date(schedule.last_run_at), { addSuffix: true })
-                            : 'Never'}
-                     </span>
-                </div>
+    return (
+        <Card className='group relative overflow-hidden transition-all hover:shadow-md border-border/60 bg-sidebar'>
+            {/* Status Strip */}
+            <div className={cn(
+                "absolute left-0 top-0 bottom-0 w-1 transition-colors",
+                schedule.status === 'ACTIVE' ? "bg-primary" : "bg-muted"
+            )} />
 
-                <div className='flex items-center gap-1.5'>
-                     <span className='font-medium text-foreground'>Next Run</span>
-                     <span>
-                         {schedule.next_run_at 
-                            ? formatDistanceToNow(new Date(schedule.next_run_at), { addSuffix: true })
-                            : '—'}
-                     </span>
-                </div>
-            </div>
-        </div>
+            <div className='flex flex-col sm:flex-row items-start sm:items-center gap-4 p-4 pl-6'>
 
-        {/* Right: Actions & Chart */}
-        <div className='flex flex-col items-end gap-4'>
-            {/* Actions Toolbar */}
-            <div className='flex items-center gap-2'>
-                <Switch 
-                    checked={schedule.status === 'ACTIVE'}
-                    onCheckedChange={handleToggle}
-                />
-                
-                <Button variant='ghost' size='icon' className='h-8 w-8' onClick={handleRunNow} title="Run Now">
-                    <Play className='h-4 w-4' />
-                </Button>
-                
-                <Button variant='ghost' size='icon' className='h-8 w-8' title="Favorite">
-                    <Star className='h-4 w-4' />
-                </Button>
-
-                <Button variant='ghost' size='icon' className='h-8 w-8 text-destructive hover:text-destructive' onClick={handleDelete} title="Delete">
-                    <Trash2 className='h-4 w-4' />
-                </Button>
-            </div>
-
-            {/* Micro Chart */}
-            <div className='h-8 w-[120px]'>
-                {runs.length > 0 ? (
-                    <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={runs}>
-                            <Tooltip 
-                                content={({ active, payload }) => {
-                                    if (active && payload && payload.length) {
-                                        const data = payload[0].payload;
-                                        return (
-                                            <div className="rounded-lg border bg-background p-2 shadow-sm text-xs">
-                                                <div className="font-medium">{formatDistanceToNow(new Date(data.triggered_at), { addSuffix: true })}</div>
-                                                <div className={cn(
-                                                    "font-bold capitalized",
-                                                    data.status === 'SUCCESS' ? 'text-emerald-500' :
-                                                    data.status === 'FAILED' ? 'text-red-500' : 'text-blue-500'
-                                                )}>
-                                                    {data.status}
-                                                </div>
-                                                <div>{data.duration_ms ? `${data.duration_ms}ms` : ''}</div>
-                                            </div>
-                                        );
-                                    }
-                                    return null;
-                                }}
-                            />
-                            <Bar dataKey="duration_ms" radius={[2, 2, 0, 0]}>
-                                {runs.map((entry, index) => (
-                                    <Cell key={`cell-${index}`} fill={getStatusColor(entry.status)} />
-                                ))}
-                            </Bar>
-                        </BarChart>
-                    </ResponsiveContainer>
-                ) : (
-                    <div className='flex h-full items-center justify-center text-xs text-muted-foreground bg-muted/20 rounded'>
-                        No runs recorded
+                {/* Main Info */}
+                <div className='flex-1 min-w-0 space-y-1'>
+                    <div className='flex items-center gap-2'>
+                        <Link
+                            to='/schedules/$scheduleId'
+                            params={{ scheduleId: String(schedule.id) }}
+                            className='font-semibold text-foreground hover:underline truncate text-base'
+                        >
+                            {schedule.name}
+                        </Link>
+                        <Badge variant='secondary' className='font-mono text-[10px] px-1.5 py-0 h-5'>
+                            {schedule.task_type === 'FLOW_TASK' ? 'Flow' : 'Linked'}
+                        </Badge>
                     </div>
-                )}
+
+                    <div className='flex items-center gap-3 text-xs text-muted-foreground'>
+                        <div className='flex items-center gap-1' title={`Cron: ${schedule.cron_expression}`}>
+                            <Clock className='h-3 w-3' />
+                            <span>{cronHuman}</span>
+                        </div>
+                        {(() => {
+                            // Last Run
+                            const sortedRuns = [...(schedule.run_history || [])].sort((a, b) =>
+                                new Date(b.triggered_at).getTime() - new Date(a.triggered_at).getTime()
+                            )
+                            const lastRun = sortedRuns[0]
+
+                            // Calculate Next Run client-side
+                            let nextRunDate: Date | null = null
+                            try {
+                                const options = {
+                                    currentDate: new Date(),
+                                    iterator: true
+                                }
+                                const interval = CronExpressionParser.parse(schedule.cron_expression, options)
+                                nextRunDate = interval.next().toDate()
+                            } catch (err) {
+                                console.error('Failed to parse cron:', err)
+                                // Fallback to server value if available and in future
+                                if (schedule.next_run_at && new Date(schedule.next_run_at) > new Date()) {
+                                    nextRunDate = new Date(schedule.next_run_at)
+                                }
+                            }
+
+                            return (
+                                <>
+                                    {lastRun && (
+                                        <>
+                                            <span className='hidden sm:inline-block'>•</span>
+                                            <span title="Last Run">
+                                                Last: {format(new Date(lastRun.triggered_at), 'dd-MM-yyyy HH:mm:ss')}
+                                            </span>
+                                        </>
+                                    )}
+
+                                    {nextRunDate && (
+                                        <>
+                                            <span className='hidden sm:inline-block'>•</span>
+                                            <span title="Next Run">
+                                                Next: {format(nextRunDate, 'dd-MM-yyyy HH:mm:ss')}
+                                            </span>
+                                        </>
+                                    )}
+                                </>
+                            )
+                        })()}
+                    </div>
+                </div>
+
+                {/* Right Side: Charts & Actions */}
+                <div className='flex items-center gap-4 w-full sm:w-auto justify-between sm:justify-end'>
+
+                    {/* Run History Sparkline */}
+                    <div className='h-8 w-24 sm:w-32 hidden sm:block'>
+                        {runs.length > 0 ? (
+                            <BarChart data={runs} width={128} height={32}>
+                                <Tooltip
+                                    cursor={{ fill: 'transparent' }}
+                                    content={({ active, payload }) => {
+                                        if (active && payload && payload.length) {
+                                            const data = payload[0].payload;
+                                            return (
+                                                <div className="rounded-md border bg-popover px-2 py-1 text-xs shadow-sm">
+                                                    <div className={cn(
+                                                        "font-bold",
+                                                        data.status === 'SUCCESS' ? 'text-emerald-500' :
+                                                            data.status === 'FAILED' ? 'text-red-500' : 'text-blue-500'
+                                                    )}>
+                                                        {data.status}
+                                                    </div>
+                                                    <div className="text-muted-foreground">
+                                                        {formatDistanceToNow(new Date(data.triggered_at), { addSuffix: true })}
+                                                    </div>
+                                                    <div>{data.duration_ms ? `${data.duration_ms}ms` : ''}</div>
+                                                </div>
+                                            );
+                                        }
+                                        return null;
+                                    }}
+                                />
+                                <Bar dataKey="duration_ms" radius={[1, 1, 0, 0]}>
+                                    {runs.map((entry, index) => (
+                                        <Cell key={`cell-${index}`} fill={getStatusColor(entry.status)} className="opacity-80 hover:opacity-100 transition-opacity" />
+                                    ))}
+                                </Bar>
+                            </BarChart>
+                        ) : (
+                            <div className='flex h-full items-center justify-center text-[10px] text-muted-foreground bg-muted/30 rounded-sm'>
+                                No runs
+                            </div>
+                        )}
+                    </div>
+
+                    <div className='flex items-center gap-2'>
+                        <div className="flex items-center gap-2 mr-2">
+                            <span className={cn("text-xs font-medium transition-colors", schedule.status === 'ACTIVE' ? "text-primary" : "text-muted-foreground")}>
+                                {schedule.status === 'ACTIVE' ? 'Active' : 'Paused'}
+                            </span>
+                            <Switch
+                                checked={schedule.status === 'ACTIVE'}
+                                onCheckedChange={handleToggle}
+                                className="scale-90"
+                            />
+                        </div>
+
+                        <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                                <Button variant='ghost' size='icon' className='h-8 w-8 text-muted-foreground hover:text-foreground'>
+                                    <MoreVertical className='h-4 w-4' />
+                                    <span className="sr-only">Actions</span>
+                                </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                                <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                                <DropdownMenuItem disabled title="Not implemented yet">
+                                    <Play className="mr-2 h-4 w-4" /> Run Now
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={handleEdit}>
+                                    <Settings className="mr-2 h-4 w-4" /> Edit Configuration
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={handleEdit}>
+                                    <Activity className="mr-2 h-4 w-4" /> View Runs
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem onClick={handleDelete} className="text-destructive focus:text-destructive">
+                                    <Trash2 className="mr-2 h-4 w-4" /> Delete Schedule
+                                </DropdownMenuItem>
+                            </DropdownMenuContent>
+                        </DropdownMenu>
+                    </div>
+                </div>
             </div>
-        </div>
-      </div>
-    </Card>
-  )
+        </Card>
+    )
 }

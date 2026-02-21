@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { X, Key, Loader2, Plus, Pencil, Trash2, CheckCircle2 } from 'lucide-react'
 import { toast } from 'sonner'
-import { TableSyncConfig, ColumnSchema } from '@/repo/pipelines'
+import { type TableSyncConfig, type ColumnSchema } from '@/repo/pipelines'
 
 interface PrimaryKeyDrawerProps {
   syncConfig: TableSyncConfig

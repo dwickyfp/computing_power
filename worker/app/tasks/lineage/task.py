@@ -4,7 +4,7 @@ Lineage generation Celery task.
 Parses custom SQL to extract column-level lineage metadata.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 import json
 
@@ -16,6 +16,80 @@ from app.tasks.lineage.parser import parse_lineage
 from app.core.database import get_db_session
 
 logger = structlog.get_logger(__name__)
+
+
+def _notify_lineage_error(table_sync_id: int, source_table: str, error_msg: str) -> None:
+    """Upsert an ERROR notification into notification_log for a lineage failure.
+
+    Mirrors the pattern used in flow_task/executor.py's _notify_flow_task_error.
+    Swallows all exceptions so a notification failure never breaks the caller.
+    """
+    try:
+        from zoneinfo import ZoneInfo
+        from sqlalchemy import text
+
+        key = f"lineage_error_sync_{table_sync_id}"
+        title = f"Lineage Generation Failed — {source_table}"
+        message = (
+            f"Table sync ID {table_sync_id} (table: {source_table}) lineage generation failed "
+            f"in the worker. Error: {error_msg}"
+        )[:2000]
+        now = datetime.now(ZoneInfo("Asia/Jakarta"))
+
+        with get_db_session() as db:
+            limit_row = db.execute(
+                text(
+                    "SELECT config_value FROM rosetta_setting_configuration "
+                    "WHERE config_key = 'NOTIFICATION_ITERATION_DEFAULT' LIMIT 1"
+                )
+            ).fetchone()
+            max_iter = int(limit_row.config_value) if limit_row else 3
+
+            existing = db.execute(
+                text(
+                    "SELECT id, iteration_check FROM notification_log "
+                    "WHERE key_notification = :key "
+                    "ORDER BY created_at DESC LIMIT 1"
+                ),
+                {"key": key},
+            ).fetchone()
+
+            if existing and existing.iteration_check < max_iter:
+                db.execute(
+                    text("""
+                        UPDATE notification_log
+                        SET iteration_check = iteration_check + 1,
+                            title           = :title,
+                            message         = :message,
+                            type            = 'ERROR',
+                            is_read         = FALSE,
+                            is_deleted      = FALSE,
+                            is_sent         = FALSE,
+                            updated_at      = :now
+                        WHERE id = :id
+                    """),
+                    {"title": title, "message": message, "now": now, "id": existing.id},
+                )
+            else:
+                db.execute(
+                    text("""
+                        INSERT INTO notification_log
+                            (key_notification, title, message, type,
+                             is_read, is_deleted, iteration_check,
+                             is_sent, is_force_sent, created_at, updated_at)
+                        VALUES
+                            (:key, :title, :message, 'ERROR',
+                             FALSE, FALSE, 1,
+                             FALSE, FALSE, :now, :now)
+                    """),
+                    {"key": key, "title": title, "message": message, "now": now},
+                )
+    except Exception as exc:
+        logger.warning(
+            "Failed to write lineage error notification",
+            table_sync_id=table_sync_id,
+            error=str(exc),
+        )
 
 
 @celery_app.task(
@@ -67,7 +141,7 @@ def generate_lineage_task(
             source_columns=source_columns or [],
         )
 
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
 
         # Update database with lineage result
         with get_db_session() as db:
@@ -132,7 +206,7 @@ def generate_lineage_task(
                     {
                         "id": table_sync_id,
                         "error": str(e)[:1000],
-                        "updated_at": datetime.utcnow(),
+                        "updated_at": datetime.now(timezone.utc),
                     },
                 )
         except Exception as db_error:
@@ -140,6 +214,9 @@ def generate_lineage_task(
                 "Failed to update lineage error status",
                 error=str(db_error),
             )
+
+        # Push notification for lineage failure
+        _notify_lineage_error(table_sync_id, source_table, str(e))
 
         return {
             "success": False,

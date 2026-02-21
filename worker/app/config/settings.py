@@ -56,8 +56,11 @@ class WorkerSettings(BaseSettings):
     )
 
     # Worker Behavior
+    # Concurrency must be >= duckdb_max_concurrent + linked_task_max_parallel_steps
+    # + headroom to prevent deadlocks between linked task orchestration threads
+    # and child flow task execution threads.
     worker_concurrency: int = Field(
-        default=8, ge=1, le=32, description="Number of concurrent worker threads"
+        default=10, ge=1, le=32, description="Number of concurrent worker threads"
     )
     task_soft_time_limit: int = Field(
         default=120, ge=10, le=600, description="Soft time limit for tasks (seconds)"
@@ -73,6 +76,26 @@ class WorkerSettings(BaseSettings):
     )
     duckdb_threads: int = Field(
         default=4, ge=1, le=16, description="DuckDB threads per query"
+    )
+
+    # DuckDB Concurrency
+    duckdb_max_concurrent: int = Field(
+        default=4, ge=1, le=16, description="Max concurrent DuckDB connections"
+    )
+
+    # Redis Connection Pool
+    redis_max_connections: int = Field(
+        default=20, ge=5, le=50, description="Redis connection pool max connections"
+    )
+
+    # Memory Management
+    memory_warning_mb: int = Field(
+        default=4096, ge=512, description="Memory warning threshold in MB"
+    )
+
+    # Linked Task
+    linked_task_max_parallel_steps: int = Field(
+        default=3, ge=1, le=8, description="Max parallel steps in linked task"
     )
 
     # Health API Server

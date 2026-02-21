@@ -44,10 +44,10 @@ class Settings(BaseSettings):
     # Database Configuration
     database_url: str = Field(..., description="PostgreSQL connection URL")
     db_pool_size: int = Field(
-        default=20, ge=1, le=100, description="Database connection pool size"
+        default=5, ge=1, le=100, description="Database connection pool size"
     )
     db_max_overflow: int = Field(
-        default=10,
+        default=5,
         ge=0,
         le=50,
         description="Maximum overflow connections beyond pool_size",
@@ -216,7 +216,7 @@ class Settings(BaseSettings):
             "pool_pre_ping": self.db_pool_pre_ping,
             "pool_use_lifo": self.db_pool_use_lifo,
             "echo": self.db_echo,
-            "echo_pool": self.debug,
+            "echo_pool": False,  # Disabled: setup_logging() handles pool log levels
             "future": True,
         }
 
